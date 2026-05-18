@@ -1,5 +1,6 @@
 # Orthohantavirus
-
+*************************************************************************
+*************************************************************************
 # Step1: Download data_report.tsv from NCBI
 
 # once conda works
@@ -24,5 +25,22 @@ dataformat tsv virus-genome \
 dataformat tsv virus-genome   --inputfile orthohanta/ncbi_dataset/data/data_report.jsonl   --fields accession,bioprojects,biosample-acc,completeness,gene-count,length,segment,release-date,update-date,sourcedb,geo-location,geo-region,geo-state,host-common-name,host-name,host-tax-id,host-infraspecific-isolate,host-infraspecific-strain,host-infraspecific-breed,host-infraspecific-cultivar,host-infraspecific-ecotype,host-infraspecific-sex,virus-common-name,virus-name,virus-tax-id,virus-infraspecific-isolate,virus-infraspecific-strain,virus-infraspecific-breed,virus-infraspecific-cultivar,virus-infraspecific-ecotype,virus-infraspecific-sex,isolate-collection-date,isolate-lineage,isolate-lineage-source,purpose-of-sampling,submitter-country,submitter-affiliation,submitter-names,sra-accs,protein-count,matpeptide-count,mol-type,is-annotated,is-lab-host,is-vaccine-strain,lab-host,virus-pangolin,host-pangolin   > data_report.tsv
 
 head -n 5 data_report.tsv
+**************************************************************************
+**************************************************************************
+# Alternative Step1 Bash: download all Orthohantavirus virus genomes + BioSample + CDS + proteins
+datasets download virus genome taxon 1980442 \
+  --include genome,biosample,cds,protein \
+  --filename ortho.zip
+
+# Bash: unzip into a working directory
+unzip ortho.zip -d ortho
+
+dataformat tsv virus-genome \
+  --package ortho.zip \
+  --fields accession,segment,completeness,length,biosample-acc,'virus-infraspecific-isolate','virus-infraspecific-strain','isolate-collection-date',geo-location,host-name \
+  > metadata.tsv
+
+**************************************************************************
+**************************************************************************
 
 # Step2: run hanta.ipynb to get orthohanta_cleaned.tsv
