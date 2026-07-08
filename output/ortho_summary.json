@@ -1,0 +1,241 @@
+{
+  "input_root": "/home/victorfrankestein/Documents/Orthohantavirus",
+  "data_dir": "/home/victorfrankestein/Documents/Orthohantavirus/all_hanta/ncbi_dataset/data",
+  "records_total": 15991,
+  "groups_total": 11049,
+  "records_with_biosample": 87,
+  "records_with_host": 14272,
+  "segment_counts": {
+    "M": 4549,
+    "L": 4384,
+    "S": 6653,
+    "unresolved": 405
+  },
+  "completeness_counts": {
+    "partial": 14652,
+    "complete": 1339
+  },
+  "group_completeness_counts": {
+    "no_complete_segment": 10305,
+    "complete_triplet": 214,
+    "partial_group_with_complete_segment": 530
+  },
+  "qc_warning_counts": {
+    "missing_biosample": 15904,
+    "unexpected_length_for_segment": 5856,
+    "missing_host": 1719,
+    "segment_from_length_only": 187,
+    "segment_from_heuristic": 187,
+    "segment_unresolved": 405,
+    "missing_segment": 405,
+    "lab_host_flag": 283,
+    "missing_protein_link": 566,
+    "missing_isolate_and_strain": 500,
+    "contains_nss_label": 1,
+    "multiple_segment_text_hits": 1
+  },
+  "provenance": {
+    "generated_at": "2026-07-08T12:04:28Z",
+    "dataset_catalog_api_version": "V2",
+    "dataset_catalog_md5": "b84f8e3f489f4d22bf7a978a0377f933",
+    "input_md5": {
+      "data_report.jsonl": "9c228361ec1892882d118876fcdd263e",
+      "annotation_report.jsonl": "01c54fe5aabe9fcf2c2092d5fb709ec4",
+      "biosample_report.jsonl": "1600e666055e53426c80ce843632ee16",
+      "dataset_catalog.json": "b84f8e3f489f4d22bf7a978a0377f933"
+    },
+    "input_files": [
+      "/home/victorfrankestein/Documents/Orthohantavirus/all_hanta/ncbi_dataset/data/data_report.jsonl",
+      "/home/victorfrankestein/Documents/Orthohantavirus/all_hanta/ncbi_dataset/data/annotation_report.jsonl",
+      "/home/victorfrankestein/Documents/Orthohantavirus/all_hanta/ncbi_dataset/data/biosample_report.jsonl",
+      "/home/victorfrankestein/Documents/Orthohantavirus/all_hanta/ncbi_dataset/data/dataset_catalog.json"
+    ]
+  },
+  "output_files": {
+    "accession_table": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_accession_table.parquet",
+    "virus_table": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_virus_table.parquet",
+    "isolate_table": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_isolate_table.parquet",
+    "host_table": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_host_table.parquet",
+    "ml_feature_matrix": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_ml_feature_matrix.parquet",
+    "suppressed_table": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_suppressed.parquet",
+    "ml_segments": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_ml_segments.parquet",
+    "qc_report": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_qc_report.parquet",
+    "summary_json": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_summary.json",
+    "log_file": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_pipeline.log"
+  },
+  "outputs": {
+    "isolate_csv": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_isolate_table.parquet",
+    "host_csv": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_host_table.parquet",
+    "ml_feature_csv": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_ml_feature_matrix.parquet",
+    "suppressed_csv": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_suppressed.parquet"
+  },
+  "output_schema": {
+    "ortho_accession_table.parquet": {
+      "columns": [
+        "accession",
+        "species_name",
+        "species_taxid",
+        "genus_name",
+        "genus_taxid",
+        "segment",
+        "segment_source",
+        "completeness",
+        "nt_length",
+        "biosample",
+        "bioproject",
+        "isolate",
+        "strain",
+        "collection_date",
+        "year",
+        "location",
+        "country",
+        "region",
+        "host_name",
+        "host_taxid",
+        "host_source",
+        "isolation_source",
+        "tissue_source",
+        "protein_accessions",
+        "annotation_products",
+        "group_key",
+        "group_confidence",
+        "is_refseq",
+        "warning_flags"
+      ]
+    },
+    "ortho_virus_table.parquet": {
+      "columns": [
+        "group_key",
+        "species_name",
+        "species_taxid",
+        "host_name",
+        "host_taxid",
+        "country",
+        "year",
+        "biosample",
+        "isolate",
+        "strain",
+        "group_confidence",
+        "group_size",
+        "s_accessions",
+        "m_accessions",
+        "l_accessions",
+        "complete_segments",
+        "completeness_class",
+        "all_hosts",
+        "all_accessions"
+      ]
+    },
+    "ortho_isolate_table.parquet": {
+      "columns": [
+        "strict_isolate_key",
+        "species_name",
+        "species_taxid",
+        "species_cluster_id",
+        "biosample",
+        "isolate",
+        "strain",
+        "host_name",
+        "host_taxid",
+        "host_role",
+        "collection_date",
+        "location",
+        "country",
+        "region",
+        "grouping_tier",
+        "grouping_confidence",
+        "s_accession",
+        "m_accession",
+        "l_accession",
+        "s_completeness",
+        "m_completeness",
+        "l_completeness",
+        "s_nt_length",
+        "m_nt_length",
+        "l_nt_length",
+        "concatenated_protein_aa",
+        "coding_complete_status",
+        "mosaic_flag",
+        "taxonomic_incongruence_warning",
+        "reassortment_candidate_warning",
+        "ns_s_overlapping_orf",
+        "species_divergence_flag",
+        "s_protein_evidence",
+        "m_protein_evidence",
+        "l_protein_evidence",
+        "s_protein_accessions",
+        "m_protein_accessions",
+        "l_protein_accessions",
+        "missing_protein_warnings",
+        "warnings"
+      ]
+    },
+    "ortho_host_table.parquet": {
+      "columns": [
+        "host_name",
+        "host_taxid",
+        "host_role",
+        "host_source",
+        "representative_biosample",
+        "representative_isolate",
+        "accession_count",
+        "isolate_count",
+        "example_species"
+      ]
+    },
+    "ortho_ml_feature_matrix.parquet": {
+      "columns": [
+        "strict_isolate_key",
+        "species_name",
+        "species_taxid",
+        "host_name",
+        "host_taxid",
+        "host_role",
+        "kmer_*"
+      ]
+    },
+    "ortho_ml_segments.parquet": {
+      "columns": [
+        "accession",
+        "segment",
+        "species_name",
+        "species_taxid",
+        "host_name",
+        "host_taxid",
+        "country",
+        "year",
+        "biosample",
+        "completeness",
+        "group_key"
+      ]
+    },
+    "ortho_suppressed.parquet": {
+      "columns": [
+        "accession",
+        "species_name",
+        "species_taxid",
+        "segment",
+        "completeness",
+        "biosample",
+        "isolate",
+        "strain",
+        "collection_date",
+        "location",
+        "host_name",
+        "host_taxid",
+        "suppression_reason"
+      ]
+    },
+    "ortho_qc_report.parquet": {
+      "columns": [
+        "accession",
+        "group_key",
+        "grouping_tier",
+        "group_confidence",
+        "segment",
+        "completeness",
+        "warnings"
+      ]
+    }
+  }
+}
