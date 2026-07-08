@@ -23,7 +23,7 @@ Design principles
 
 Usage
 -----
-python all_hanta_production.py /path/to/unzipped_package
+python all_hanta.py --input /path/to/unzipped_package [--output /path/to/output] [--threads N] [--verbose]
 
 Expected package layout
 -----------------------
@@ -40,7 +40,11 @@ Outputs
 output/
     ortho_accession_table.parquet
     ortho_virus_table.parquet
+    ortho_isolate_table.parquet
+    ortho_host_table.parquet
+    ortho_ml_feature_matrix.parquet
     ortho_ml_segments.parquet
+    ortho_suppressed.parquet
     ortho_qc_report.parquet
     ortho_summary.json
     ortho_pipeline.log
@@ -71,6 +75,8 @@ from typing import Any, DefaultDict, Dict, Iterable, Iterator, List, Optional, S
 # Constants
 # ---------------------------------------------------------------------------
 
+__version__ = "1.0.0"
+
 ACCESSION_RE = re.compile(r"[A-Z]{1,4}_?\d{4,}(?:\.\d+)?")
 BIOSAMPLE_RE = re.compile(r"\bSAM[NED]?[A-Z]?\d+\b", re.I)
 YEAR_RE = re.compile(r"(19|20)\d{2}")
@@ -85,7 +91,7 @@ OUTPUT_TABLE_SCHEMAS = {
     "ortho_accession_table.parquet": [
         "accession", "species_name", "species_taxid", "genus_name", "genus_taxid", "segment", "segment_source",
         "completeness", "nt_length", "biosample", "bioproject", "isolate", "strain", "collection_date", "year",
-        "location", "country", "region", "host_name", "host_taxid", "host_source", "isolation_source",
+        "location", "country", "region", "host_name", "host_taxid", "host_source", "host_role", "isolation_source",
         "tissue_source", "protein_accessions", "annotation_products", "group_key", "group_confidence", "is_refseq",
         "warning_flags",
     ],
@@ -177,7 +183,7 @@ ISOLATE_CSV = "ortho_isolate_table.csv"
 HOST_CSV = "ortho_host_table.csv"
 ML_FEATURE_CSV = "ortho_ml_feature_matrix.csv"
 KMER_K = 3
-HSIC_LASSO_MAX_FEATURES = 200
+CORRELATION_MAX_FEATURES = 200
 PED_SPECIES_THRESHOLD = 0.1
 N_AMBIGUOUS_THRESHOLD = 100
 TERMINAL_MOTIF_5 = "UAGUAGUAG"
@@ -393,7 +399,6 @@ class IsolateRecord:
     m_protein_accessions: List[str]
     l_protein_accessions: List[str]
     missing_protein_warnings: List[str]
-    host_role: str
     host_source: str
     raw_metadata: Dict[str, Any]
     warnings: List[str]
@@ -957,7 +962,7 @@ def has_terminal_motif(sequence: str) -> bool:
 def is_strict_complete_segment(rec: AccessionRecord) -> bool:
     if not rec.segment or rec.segment not in COMPLETE_LENGTH_MIN:
         return False
-    if rec.completeness not in {"complete", "coding_complete_only", "likely_complete"}:
+    if rec.completeness not in {"complete", "coding_complete_only", "likely_complete", "coding_complete"}:
         return False
     return rec.nt_length >= COMPLETE_LENGTH_MIN[rec.segment]
 
@@ -977,7 +982,7 @@ def determine_host_role(host_name: str, host_taxid: str, host_source: str, isola
     if any(term in low_iso for term in excreta_terms) or any(term in low_source for term in excreta_terms) or any(term in low_blob for term in excreta_terms):
         return "reservoir_candidate"
 
-    reservoir_terms = ["feces", "urine", "saliva", "excreta", "salivary gland", "kidney", "liver", "lung"]
+    reservoir_terms = ["salivary gland", "kidney", "liver", "lung"]
     if any(term in low_iso for term in reservoir_terms) or any(term in low_source for term in reservoir_terms):
         return "potential_host"
 
@@ -1076,10 +1081,10 @@ def pearson_correlation(xs: Sequence[float], ys: Sequence[float]) -> float:
     return num / (denom_x**0.5 * denom_y**0.5)
 
 
-def select_hsic_lasso_features(
+def select_correlation_features(
     matrix: Sequence[Dict[str, float]],
     labels: Sequence[str],
-    max_features: int = HSIC_LASSO_MAX_FEATURES,
+    max_features: int = CORRELATION_MAX_FEATURES,
 ) -> List[str]:
     if not matrix or not labels:
         return []
@@ -1117,6 +1122,10 @@ def normalize_matrix_columns(rows: Sequence[Dict[str, Any]], feature_names: Sequ
 
 
 def compute_protein_distance(seq1: str, seq2: str) -> float:
+    """Approximate pairwise distance using character-level Hamming distance on
+    unaligned sequences. This is a fast heuristic suitable for coarse clustering;
+    it is NOT a substitution-model-corrected phylogenetic distance. Report as an
+    approximation in any publication."""
     if not seq1 or not seq2:
         return 1.0
     len1, len2 = len(seq1), len(seq2)
@@ -1619,7 +1628,7 @@ def build_ml_feature_matrix(isolates: Sequence[IsolateRecord]) -> List[Dict[str,
         }
         rows.append(row)
 
-    selected_features = select_hsic_lasso_features(matrices, labels)
+    selected_features = select_correlation_features(matrices, labels)
     for row, counts in zip(rows, matrices):
         for feature in selected_features:
             row[f"kmer_{feature}"] = counts.get(feature, 0.0)
@@ -1646,7 +1655,7 @@ def build_suppressed_rows(accessions: Sequence[AccessionRecord], isolates: Seque
             "location": rec.location,
             "host_name": rec.host_name,
             "host_taxid": rec.host_taxid,
-            "suppression_reason": ";".join(rec.warning_flags or ["suppressed_incomplete_isolate"]),
+            "suppression_reason": ";".join(rec.warning_flags) if rec.warning_flags else "not_best_representative",
         })
     return rows
 
@@ -1679,6 +1688,16 @@ def build_isolate_rows(isolates: Sequence[IsolateRecord]) -> List[Dict[str, Any]
             "m_nt_length": isolate.m_nt_length,
             "l_nt_length": isolate.l_nt_length,
             "concatenated_protein_aa": isolate.concatenated_protein_aa,
+        "coding_complete_status": isolate.coding_complete_status,
+        "grouping_tier": isolate.grouping_tier,
+        "grouping_confidence": isolate.grouping_confidence,
+        "s_protein_evidence": isolate.s_protein_evidence,
+        "m_protein_evidence": isolate.m_protein_evidence,
+        "l_protein_evidence": isolate.l_protein_evidence,
+        "s_protein_accessions": ";".join(isolate.s_protein_accessions),
+        "m_protein_accessions": ";".join(isolate.m_protein_accessions),
+        "l_protein_accessions": ";".join(isolate.l_protein_accessions),
+        "missing_protein_warnings": ";".join(isolate.missing_protein_warnings),
             "mosaic_flag": int(isolate.mosaic_flag),
             "reassortment_candidate_warning": int(isolate.reassortment_candidate_warning),
             "taxonomic_incongruence_warning": int(isolate.taxonomic_incongruence_warning),
@@ -1864,6 +1883,7 @@ def run_pipeline(paths: InputPaths, threads: int = 4) -> None:
             "host_name": r.host_name,
             "host_taxid": r.host_taxid,
             "host_source": r.host_source,
+        "host_role": r.host_role,
             "isolation_source": r.isolation_source,
             "tissue_source": r.tissue_source,
             "protein_accessions": ";".join(r.protein_accessions),

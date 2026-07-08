@@ -1,24 +1,24 @@
-2026-07-08 15:58:31,618 | INFO | Starting Orthohantavirus production pipeline
-2026-07-08 15:58:31,618 | INFO | Input root: /home/victorfrankestein/Documents/Orthohantavirus
-2026-07-08 15:58:31,619 | INFO | Output dir: /home/victorfrankestein/Documents/Orthohantavirus/output
-2026-07-08 15:58:31,619 | INFO | Loading JSONL reports
-2026-07-08 15:58:33,603 | INFO | Building annotation and biosample indexes
-2026-07-08 15:58:34,022 | INFO | Parsing FASTA files
-2026-07-08 15:58:34,356 | INFO | Transforming accession records in parallel
-2026-07-08 15:59:33,263 | INFO | Grouping accessions into virus-level records
-2026-07-08 15:59:33,479 | INFO | Building strict S/M/L isolate records
-2026-07-08 15:59:49,460 | INFO | Building host table
-2026-07-08 15:59:49,785 | INFO | Building ML feature matrix
-2026-07-08 16:04:27,236 | INFO | Building suppressed accession table
-2026-07-08 16:04:27,291 | INFO | Writing outputs
-2026-07-08 16:04:27,960 | INFO | Wrote 15991 rows to /home/victorfrankestein/Documents/Orthohantavirus/output/ortho_accession_table.parquet
-2026-07-08 16:04:28,065 | INFO | Wrote 11049 rows to /home/victorfrankestein/Documents/Orthohantavirus/output/ortho_virus_table.parquet
-2026-07-08 16:04:28,262 | INFO | Wrote 10665 rows to /home/victorfrankestein/Documents/Orthohantavirus/output/ortho_isolate_table.parquet
-2026-07-08 16:04:28,273 | INFO | Wrote 261 rows to /home/victorfrankestein/Documents/Orthohantavirus/output/ortho_host_table.parquet
-2026-07-08 16:04:28,460 | INFO | Wrote 2335 rows to /home/victorfrankestein/Documents/Orthohantavirus/output/ortho_ml_feature_matrix.parquet
-2026-07-08 16:04:28,542 | INFO | Wrote 14129 rows to /home/victorfrankestein/Documents/Orthohantavirus/output/ortho_ml_segments.parquet
-2026-07-08 16:04:28,558 | INFO | Wrote 906 rows to /home/victorfrankestein/Documents/Orthohantavirus/output/ortho_suppressed.parquet
-2026-07-08 16:04:28,613 | INFO | Wrote 15991 rows to /home/victorfrankestein/Documents/Orthohantavirus/output/ortho_qc_report.parquet
-2026-07-08 16:04:28,704 | INFO | Done
-2026-07-08 16:04:28,704 | INFO | Accession records: 15991
-2026-07-08 16:04:28,704 | INFO | Virus groups: 11049
+2026-07-08 17:22:12,655 | INFO | Starting Orthohantavirus production pipeline
+2026-07-08 17:22:12,656 | INFO | Input root: /home/victorfrankestein/Documents/Orthohantavirus
+2026-07-08 17:22:12,656 | INFO | Output dir: /home/victorfrankestein/Documents/Orthohantavirus/output
+2026-07-08 17:22:12,657 | INFO | Loading JSONL reports
+2026-07-08 17:22:19,680 | INFO | Building annotation and biosample indexes
+2026-07-08 17:22:20,772 | INFO | Parsing FASTA files
+2026-07-08 17:22:29,841 | INFO | Transforming accession records in parallel
+2026-07-08 17:23:26,981 | INFO | Grouping accessions into virus-level records
+2026-07-08 17:23:27,306 | INFO | Building strict S/M/L isolate records
+2026-07-08 17:23:42,256 | INFO | Building host table
+2026-07-08 17:23:42,393 | INFO | Building ML feature matrix
+2026-07-08 17:29:28,616 | INFO | Building suppressed accession table
+2026-07-08 17:29:28,672 | INFO | Writing outputs
+2026-07-08 17:29:29,093 | INFO | Wrote 15991 rows to /home/victorfrankestein/Documents/Orthohantavirus/output/ortho_accession_table.parquet
+2026-07-08 17:29:29,221 | INFO | Wrote 11049 rows to /home/victorfrankestein/Documents/Orthohantavirus/output/ortho_virus_table.parquet
+2026-07-08 17:29:29,467 | INFO | Wrote 10665 rows to /home/victorfrankestein/Documents/Orthohantavirus/output/ortho_isolate_table.parquet
+2026-07-08 17:29:29,478 | INFO | Wrote 261 rows to /home/victorfrankestein/Documents/Orthohantavirus/output/ortho_host_table.parquet
+2026-07-08 17:29:29,664 | INFO | Wrote 2335 rows to /home/victorfrankestein/Documents/Orthohantavirus/output/ortho_ml_feature_matrix.parquet
+2026-07-08 17:29:29,744 | INFO | Wrote 14129 rows to /home/victorfrankestein/Documents/Orthohantavirus/output/ortho_ml_segments.parquet
+2026-07-08 17:29:29,759 | INFO | Wrote 906 rows to /home/victorfrankestein/Documents/Orthohantavirus/output/ortho_suppressed.parquet
+2026-07-08 17:29:29,830 | INFO | Wrote 15991 rows to /home/victorfrankestein/Documents/Orthohantavirus/output/ortho_qc_report.parquet
+2026-07-08 17:29:30,073 | INFO | Done
+2026-07-08 17:29:30,073 | INFO | Accession records: 15991
+2026-07-08 17:29:30,073 | INFO | Virus groups: 11049

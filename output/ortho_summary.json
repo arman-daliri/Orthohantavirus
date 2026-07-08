@@ -35,7 +35,7 @@
     "multiple_segment_text_hits": 1
   },
   "provenance": {
-    "generated_at": "2026-07-08T12:04:28Z",
+    "generated_at": "2026-07-08T13:29:29Z",
     "dataset_catalog_api_version": "V2",
     "dataset_catalog_md5": "b84f8e3f489f4d22bf7a978a0377f933",
     "input_md5": {
@@ -93,6 +93,7 @@
         "host_name",
         "host_taxid",
         "host_source",
+        "host_role",
         "isolation_source",
         "tissue_source",
         "protein_accessions",
