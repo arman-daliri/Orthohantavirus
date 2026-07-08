@@ -1,115 +1,431 @@
+#!/usr/bin/env python3
 """
-Orthohantavirus Master Dataset Pipeline (production-ready)
-NCBI unzipped package -> grouped ML-ready JSON + host-prediction CSV + summary JSON
+Orthohantavirus production pipeline
+==================================
 
-Key fixes in this revision
---------------------------
-1. Correctly populates protein_accessions and protein_lengths_aa from protein.faa and metadata cross-links.
-2. Fixes the common inflation artifact where groups with only one complete segment are counted by records
-   instead of by groups. Summary now reports both group-level and record-level pattern counts separately.
-3. Cross-checks metadata across data_report.jsonl, annotation_report.jsonl, biosample_report.jsonl,
-   genomic.fna, cds.fna, and protein.faa.
-4. Uses BioSample-first grouping, then exact fallback on isolate_or_strain + collection_date + location + host.
-5. Keeps accession-level provenance while also exporting one row per group for host prediction.
-6. sequencehash is preserved as an empty string exactly as requested.
-7. Fixes BioSample extraction for hierarchical NCBI virus JSON where BioSample may appear as nested arrays/objects.
+Purpose
+-------
+Parse an NCBI Datasets Orthohantavirus package and produce accession-level,
+virus-level, and QC outputs without over-inferring biology that is already
+present in the package metadata.
+
+Design principles
+-----------------
+1. Treat data_report.jsonl as the primary accession-level metadata source.
+2. Treat biosample_report.jsonl as the preferred host metadata source.
+3. Treat annotation_report.jsonl as supporting evidence for QC, not as the
+   first source of segment identity when explicit segment metadata exists.
+4. Group accessions conservatively: species + biosample + isolate/strain first,
+   then controlled fallbacks.
+5. Keep incomplete viruses; classify completeness rather than discarding them.
+6. Do not infer reassortment from host labels.
+7. Use sequence files mainly as attachments and validation layers.
+
+Usage
+-----
+python all_hanta_production.py /path/to/unzipped_package
+
+Expected package layout
+-----------------------
+<root>/ncbi_dataset/data/
+    data_report.jsonl
+    annotation_report.jsonl
+    biosample_report.jsonl
+    genomic.fna
+    cds.fna
+    protein.faa
+
+Outputs
+-------
+output/
+    ortho_accession_table.parquet
+    ortho_virus_table.parquet
+    ortho_ml_segments.parquet
+    ortho_qc_report.parquet
+    ortho_summary.json
+    ortho_pipeline.log
 """
 
 from __future__ import annotations
 
-import csv
+import argparse
+import hashlib
 import json
+import logging
+import os
 import re
 import sys
+from datetime import UTC, datetime
+
+import pandas as pd
+# Requires:
+# pip install pandas pyarrow
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, DefaultDict, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
-INPUT_ROOT = Path("/home/victorfrankestein/Documents/hanta_revised5/all_hanta")
-DATA_DIR = INPUT_ROOT / "ncbi_dataset" / "data"
-OUTPUT_DIR = Path("/home/victorfrankestein/Documents/hanta_revised5/output")
 
-DATA_REPORT = DATA_DIR / "data_report.jsonl"
-ANNOTATION_REPORT = DATA_DIR / "annotation_report.jsonl"
-BIOSAMPLE_REPORT = DATA_DIR / "biosample_report.jsonl"
-GENOMIC_FASTA = DATA_DIR / "genomic.fna"
-CDS_FASTA = DATA_DIR / "cds.fna"
-PROTEIN_FASTA = DATA_DIR / "protein.faa"
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
 
-OUT_JSON = OUTPUT_DIR / "orthohantavirus_ml_ready.json"
-OUT_CSV = OUTPUT_DIR / "orthohantavirus_host_prediction_master.csv"
-OUT_SUMMARY = OUTPUT_DIR / "orthohantavirus_summary.json"
-
-MIN_COMPLETE_NT = {"L": 5000, "M": 2500, "S": 1000}
 ACCESSION_RE = re.compile(r"[A-Z]{1,4}_?\d{4,}(?:\.\d+)?")
-BIOSAMPLE_RE = re.compile(r"\bSAM[NED]?[A-Z]?\d+\b", flags=re.I)
-REFSEQ_PREFIXES = ("NC_", "NM_", "NP_", "YP_", "XM_", "XP_", "XR_", "NR_")
+BIOSAMPLE_RE = re.compile(r"\bSAM[NED]?[A-Z]?\d+\b", re.I)
+YEAR_RE = re.compile(r"(19|20)\d{2}")
 
-LAB_PASSAGE_TERMS = [
-    "vero",
-    "passage",
-    "passaged",
-    "cell culture",
-    "cell line",
-    "cell-line",
-    "adapted",
-    "in vitro",
-]
+COMPLETE_LENGTH_MIN = {
+    "L": 6000,
+    "M": 3200,
+    "S": 1200,
+}
 
-SEGMENT_RULES = {
-    "S": [
-        r"\bnucleocapsid\b",
-        r"\bnucleoprotein\b",
-        r"\bnp\b",
-        r"\bn protein\b",
-        r"\bsmall\b",
-        r"\bsegment\s*s\b",
+OUTPUT_TABLE_SCHEMAS = {
+    "ortho_accession_table.parquet": [
+        "accession", "species_name", "species_taxid", "genus_name", "genus_taxid", "segment", "segment_source",
+        "completeness", "nt_length", "biosample", "bioproject", "isolate", "strain", "collection_date", "year",
+        "location", "country", "region", "host_name", "host_taxid", "host_source", "isolation_source",
+        "tissue_source", "protein_accessions", "annotation_products", "group_key", "group_confidence", "is_refseq",
+        "warning_flags",
+    ],
+    "ortho_virus_table.parquet": [
+        "group_key", "species_name", "species_taxid", "host_name", "host_taxid", "country", "year", "biosample",
+        "isolate", "strain", "group_confidence", "group_size", "s_accessions", "m_accessions", "l_accessions",
+        "complete_segments", "completeness_class", "all_hosts", "all_accessions",
+    ],
+    "ortho_isolate_table.parquet": [
+        "strict_isolate_key", "species_name", "species_taxid", "species_cluster_id", "biosample", "isolate", "strain",
+        "host_name", "host_taxid", "host_role", "collection_date", "location", "country", "region", "grouping_tier",
+        "grouping_confidence", "s_accession", "m_accession", "l_accession", "s_completeness", "m_completeness",
+        "l_completeness", "s_nt_length", "m_nt_length", "l_nt_length", "concatenated_protein_aa",
+        "coding_complete_status", "mosaic_flag", "taxonomic_incongruence_warning", "reassortment_candidate_warning",
+        "ns_s_overlapping_orf", "species_divergence_flag", "s_protein_evidence", "m_protein_evidence",
+        "l_protein_evidence", "s_protein_accessions", "m_protein_accessions", "l_protein_accessions",
+        "missing_protein_warnings", "warnings",
+    ],
+    "ortho_host_table.parquet": [
+        "host_name", "host_taxid", "host_role", "host_source", "representative_biosample", "representative_isolate",
+        "accession_count", "isolate_count", "example_species",
+    ],
+    "ortho_ml_feature_matrix.parquet": [
+        "strict_isolate_key", "species_name", "species_taxid", "host_name", "host_taxid", "host_role",
+        "kmer_*",
+    ],
+    "ortho_ml_segments.parquet": [
+        "accession", "segment", "species_name", "species_taxid", "host_name", "host_taxid", "country", "year",
+        "biosample", "completeness", "group_key",
+    ],
+    "ortho_suppressed.parquet": [
+        "accession", "species_name", "species_taxid", "segment", "completeness", "biosample", "isolate", "strain",
+        "collection_date", "location", "host_name", "host_taxid", "suppression_reason",
+    ],
+    "ortho_qc_report.parquet": [
+        "accession", "group_key", "grouping_tier", "group_confidence", "segment", "completeness", "warnings",
+    ],
+}
+
+SEGMENT_TEXT_PATTERNS = {
+    "L": [
+        r"\bsegment\s*l\b",
+        r"\blarge\b",
+        r"\bpolymerase\b",
+        r"\brdrp\b",
+        r"rna[- ]dependent rna polymerase",
+        r"\bl protein\b",
     ],
     "M": [
-        r"\bglycoprotein precursor\b",
+        r"\bsegment\s*m\b",
+        r"\bmedium\b",
+        r"glycoprotein precursor",
         r"\bglycoprotein\b",
         r"\bgpc\b",
         r"\bgn\b",
         r"\bgc\b",
         r"\bg1\b",
         r"\bg2\b",
-        r"\bgp\b",
-        r"\bmedium\b",
-        r"\bsegment\s*m\b",
     ],
-    "L": [
+    "S": [
+        r"\bsegment\s*s\b",
+        r"\bsmall\b",
+        r"\bnucleocapsid\b",
+        r"\bnucleoprotein\b",
+        r"\bn protein\b",
+        r"\bnp\b",
+    ],
+}
+
+LAB_HOST_TERMS = [
+    "vero",
+    "cell line",
+    "cell-line",
+    "cell culture",
+    "passage",
+    "passaged",
+    "adapted",
+    "in vitro",
+]
+
+DATA_REPORT = "data_report.jsonl"
+ANNOTATION_REPORT = "annotation_report.jsonl"
+BIOSAMPLE_REPORT = "biosample_report.jsonl"
+GENOMIC_FASTA = "genomic.fna"
+CDS_FASTA = "cds.fna"
+PROTEIN_FASTA = "protein.faa"
+SUPPRESSED_CSV = "ortho_suppressed.csv"
+ISOLATE_CSV = "ortho_isolate_table.csv"
+HOST_CSV = "ortho_host_table.csv"
+ML_FEATURE_CSV = "ortho_ml_feature_matrix.csv"
+KMER_K = 3
+HSIC_LASSO_MAX_FEATURES = 200
+PED_SPECIES_THRESHOLD = 0.1
+N_AMBIGUOUS_THRESHOLD = 100
+TERMINAL_MOTIF_5 = "UAGUAGUAG"
+TERMINAL_MOTIF_3 = "AUCAUCAUCUG"
+TRIPLET_SEGMENTS = {"S", "M", "L"}
+
+PROTEIN_PRODUCT_PATTERNS = {
+    "N": [
+        r"\bnucleocapsid\b",
+        r"\bnucleoprotein\b",
+        r"\bnp\b",
+        r"\bN protein\b",
+    ],
+    "GPC": [
+        r"\bglycoprotein precursor\b",
+        r"\bglycoprotein\b",
+        r"\bgpc\b",
+        r"\bGn\b",
+        r"\bGc\b",
+        r"\bG1\b",
+        r"\bG2\b",
+    ],
+    "NSs": [
+        r"\bns s\b",
+        r"\bnon[- ]structural protein s\b",
+        r"\bns s protein\b",
+        r"\bns s orf\b",
+        r"\bns s overlapping\b",
+        r"\bns s overlap\b",
+    ],
+    "RdRp": [
         r"\bpolymerase\b",
-        r"\brdrp\b",
+        r"\brdRp\b",
         r"\brna[- ]dependent rna polymerase\b",
         r"\bl protein\b",
-        r"\blarge\b",
-        r"\bsegment\s*l\b",
+        r"\blarge protein\b",
     ],
 }
 
 
-def ensure_inputs() -> None:
-    missing = [
-        p for p in [
-            DATA_REPORT,
-            ANNOTATION_REPORT,
-            BIOSAMPLE_REPORT,
-            GENOMIC_FASTA,
-            CDS_FASTA,
-            PROTEIN_FASTA,
-        ] if not p.exists()
-    ]
-    if missing:
-        msg = "\n".join(str(p) for p in missing)
-        raise FileNotFoundError(f"Missing required inputs:\n{msg}")
+# ---------------------------------------------------------------------------
+# Dataclasses
+# ---------------------------------------------------------------------------
+
+@dataclass
+class InputPaths:
+    root: Path
+    data_dir: Path
+    data_report: Path
+    annotation_report: Path
+    biosample_report: Path
+    dataset_catalog: Path
+    genomic_fasta: Optional[Path]
+    cds_fasta: Optional[Path]
+    protein_fasta: Optional[Path]
+    output_dir: Path
+    log_file: Path
 
 
-def safe_jsonable(obj: Any) -> Any:
-    if isinstance(obj, dict):
-        return {str(k): safe_jsonable(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple, set)):
-        return [safe_jsonable(v) for v in obj]
-    return obj
+@dataclass
+class FastaRecord:
+    accession: str
+    accession_base: str
+    header: str
+    sequence: str
+    length: int
+
+
+@dataclass
+class AnnotationEvidence:
+    accession_links: List[str] = field(default_factory=list)
+    product_names: List[str] = field(default_factory=list)
+    protein_accessions: List[str] = field(default_factory=list)
+    raw_hits: int = 0
+
+
+@dataclass
+class BioSampleInfo:
+    accession: str = ""
+    host: Optional[str] = None
+    host_taxid: Optional[str] = None
+    isolation_source: Optional[str] = None
+    tissue: Optional[str] = None
+    collection_date: Optional[str] = None
+    geographic_location: Optional[str] = None
+    strain: Optional[str] = None
+    isolate: Optional[str] = None
+    raw_attributes: Dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class QCFlags:
+    missing_segment: bool = False
+    segment_from_heuristic: bool = False
+    segment_annotation_conflict: bool = False
+    missing_host: bool = False
+    missing_biosample: bool = False
+    missing_isolate_and_strain: bool = False
+    lab_host_flag: bool = False
+    missing_genomic_sequence: bool = False
+    missing_protein_link: bool = False
+    unexpected_length_for_segment: bool = False
+
+    def to_messages(self) -> List[str]:
+        msgs: List[str] = []
+        for key, value in asdict(self).items():
+            if value:
+                msgs.append(key)
+        return msgs
+
+
+@dataclass
+class AccessionRecord:
+    accession: str
+    accession_base: str
+    species_name: str
+    species_taxid: str
+    genus_name: str
+    genus_taxid: str
+    segment: str
+    segment_source: str
+    completeness: str
+    nt_length: int
+    biosample: str
+    bioproject: str
+    isolate: str
+    strain: str
+    collection_date: str
+    year: str
+    location: str
+    country: str
+    region: str
+    host_name: str
+    host_taxid: str
+    host_source: str
+    host_role: str
+    isolation_source: str
+    tissue_source: str
+    protein_accessions: List[str]
+    annotation_products: List[str]
+    protein_aa: str
+    protein_product: str
+    nss_overlap_flag: bool
+    strict_isolate_key: str
+    group_key: str
+    grouping_tier: str
+    group_confidence: float
+    is_refseq: bool
+    warning_flags: List[str]
+
+
+@dataclass
+class VirusGroupRecord:
+    group_key: str
+    species_name: str
+    species_taxid: str
+    host_name: str
+    host_taxid: str
+    country: str
+    year: str
+    biosample: str
+    isolate: str
+    strain: str
+    group_confidence: float
+    group_size: int
+    s_accessions: List[str]
+    m_accessions: List[str]
+    l_accessions: List[str]
+    complete_segments: List[str]
+    completeness_class: str
+    all_hosts: List[str]
+    all_accessions: List[str]
+
+
+@dataclass
+class IsolateRecord:
+    strict_isolate_key: str
+    species_name: str
+    species_taxid: str
+    species_cluster_id: str
+    biosample: str
+    isolate: str
+    strain: str
+    host_name: str
+    host_taxid: str
+    host_role: str
+    collection_date: str
+    location: str
+    country: str
+    region: str
+    grouping_tier: str
+    grouping_confidence: float
+    s_accession: str
+    m_accession: str
+    l_accession: str
+    s_completeness: str
+    m_completeness: str
+    l_completeness: str
+    s_nt_length: int
+    m_nt_length: int
+    l_nt_length: int
+    concatenated_protein_aa: str
+    coding_complete_status: str
+    mosaic_flag: bool
+    taxonomic_incongruence_warning: bool
+    reassortment_candidate_warning: bool
+    ns_s_overlapping_orf: bool
+    species_divergence_flag: bool
+    s_protein_evidence: str
+    m_protein_evidence: str
+    l_protein_evidence: str
+    s_protein_accessions: List[str]
+    m_protein_accessions: List[str]
+    l_protein_accessions: List[str]
+    missing_protein_warnings: List[str]
+    host_role: str
+    host_source: str
+    raw_metadata: Dict[str, Any]
+    warnings: List[str]
+
+
+@dataclass
+class HostRecord:
+    host_name: str
+    host_taxid: str
+    host_role: str
+    host_source: str
+    representative_biosample: str
+    representative_isolate: str
+    accession_count: int
+    isolate_count: int
+    example_species: str
+
+
+# ---------------------------------------------------------------------------
+# Utility helpers
+# ---------------------------------------------------------------------------
+
+
+def configure_logging(log_file: Path, verbose: bool = False) -> None:
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s | %(levelname)s | %(message)s",
+        handlers=[logging.FileHandler(log_file, encoding="utf-8"), logging.StreamHandler(sys.stdout)],
+    )
+
 
 
 def clean_text(value: Any) -> Optional[str]:
@@ -121,9 +437,11 @@ def clean_text(value: Any) -> Optional[str]:
         text = str(value).strip()
     if not text:
         return None
-    if text.lower() in {"none", "null", "nan", "na", "n/a", "unknown", "missing", "not collected"}:
+    low = text.lower()
+    if low in {"none", "null", "nan", "na", "n/a", "unknown", "missing", "not collected"}:
         return None
     return re.sub(r"\s+", " ", text).strip()
+
 
 
 def first_nonempty(*values: Any) -> Optional[str]:
@@ -140,15 +458,22 @@ def first_nonempty(*values: Any) -> Optional[str]:
     return None
 
 
+
 def uniq(values: Iterable[Any]) -> List[Any]:
     seen = set()
-    out: List[Any] = []
+    out = []
     for value in values:
-        key = json.dumps(safe_jsonable(value), ensure_ascii=False, sort_keys=True) if isinstance(value, (dict, list, tuple, set)) else str(value)
+        key = json.dumps(value, ensure_ascii=False, sort_keys=True) if isinstance(value, (dict, list, tuple, set)) else str(value)
         if key not in seen:
             seen.add(key)
             out.append(value)
     return out
+
+
+
+def accession_base(accession: str) -> str:
+    return accession.split(".")[0] if accession else ""
+
 
 
 def flatten_json(obj: Any, prefix: str = "") -> Dict[str, Any]:
@@ -167,6 +492,7 @@ def flatten_json(obj: Any, prefix: str = "") -> Dict[str, Any]:
     return out
 
 
+
 def iter_jsonl(path: Path) -> Iterator[Dict[str, Any]]:
     with path.open("r", encoding="utf-8") as handle:
         for line_no, line in enumerate(handle, start=1):
@@ -181,65 +507,116 @@ def iter_jsonl(path: Path) -> Iterator[Dict[str, Any]]:
                 yield obj
 
 
-def accession_base(acc: str) -> str:
-    return acc.split(".")[0] if acc else ""
+def md5sum(path: Path) -> str:
+    digest = hashlib.md5()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(8192), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
-def extract_accessions_from_blob(obj: Any) -> List[str]:
-    return uniq(ACCESSION_RE.findall(json.dumps(obj, ensure_ascii=False)))
+def load_dataset_catalog(path: Path) -> Dict[str, Any]:
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
 
 
-def extract_biosample_candidates(obj: Any) -> List[str]:
-    found: List[str] = []
-
-    def walk(x: Any) -> None:
-        if isinstance(x, dict):
-            for k, v in x.items():
-                lk = str(k).lower()
-                if lk in {"biosampleaccession", "biosample_acc", "biosample"} and isinstance(v, str):
-                    m = BIOSAMPLE_RE.search(v.strip())
-                    if m:
-                        found.append(m.group(0).upper())
-                elif lk == "accession" and isinstance(v, str):
-                    m = BIOSAMPLE_RE.search(v.strip())
-                    if m:
-                        found.append(m.group(0).upper())
-                walk(v)
-        elif isinstance(x, list):
-            for item in x:
-                walk(item)
-        elif isinstance(x, str):
-            m = BIOSAMPLE_RE.search(x)
-            if m:
-                found.append(m.group(0).upper())
-
-    walk(obj)
-    return uniq(found)
+def extract_year(text: Optional[str]) -> str:
+    if not text:
+        return ""
+    m = YEAR_RE.search(text)
+    return m.group(0) if m else ""
 
 
-def parse_fasta(path: Path) -> Dict[str, Dict[str, Any]]:
-    index: Dict[str, Dict[str, Any]] = {}
+
+def split_geo(geo: str) -> Tuple[str, str]:
+    if not geo:
+        return "", ""
+    if ":" in geo:
+        country, region = geo.split(":", 1)
+        return country.strip(), region.strip()
+    return geo.strip(), ""
+
+
+
+def safe_write_parquet(path: Path, rows: Sequence[Dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df = pd.DataFrame(rows)
+    df.to_parquet(path, engine="pyarrow", index=False)
+    logging.info("Wrote %s rows to %s", len(df), path)
+
+
+def safe_write_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# Path detection
+# ---------------------------------------------------------------------------
+
+
+def resolve_inputs(root: Path, output: Optional[Path] = None) -> InputPaths:
+    root = root.expanduser().resolve()
+    data_dir = root / "all_hanta" / "ncbi_dataset" / "data"
+    if not data_dir.exists():
+        raise FileNotFoundError(f"Could not find data directory: {data_dir}")
+
+    data_report = data_dir / DATA_REPORT
+    annotation_report = data_dir / ANNOTATION_REPORT
+    biosample_report = data_dir / BIOSAMPLE_REPORT
+    dataset_catalog = data_dir / "dataset_catalog.json"
+
+    for required in [data_report, annotation_report, biosample_report, dataset_catalog]:
+        if not required.exists():
+            raise FileNotFoundError(f"Missing required file: {required}")
+
+    output_dir = (output.expanduser().resolve() if output else root / "output")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    return InputPaths(
+        root=root,
+        data_dir=data_dir,
+        data_report=data_report,
+        annotation_report=annotation_report,
+        biosample_report=biosample_report,
+        dataset_catalog=dataset_catalog,
+        genomic_fasta=(data_dir / GENOMIC_FASTA) if (data_dir / GENOMIC_FASTA).exists() else None,
+        cds_fasta=(data_dir / CDS_FASTA) if (data_dir / CDS_FASTA).exists() else None,
+        protein_fasta=(data_dir / PROTEIN_FASTA) if (data_dir / PROTEIN_FASTA).exists() else None,
+        output_dir=output_dir,
+        log_file=output_dir / "ortho_pipeline.log",
+    )
+
+
+# ---------------------------------------------------------------------------
+# FASTA parsing
+# ---------------------------------------------------------------------------
+
+
+def parse_fasta(path: Optional[Path]) -> Dict[str, FastaRecord]:
+    index: Dict[str, FastaRecord] = {}
+    if path is None or not path.exists():
+        return index
+
     header: Optional[str] = None
     seq_parts: List[str] = []
 
-    def commit(h: str, parts: List[str]) -> None:
-        desc = h[1:].strip()
+    def commit(raw_header: str, parts: List[str]) -> None:
+        desc = raw_header[1:].strip()
         acc = desc.split()[0]
         base = accession_base(acc)
         seq = "".join(parts)
-        rec = {
-            "accession": acc,
-            "accession_base": base,
-            "header": desc,
-            "sequence": seq,
-            "length": len(seq),
-        }
+        rec = FastaRecord(
+            accession=acc,
+            accession_base=base,
+            header=desc,
+            sequence=seq,
+            length=len(seq),
+        )
         index[acc] = rec
         if base and base not in index:
             index[base] = rec
-
-    if not path.exists():
-        return index
 
     with path.open("r", encoding="utf-8", errors="replace") as handle:
         for line in handle:
@@ -256,15 +633,14 @@ def parse_fasta(path: Path) -> Dict[str, Dict[str, Any]]:
     return index
 
 
-def dedupe_records(records: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    seen = set()
-    out: List[Dict[str, Any]] = []
-    for rec in records:
-        key = json.dumps(rec, ensure_ascii=False, sort_keys=True)
-        if key not in seen:
-            seen.add(key)
-            out.append(rec)
-    return out
+# ---------------------------------------------------------------------------
+# Annotation and biosample indexes
+# ---------------------------------------------------------------------------
+
+
+def extract_accessions_from_blob(obj: Any) -> List[str]:
+    return uniq(ACCESSION_RE.findall(json.dumps(obj, ensure_ascii=False)))
+
 
 
 def build_annotation_index(records: Sequence[Dict[str, Any]]) -> DefaultDict[str, List[Dict[str, Any]]]:
@@ -278,136 +654,189 @@ def build_annotation_index(records: Sequence[Dict[str, Any]]) -> DefaultDict[str
     return idx
 
 
-def build_biosample_index(records: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
-    idx: Dict[str, Dict[str, Any]] = {}
+
+def extract_biosample_candidates(obj: Any) -> List[str]:
+    found: List[str] = []
+
+    def walk(x: Any) -> None:
+        if isinstance(x, dict):
+            for k, v in x.items():
+                lk = str(k).lower()
+                if lk in {"biosample", "biosampleaccession", "biosample_acc"} and isinstance(v, str):
+                    m = BIOSAMPLE_RE.search(v)
+                    if m:
+                        found.append(m.group(0).upper())
+                walk(v)
+        elif isinstance(x, list):
+            for item in x:
+                walk(item)
+        elif isinstance(x, str):
+            m = BIOSAMPLE_RE.search(x)
+            if m:
+                found.append(m.group(0).upper())
+
+    walk(obj)
+    return uniq(found)
+
+
+
+def normalize_attr_name(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
+
+
+
+def parse_biosample_record(rec: Dict[str, Any]) -> BioSampleInfo:
+    flat = flatten_json(rec)
+    accession = first_nonempty(rec.get("accession"), flat.get("accession")) or ""
+    info = BioSampleInfo(accession=accession)
+
+    attrs = rec.get("attributes", [])
+    attr_map: Dict[str, str] = {}
+    if isinstance(attrs, list):
+        for item in attrs:
+            if not isinstance(item, dict):
+                continue
+            name = normalize_attr_name(str(item.get("name", "")))
+            value = clean_text(item.get("value"))
+            if name and value:
+                attr_map[name] = value
+
+    info.raw_attributes = attr_map
+    info.host = first_nonempty(attr_map.get("host"), flat.get("host"))
+    info.host_taxid = first_nonempty(attr_map.get("host_taxid"), flat.get("host.taxId"), flat.get("host.taxid"))
+    info.isolation_source = first_nonempty(attr_map.get("isolation_source"), attr_map.get("source"))
+    info.tissue = first_nonempty(attr_map.get("tissue"), attr_map.get("host_tissue_sampled"))
+    info.collection_date = first_nonempty(attr_map.get("collection_date"), flat.get("collectionDate"))
+    info.geographic_location = first_nonempty(attr_map.get("geo_loc_name"), flat.get("geoLocName"), flat.get("geographicLocation"))
+    info.strain = first_nonempty(attr_map.get("strain"))
+    info.isolate = first_nonempty(attr_map.get("isolate"))
+    return info
+
+
+
+def build_biosample_index(records: Sequence[Dict[str, Any]]) -> Dict[str, BioSampleInfo]:
+    out: Dict[str, BioSampleInfo] = {}
     for rec in records:
-        for biosample in extract_biosample_candidates(rec):
-            idx[biosample] = rec
-    return idx
+        info = parse_biosample_record(rec)
+        for candidate in extract_biosample_candidates(rec) + ([info.accession] if info.accession else []):
+            if candidate:
+                out[candidate.upper()] = info
+    return out
 
 
-def first_from_contexts(contexts: Sequence[Dict[str, Any]], keys: Sequence[str]) -> Optional[str]:
-    for key in keys:
-        for ctx in contexts:
-            if key in ctx:
-                value = clean_text(ctx.get(key))
-                if value:
-                    return value
+
+def extract_annotation_evidence(annotation_records: Sequence[Dict[str, Any]], protein_index: Dict[str, FastaRecord]) -> AnnotationEvidence:
+    evidence = AnnotationEvidence(raw_hits=len(annotation_records))
+    products: List[str] = []
+    links: List[str] = []
+    prot_accs: List[str] = []
+
+    for rec in annotation_records:
+        links.extend(extract_accessions_from_blob(rec))
+        blob = json.dumps(rec, ensure_ascii=False)
+        for product_match in re.findall(r'"name"\s*:\s*"([^"]+)"', blob):
+            products.append(product_match)
+        for acc in extract_accessions_from_blob(rec):
+            if acc in protein_index or accession_base(acc) in protein_index:
+                prot_accs.append(acc)
+
+    evidence.accession_links = uniq(links)
+    evidence.product_names = uniq(products)
+    evidence.protein_accessions = uniq(prot_accs)
+    return evidence
+
+
+# ---------------------------------------------------------------------------
+# Segment, completeness, host, grouping
+# ---------------------------------------------------------------------------
+
+
+def segment_from_explicit_fields(flat_contexts: Sequence[Dict[str, Any]]) -> Optional[str]:
+    for flat in flat_contexts:
+        value = first_nonempty(
+            flat.get("segment"),
+            flat.get("virus.segment"),
+            flat.get("annotation.segment"),
+        )
+        if not value:
+            continue
+        v = value.strip().upper()
+        if v in {"S", "M", "L"}:
+            return v
+        if v in {"SMALL"}:
+            return "S"
+        if v in {"MEDIUM"}:
+            return "M"
+        if v in {"LARGE"}:
+            return "L"
     return None
 
 
-def all_from_contexts(contexts: Sequence[Dict[str, Any]], keys: Sequence[str]) -> List[str]:
-    vals: List[str] = []
-    for key in keys:
-        for ctx in contexts:
-            if key in ctx:
-                value = ctx.get(key)
-                if isinstance(value, list):
-                    vals.extend(str(v) for v in value if clean_text(v))
-                else:
-                    x = clean_text(value)
-                    if x:
-                        vals.append(x)
-    return uniq(vals)
 
-
-def normalize_host_label(text: Optional[str]) -> Optional[str]:
-    if not text:
-        return None
-    text = re.split(r"[\(\[,:;]", text)[0].strip()
-    text = re.sub(r"\s+", " ", text).strip()
-    if not text:
-        return None
-    return text.replace(" ", "_")
-
-
-def choose_host_candidates(contexts: Sequence[Dict[str, Any]]) -> Tuple[List[str], List[str], List[str]]:
-    host_fields = [
-        "virus.host.scientificName",
-        "host.organismName",
-        "host.scientificName",
-        "host.organismname",
-        "host.scientificname",
-        "hostName",
-        "host.name",
-        "host",
-        "biosample.attributes.host",
-    ]
-    host_taxid_fields = [
-        "virus.host.taxId",
-        "host.taxId",
-        "host.tax_id",
-        "biosample.attributes.host_taxid",
-    ]
-    isolation_source_fields = [
-        "biosample.attributes.isolation_source",
-        "isolationSource",
-        "source",
-    ]
-
-    raw_hosts = all_from_contexts(contexts, host_fields)
-    host_candidates = uniq([x for x in (normalize_host_label(h) for h in raw_hosts) if x])
-
-    host_tax_ids: List[str] = []
-    for value in all_from_contexts(contexts, host_taxid_fields):
-        m = re.search(r"\d+", value)
-        if m:
-            host_tax_ids.append(m.group(0))
-    host_tax_ids = uniq(host_tax_ids)
-
-    isolation_sources = all_from_contexts(contexts, isolation_source_fields)
-    return host_candidates, host_tax_ids, isolation_sources
-
-
-def infer_segment_from_text(text: str) -> Tuple[Optional[str], List[str]]:
+def segment_from_text_evidence(texts: Sequence[str]) -> Tuple[Optional[str], List[str]]:
     warnings: List[str] = []
-    low = text.lower()
-    if "nss" in low or "ns s" in low:
-        warnings.append("contains_nss_label")
-        return None, warnings
-    for seg, patterns in SEGMENT_RULES.items():
-        for pat in patterns:
-            if re.search(pat, low, flags=re.I):
-                return seg, warnings
-    return None, warnings
+    scores = {"S": 0, "M": 0, "L": 0}
+    for text in texts:
+        low = text.lower()
+        if "nss" in low or "ns s" in low:
+            warnings.append("contains_nss_label")
+        for seg, patterns in SEGMENT_TEXT_PATTERNS.items():
+            for pat in patterns:
+                if re.search(pat, low, flags=re.I):
+                    scores[seg] += 1
+    best = max(scores, key=scores.get)
+    if scores[best] == 0:
+        return None, uniq(warnings)
+    non_zero = [k for k, v in scores.items() if v > 0]
+    if len(non_zero) > 1:
+        warnings.append("multiple_segment_text_hits")
+    return best, uniq(warnings)
 
 
-def choose_segment(contexts: Sequence[Dict[str, Any]], protein_headers: Sequence[str], nt_len: int) -> Tuple[str, str, List[str]]:
+
+def choose_segment(flat_contexts: Sequence[Dict[str, Any]], annotation: AnnotationEvidence, nt_len: int) -> Tuple[str, str, List[str]]:
+    explicit = segment_from_explicit_fields(flat_contexts)
+    if explicit:
+        return explicit, "explicit_metadata", []
+
     texts: List[str] = []
-    warnings: List[str] = []
-    for ctx in contexts:
-        for k, v in ctx.items():
+    for flat in flat_contexts:
+        for k, v in flat.items():
             lk = k.lower()
-            if any(t in lk for t in ["segment", "title", "definition", "description", "product", "protein"]):
+            if any(token in lk for token in ["segment", "description", "definition", "title", "product", "protein"]):
                 if isinstance(v, list):
-                    texts.extend(str(x) for x in v if x is not None)
+                    texts.extend([str(x) for x in v if x is not None])
                 else:
                     texts.append(str(v))
-    texts.extend(protein_headers)
+    texts.extend(annotation.product_names)
 
-    for text in texts:
-        seg, local_warnings = infer_segment_from_text(text)
-        warnings.extend(local_warnings)
-        if seg:
-            return seg, "text_metadata", uniq(warnings)
+    seg, warnings = segment_from_text_evidence(texts)
+    if seg:
+        return seg, "annotation_text", warnings
 
     if nt_len:
-        if nt_len >= MIN_COMPLETE_NT["L"]:
-            return "L", "length_heuristic", uniq(warnings)
-        if nt_len >= MIN_COMPLETE_NT["M"]:
-            return "M", "length_heuristic", uniq(warnings)
-        if nt_len >= MIN_COMPLETE_NT["S"]:
-            return "S", "length_heuristic", uniq(warnings)
+        if nt_len >= COMPLETE_LENGTH_MIN["L"]:
+            return "L", "length_heuristic", ["segment_from_length_only"]
+        if nt_len >= COMPLETE_LENGTH_MIN["M"]:
+            return "M", "length_heuristic", ["segment_from_length_only"]
+        if nt_len >= COMPLETE_LENGTH_MIN["S"]:
+            return "S", "length_heuristic", ["segment_from_length_only"]
 
-    warnings.append("segment_unresolved")
-    return "", "unresolved", uniq(warnings)
+    return "", "unresolved", ["segment_unresolved"]
 
 
-def determine_completeness(segment: str, contexts: Sequence[Dict[str, Any]], raw_blob: str, nt_len: int) -> str:
-    structured = first_from_contexts(
-        contexts,
-        ["completeness", "nucleotideCompleteness", "nucleotide.completeness", "annotation.completeness"],
-    )
+
+def determine_completeness(flat_contexts: Sequence[Dict[str, Any]], segment: str, nt_len: int, raw_blob: str, nt_sequence: Optional[str] = None) -> str:
+    structured = None
+    for flat in flat_contexts:
+        structured = first_nonempty(
+            flat.get("completeness"),
+            flat.get("nucleotideCompleteness"),
+            flat.get("nucleotide.completeness"),
+        )
+        if structured:
+            break
+
     if structured:
         low = structured.lower()
         if low == "complete":
@@ -420,498 +849,1129 @@ def determine_completeness(segment: str, contexts: Sequence[Dict[str, Any]], raw
         return "complete"
     if "complete cds" in low_blob and "partial" not in low_blob:
         return "coding_complete_only"
-    if segment and nt_len and nt_len >= MIN_COMPLETE_NT.get(segment, 10**9):
+
+    n_count = count_ambiguous_n(nt_sequence or "")
+    if n_count > N_AMBIGUOUS_THRESHOLD:
+        return "partial_or_unknown"
+
+    motif = has_terminal_motif(nt_sequence or "")
+    if segment and nt_len and nt_len >= COMPLETE_LENGTH_MIN.get(segment, 10**9):
+        if motif:
+            return "coding_complete"
         return "likely_complete"
     if nt_len:
         return "partial_or_unknown"
     return "unknown"
 
 
+
 def is_complete_status(status: str) -> bool:
-    return status in {"complete", "coding_complete_only", "likely_complete"}
+    return status in {"complete", "coding_complete_only", "likely_complete", "coding_complete"}
 
 
-def is_refseq(acc: str) -> bool:
-    return acc.startswith(REFSEQ_PREFIXES)
+
+def choose_host(flat_contexts: Sequence[Dict[str, Any]], biosample: Optional[BioSampleInfo]) -> Tuple[str, str, str]:
+    if biosample and biosample.host:
+        return biosample.host, clean_text(biosample.host_taxid) or "", "biosample"
+
+    for flat in flat_contexts:
+        host = first_nonempty(
+            flat.get("host.organismName"),
+            flat.get("host.scientificName"),
+            flat.get("hostName"),
+            flat.get("host"),
+        )
+        if host:
+            host_taxid = first_nonempty(flat.get("host.taxId"), flat.get("host.taxid")) or ""
+            return host, host_taxid, "data_report"
+
+    return "", "", "missing"
 
 
-def extract_year(text: Optional[str]) -> str:
-    if not text:
-        return ""
-    m = re.search(r"(19|20)\d{2}", text)
-    return m.group(0) if m else ""
 
-
-def clean_for_group(text: Optional[str]) -> str:
-    if not text:
-        return "unknown"
-    text = clean_text(text) or "unknown"
-    text = text.casefold()
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
-
-
-def build_group_key(biosample: str, isolate: str, strain: str, collection_date: str, location: str, host: str, accession: str) -> Tuple[str, str, float]:
-    if biosample:
-        return f"biosample|{biosample}", "biosample", 1.0
-
+def build_group_key(
+    species_taxid: str,
+    biosample: str,
+    isolate: str,
+    strain: str,
+    collection_date: str,
+    location: str,
+    host_name: str,
+    accession: str,
+) -> Tuple[str, str, float]:
     isolate_or_strain = isolate or strain
-    parts = [
-        clean_for_group(isolate_or_strain),
-        clean_for_group(collection_date),
-        clean_for_group(location),
-        clean_for_group(host),
-    ]
-    non_unknown = sum(1 for x in parts if x != "unknown")
-    if non_unknown:
-        return "exact|" + "|".join(parts), "isolate_or_strain_collection_date_location_host", round(non_unknown / 4.0, 3)
-
-    return f"accession|{accession}", "accession_fallback", 0.0
-
-
-def choose_best_group_member_for_segment(members: Sequence[Dict[str, Any]], segment: str) -> Optional[Dict[str, Any]]:
-    candidates = [m for m in members if m["segment"] == segment]
-    if not candidates:
-        return None
-    candidates.sort(
-        key=lambda r: (
-            1 if is_complete_status(r["completeness_status"]) else 0,
-            1 if is_refseq(r["accession"]) else 0,
-            int(r.get("nucleotide_length", 0)),
-            r["accession"],
-        ),
-        reverse=True,
-    )
-    return candidates[0]
+    if species_taxid and biosample and isolate_or_strain:
+        return f"species_biosample_isolate|{species_taxid}|{biosample}|{isolate_or_strain}", "tier_1", 1.0
+    if species_taxid and biosample:
+        return f"species_biosample|{species_taxid}|{biosample}", "tier_2", 0.92
+    if species_taxid and isolate_or_strain and collection_date and location:
+        return f"species_isolate_date_loc|{species_taxid}|{isolate_or_strain}|{collection_date}|{location}", "tier_3", 0.80
+    if species_taxid and isolate_or_strain and location:
+        return f"species_isolate_loc|{species_taxid}|{isolate_or_strain}|{location}", "tier_4", 0.72
+    if species_taxid and strain and host_name and location:
+        return f"species_strain_host_loc|{species_taxid}|{strain}|{host_name}|{location}", "tier_5", 0.62
+    return f"accession_only|{accession}", "fallback", 0.10
 
 
-def segment_completion_pattern(complete_segments: Sequence[str]) -> str:
-    if not complete_segments:
-        return "none_complete"
-    ordered = [seg.lower() for seg in ["S", "M", "L"] if seg in complete_segments]
-    return "".join(ordered) + "_complete"
+def is_lab_host_record(raw_blob: str) -> bool:
+    low = raw_blob.lower()
+    return any(term in low for term in LAB_HOST_TERMS)
 
 
-def choose_primary_host(host_candidates: Sequence[str], isolation_sources: Sequence[str]) -> Tuple[str, List[str]]:
-    observed = uniq([h for h in host_candidates if h])
-    if not observed:
-        observed = uniq([x for x in (normalize_host_label(v) for v in isolation_sources) if x])
-    if not observed:
-        return "unknown", []
-    return Counter(observed).most_common(1)[0][0], observed
+
+def expected_length_warning(segment: str, nt_len: int) -> bool:
+    if not segment or not nt_len:
+        return False
+    if segment == "S" and nt_len > 4000:
+        return True
+    if segment == "M" and not (1500 <= nt_len <= 5000):
+        return True
+    if segment == "L" and nt_len < 3000:
+        return True
+    return False
 
 
-def predict_segment_host(members: Sequence[Dict[str, Any]], segment: str) -> Optional[str]:
-    seg_members = [m for m in members if m["segment"] == segment and is_complete_status(m["completeness_status"])]
-    if not seg_members:
-        return None
-    hosts: List[str] = []
-    for member in seg_members:
-        if member.get("host_candidates"):
-            hosts.extend(member["host_candidates"])
-        else:
-            hosts.extend(member.get("_isolation_sources", []))
-    normalized = uniq([x for x in (normalize_host_label(v) for v in hosts) if x])
-    if not normalized:
-        return None
-    return Counter(normalized).most_common(1)[0][0]
+def count_ambiguous_n(sequence: str) -> int:
+    if not sequence:
+        return 0
+    return sequence.upper().count("N")
 
 
-def classify_reassortment(hs: Optional[str], hm: Optional[str], hl: Optional[str]) -> Any:
-    available = [x for x in [hs, hm, hl] if x]
-    if len(available) == 3:
-        return 0 if len(set(available)) == 1 else 1
-    if len(available) == 2:
-        return 1 if len(set(available)) > 1 else "unknown"
+def has_terminal_motif(sequence: str) -> bool:
+    if not sequence:
+        return False
+    seq = sequence.upper().replace("T", "U")
+    five = TERMINAL_MOTIF_5
+    three = TERMINAL_MOTIF_3
+    if seq.startswith(five) and seq.endswith(three):
+        return True
+    if seq.startswith(five) or seq.endswith(three):
+        return True
+    dna5 = five.replace("U", "T")
+    dna3 = three.replace("U", "T")
+    if sequence.upper().startswith(dna5) or sequence.upper().endswith(dna3):
+        return True
+    return False
+
+
+def is_strict_complete_segment(rec: AccessionRecord) -> bool:
+    if not rec.segment or rec.segment not in COMPLETE_LENGTH_MIN:
+        return False
+    if rec.completeness not in {"complete", "coding_complete_only", "likely_complete"}:
+        return False
+    return rec.nt_length >= COMPLETE_LENGTH_MIN[rec.segment]
+
+
+def determine_host_role(host_name: str, host_taxid: str, host_source: str, isolation_source: str, raw_blob: str) -> str:
+    low_name = (host_name or "").lower()
+    low_source = (host_source or "").lower()
+    low_iso = (isolation_source or "").lower()
+    low_blob = (raw_blob or "").lower()
+
+    if host_taxid == "9606" or "human" in low_name or "homo sapiens" in low_name:
+        return "spillover_host"
+    if any(term in low_name for term in LAB_HOST_TERMS) or any(term in low_source for term in LAB_HOST_TERMS) or any(term in low_iso for term in LAB_HOST_TERMS) or any(term in low_blob for term in LAB_HOST_TERMS):
+        return "laboratory_host"
+
+    excreta_terms = ["urine", "feces", "faeces", "saliva", "stool", "fecal", "urinary", "salivary", "excreta"]
+    if any(term in low_iso for term in excreta_terms) or any(term in low_source for term in excreta_terms) or any(term in low_blob for term in excreta_terms):
+        return "reservoir_candidate"
+
+    reservoir_terms = ["feces", "urine", "saliva", "excreta", "salivary gland", "kidney", "liver", "lung"]
+    if any(term in low_iso for term in reservoir_terms) or any(term in low_source for term in reservoir_terms):
+        return "potential_host"
+
+    serology_terms = ["serum", "serology", "antibody", "igg", "igm", "sero"]
+    if any(term in low_iso for term in serology_terms) or any(term in low_source for term in serology_terms) or any(term in low_blob for term in serology_terms):
+        return "spillover_host"
+
+    if host_name:
+        return "potential_host"
     return "unknown"
 
 
-def extract_biosample_accession_from_record(record: Dict[str, Any], ann_matches: Sequence[Dict[str, Any]]) -> str:
-    candidates: List[str] = []
-
-    candidates.extend(extract_biosample_candidates(record))
-    for ann in ann_matches:
-        candidates.extend(extract_biosample_candidates(ann))
-
-    data_flat = flatten_json(record)
-    candidates.extend([
-        first_nonempty(
-            data_flat.get("bioSampleAccession"),
-            data_flat.get("biosample.accession"),
-            data_flat.get("virus.bioSampleAccession"),
-            data_flat.get("virus.biosample.accession"),
-            data_flat.get("assemblyInfo.biosample.accession"),
-        ) or ""
-    ])
-
-    for ann in ann_matches:
-        ann_flat = flatten_json(ann)
-        candidates.extend([
-            first_nonempty(
-                ann_flat.get("bioSampleAccession"),
-                ann_flat.get("biosample.accession"),
-                ann_flat.get("virus.bioSampleAccession"),
-                ann_flat.get("virus.biosample.accession"),
-            ) or ""
-        ])
-
-    cleaned = []
-    for c in candidates:
-        c = clean_text(c)
-        if not c:
-            continue
-        m = BIOSAMPLE_RE.search(c)
-        if m:
-            cleaned.append(m.group(0).upper())
-    cleaned = uniq(cleaned)
-    return cleaned[0] if cleaned else ""
-
-
-def main() -> None:
-    ensure_inputs()
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-    print("[1/7] Loading JSONL reports...")
-    data_records = list(iter_jsonl(DATA_REPORT))
-    annotation_records = list(iter_jsonl(ANNOTATION_REPORT))
-    biosample_records = list(iter_jsonl(BIOSAMPLE_REPORT))
-
-    print("[2/7] Building indexes...")
-    annotation_index = build_annotation_index(annotation_records)
-    biosample_index = build_biosample_index(biosample_records)
-    genomic_index = parse_fasta(GENOMIC_FASTA)
-    cds_index = parse_fasta(CDS_FASTA)
-    protein_index = parse_fasta(PROTEIN_FASTA)
-
-    accession_rows: List[Dict[str, Any]] = []
-    parse_errors = 0
-    lab_dropped = 0
-
-    print("[3/7] Parsing and cross-checking accession records...")
-    for i, record in enumerate(data_records, start=1):
-        try:
-            data_flat = flatten_json(record)
-            accession = first_nonempty(
-                record.get("accession"),
-                data_flat.get("accession"),
-                data_flat.get("nucleotideAccession"),
-                data_flat.get("annotation.accession"),
-            )
-            if not accession:
-                tokens = extract_accessions_from_blob(record)
-                accession = tokens[0] if tokens else "UNKNOWN_ACCESSION"
-            accession_key = accession_base(accession)
-
-            ann_matches = dedupe_records(annotation_index.get(accession, []) + annotation_index.get(accession_key, []))
-            ann_flats = [flatten_json(x) for x in ann_matches]
-
-            biosample_acc = extract_biosample_accession_from_record(record, ann_matches)
-            biosample_rec = biosample_index.get(biosample_acc) if biosample_acc else None
-            biosample_flat = flatten_json(biosample_rec) if biosample_rec else {}
-
-            contexts = [data_flat] + ann_flats + ([biosample_flat] if biosample_flat else [])
-            raw_blob = json.dumps([record] + ann_matches + ([biosample_rec] if biosample_rec else []), ensure_ascii=False)
-
-            genomic_rec = genomic_index.get(accession) or genomic_index.get(accession_key) or {}
-            cds_rec = cds_index.get(accession) or cds_index.get(accession_key) or {}
-
-            protein_accessions: List[str] = []
-            protein_lengths_aa: List[int] = []
-            protein_headers: List[str] = []
-
-            linked_protein_tokens = []
-            for token in extract_accessions_from_blob([record] + ann_matches + ([biosample_rec] if biosample_rec else [])):
-                if token in protein_index or accession_base(token) in protein_index:
-                    linked_protein_tokens.append(token)
-            linked_protein_tokens = uniq(linked_protein_tokens)
-
-            if not linked_protein_tokens:
-                iso_hint = first_from_contexts(contexts, ["virus.isolate", "isolate.name", "isolate"])
-                strain_hint = first_from_contexts(contexts, ["virus.strain", "strain.name", "strain"])
-                iso_l = (iso_hint or "").lower()
-                strain_l = (strain_hint or "").lower()
-                if iso_l or strain_l:
-                    for p_acc, p_rec in protein_index.items():
-                        if p_acc != p_rec["accession"]:
-                            continue
-                        header_l = p_rec["header"].lower()
-                        if (iso_l and iso_l in header_l) or (strain_l and strain_l in header_l):
-                            linked_protein_tokens.append(p_rec["accession"])
-                linked_protein_tokens = uniq(linked_protein_tokens)
-
-            for token in linked_protein_tokens:
-                p = protein_index.get(token) or protein_index.get(accession_base(token))
-                if p:
-                    protein_accessions.append(p["accession"])
-                    protein_lengths_aa.append(int(p["length"]))
-                    protein_headers.append(p["header"])
-
-            protein_accessions = uniq(protein_accessions)
-            protein_lengths_aa = [int((protein_index.get(acc) or protein_index.get(accession_base(acc)) or {}).get("length", 0)) for acc in protein_accessions]
-            protein_headers = [((protein_index.get(acc) or protein_index.get(accession_base(acc)) or {}).get("header", "")) for acc in protein_accessions]
-
-            organism_name = first_from_contexts(contexts, ["organism.organismName", "organismName", "taxonomy.organismName", "virus.taxonomy.organismName"]) or ""
-            tax_id = first_from_contexts(contexts, ["taxonomy.taxId", "taxId", "organism.taxId", "virus.taxonomy.taxId"]) or ""
-            isolate = first_from_contexts(contexts, ["virus.isolate", "isolate.name", "virus.isolateName", "biosample.attributes.isolate", "isolate"]) or ""
-            strain = first_from_contexts(contexts, ["virus.strain", "strain.name", "virus.strainName", "biosample.attributes.strain", "strain"]) or ""
-            collection_date = first_from_contexts(contexts, ["collectionDate", "virus.collectionDate", "biosample.attributes.collection_date", "collection_date", "isolate.collectionDate"]) or ""
-            country_full = first_from_contexts(contexts, ["location.geographicLocation", "virus.geographicLocation", "biosample.attributes.geo_loc_name", "geoLocName", "country"]) or ""
-            country = country_full.split(":")[0].strip() if country_full else ""
-            region = country_full.split(":", 1)[1].strip() if ":" in country_full else ""
-            year = extract_year(collection_date)
-            isolation_source = first_from_contexts(contexts, ["biosample.attributes.isolation_source", "isolationSource", "source"]) or ""
-            tissue_specimen_source = first_from_contexts(contexts, ["biosample.attributes.tissue", "biosample.attributes.host_tissue_sampled", "tissue"]) or ""
-            biosample = biosample_acc or ""
-            bioproject = first_from_contexts(contexts, ["bioProjectAccession", "bioproject.accession", "bioprojects"]) or ""
-
-            host_candidates, host_tax_ids, isolation_sources = choose_host_candidates(contexts)
-            host_predict, all_observed_hosts = choose_primary_host(host_candidates, isolation_sources)
-
-            nt_len = int(genomic_rec.get("length", 0) or cds_rec.get("length", 0) or 0)
-            segment, segment_method, segment_warnings = choose_segment(contexts, protein_headers, nt_len)
-            completeness_status = determine_completeness(segment, contexts, raw_blob, nt_len)
-
-            low_blob = raw_blob.lower()
-            lab_terms = [term for term in LAB_PASSAGE_TERMS if term in low_blob]
-            if lab_terms:
-                lab_dropped += 1
-                continue
-
-            group_string_id, group_key_type, group_key_confidence = build_group_key(
-                biosample=biosample,
-                isolate=isolate,
-                strain=strain,
-                collection_date=collection_date,
-                location=country_full,
-                host=host_candidates[0] if host_candidates else (host_predict or ""),
-                accession=accession,
-            )
-
-            accession_rows.append(
-                {
-                    "accession": accession,
-                    "sequencehash": "",
-                    "group_string_id": group_string_id,
-                    "group_key_type": group_key_type,
-                    "group_key_confidence": group_key_confidence,
-                    "segment": segment,
-                    "segment_assignment_method": segment_method,
-                    "completeness_status": completeness_status,
-                    "organism_name": organism_name,
-                    "tax_id": tax_id,
-                    "isolate": isolate,
-                    "strain": strain,
-                    "collection_date": collection_date,
-                    "year": year,
-                    "country": country,
-                    "region": region,
-                    "isolation_source": isolation_source,
-                    "tissue_specimen_source": tissue_specimen_source,
-                    "biosample": biosample,
-                    "bioproject": bioproject,
-                    "host_candidates": host_candidates,
-                    "host_tax_ids": host_tax_ids,
-                    "host_predict": host_predict,
-                    "all_observed_hosts": all_observed_hosts,
-                    "protein_accessions": protein_accessions,
-                    "protein_lengths_aa": protein_lengths_aa,
-                    "warning_flags": uniq(segment_warnings),
-                    "nucleotide_length": nt_len,
-                    "group_size": 0,
-                    "solo": 0,
-                    "segment_completion_pattern": "",
-                    "is_reassortant": "unknown",
-                    "group_members": [],
-                    "predict_host_S": None,
-                    "predict_host_M": None,
-                    "predict_host_L": None,
-                    "_isolation_sources": isolation_sources,
-                }
-            )
-
-            if i % 3000 == 0:
-                print(f"   parsed {i:,} records...")
-        except Exception as exc:
-            parse_errors += 1
-            sys.stderr.write(f"[WARN] parse failure: {exc}\n")
-
-    print("[4/7] Grouping accession records...")
-    grouped: DefaultDict[str, List[Dict[str, Any]]] = defaultdict(list)
-    for row in accession_rows:
-        grouped[row["group_string_id"]].append(row)
-
-    print("[5/7] Applying quality control and building group annotations...")
-    final_json_rows: List[Dict[str, Any]] = []
-    final_csv_rows: List[Dict[str, Any]] = []
-
-    group_pattern_counts = Counter()
-    record_pattern_counts = Counter()
-    reassortant_group_count = 0
-
-    kept_groups = 0
-    for gid, members in grouped.items():
-        complete_segments = sorted(
-            {m["segment"] for m in members if m["segment"] in {"S", "M", "L"} and is_complete_status(m["completeness_status"])},
-            key=lambda x: {"S": 0, "M": 1, "L": 2}[x],
-        )
-
-        if set(complete_segments) != {"S", "M", "L"}:
-            continue
-
-        kept_groups += 1
-        pattern = segment_completion_pattern(complete_segments)
-        group_pattern_counts[pattern] += 1
-
-        group_size = len(members)
-        group_members = sorted(m["accession"] for m in members)
-        solo = 1 if group_size == 1 else 0
-
-        predict_host_s = predict_segment_host(members, "S")
-        predict_host_m = predict_segment_host(members, "M")
-        predict_host_l = predict_segment_host(members, "L")
-        is_reassortant = classify_reassortment(predict_host_s, predict_host_m, predict_host_l)
-        if is_reassortant == 1:
-            reassortant_group_count += 1
-
-        preferred_s = choose_best_group_member_for_segment(members, "S")
-        preferred_m = choose_best_group_member_for_segment(members, "M")
-        preferred_l = choose_best_group_member_for_segment(members, "L")
-
-        all_hosts_group = uniq([h for m in members for h in m.get("all_observed_hosts", []) if h])
-        primary_host_label = preferred_s.get("host_predict") if preferred_s and preferred_s.get("host_predict") else (all_hosts_group[0] if all_hosts_group else "unknown")
-
-        final_csv_rows.append(
-            {
-                "group_string_id": gid,
-                "primary_host_label": primary_host_label,
-                "s_prot_accession": (preferred_s.get("protein_accessions", [""])[0] if preferred_s and preferred_s.get("protein_accessions") else ""),
-                "m_prot_accession": (preferred_m.get("protein_accessions", [""])[0] if preferred_m and preferred_m.get("protein_accessions") else ""),
-                "l_prot_accession": (preferred_l.get("protein_accessions", [""])[0] if preferred_l and preferred_l.get("protein_accessions") else ""),
-                "complete_members": 3,
-                "is_reassortant": is_reassortant,
-                "segment_completion_pattern": pattern,
-                "group_size": group_size,
-                "all_observed_hosts": "|".join(all_hosts_group),
-                "country": preferred_s.get("country", "") if preferred_s else (members[0].get("country", "") if members else ""),
-                "year": preferred_s.get("year", "") if preferred_s else (members[0].get("year", "") if members else ""),
-            }
-        )
-
-        for member in members:
-            rec = dict(member)
-            rec["group_size"] = group_size
-            rec["solo"] = solo
-            rec["segment_completion_pattern"] = pattern
-            rec["is_reassortant"] = is_reassortant
-            rec["group_members"] = group_members
-            rec["predict_host_S"] = predict_host_s
-            rec["predict_host_M"] = predict_host_m
-            rec["predict_host_L"] = predict_host_l
-            final_json_rows.append(rec)
-            record_pattern_counts[pattern] += 1
-
-    print("[6/7] Writing outputs...")
-    json_columns = [
-        "accession",
-        "sequencehash",
-        "group_string_id",
-        "group_key_type",
-        "group_key_confidence",
-        "segment",
-        "segment_assignment_method",
-        "completeness_status",
-        "organism_name",
-        "tax_id",
-        "isolate",
-        "strain",
-        "collection_date",
-        "year",
-        "country",
-        "region",
-        "isolation_source",
-        "tissue_specimen_source",
-        "biosample",
-        "bioproject",
-        "host_candidates",
-        "host_tax_ids",
-        "host_predict",
-        "all_observed_hosts",
-        "protein_accessions",
-        "protein_lengths_aa",
-        "warning_flags",
-        "nucleotide_length",
-        "group_size",
-        "solo",
-        "segment_completion_pattern",
-        "is_reassortant",
-        "group_members",
-        "predict_host_S",
-        "predict_host_M",
-        "predict_host_L",
-    ]
-
-    with OUT_JSON.open("w", encoding="utf-8") as handle:
-        json.dump([{col: safe_jsonable(row.get(col)) for col in json_columns} for row in final_json_rows], handle, ensure_ascii=False, indent=2)
-
-    csv_columns = [
-        "group_string_id",
-        "primary_host_label",
-        "s_prot_accession",
-        "m_prot_accession",
-        "l_prot_accession",
-        "complete_members",
-        "is_reassortant",
-        "segment_completion_pattern",
-        "group_size",
-        "all_observed_hosts",
-        "country",
-        "year",
-    ]
-
-    with OUT_CSV.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=csv_columns)
-        writer.writeheader()
-        for row in final_csv_rows:
-            writer.writerow({col: row.get(col, "") for col in csv_columns})
-
-    summary = {
-        "total_records": len(final_json_rows),
-        "groups": kept_groups,
-        "solo_records": sum(1 for r in final_json_rows if r["solo"] == 1),
-        "segment_counts": dict(Counter(r["segment"] or "unknown" for r in final_json_rows)),
-        "completeness_counts": dict(Counter(r["completeness_status"] for r in final_json_rows)),
-        "segment_completion_patterns_group_level": dict(group_pattern_counts),
-        "segment_completion_patterns_record_level": dict(record_pattern_counts),
-        "group_key_type_distribution": dict(Counter(r["group_key_type"] for r in final_json_rows)),
-        "reassortant_group_count": reassortant_group_count,
-        "reassortant_record_count": sum(1 for r in final_json_rows if r["is_reassortant"] == 1),
-        "top_host_predictions": dict(Counter(r["host_predict"] for r in final_json_rows if r.get("host_predict")).most_common(25)),
-        "output_files": [str(OUT_JSON), str(OUT_CSV), str(OUT_SUMMARY)],
-        "final_json_columns": json_columns,
-        "final_csv_columns": csv_columns,
-        "records_before_grouping": len(accession_rows),
-        "groups_before_filtering": len(grouped),
-        "parse_errors": parse_errors,
-        "lab_dropped": lab_dropped,
+def compile_product_patterns() -> Dict[str, List[re.Pattern]]:
+    return {
+        key: [re.compile(pat, flags=re.I) for pat in patterns]
+        for key, patterns in PROTEIN_PRODUCT_PATTERNS.items()
     }
 
-    with OUT_SUMMARY.open("w", encoding="utf-8") as handle:
-        json.dump(summary, handle, ensure_ascii=False, indent=2)
 
-    print("[7/7] Verification report")
-    print("=" * 72)
-    print(f"Records before grouping: {len(accession_rows):,}")
-    print(f"Groups before filtering: {len(grouped):,}")
-    print(f"Groups after filtering:  {kept_groups:,}")
-    print(f"Final JSON records:      {len(final_json_rows):,}")
-    print(f"Lab-dropped records:     {lab_dropped:,}")
-    print(f"Parse errors:            {parse_errors:,}")
-    print(f"Reassortant groups:      {reassortant_group_count:,}")
-    print(f"JSON output:             {OUT_JSON}")
-    print(f"CSV output:              {OUT_CSV}")
-    print(f"Summary output:          {OUT_SUMMARY}")
-    print("=" * 72)
+def matches_product(text: str, patterns: List[re.Pattern]) -> bool:
+    low = text.lower()
+    return any(p.search(low) for p in patterns)
+
+
+def extract_protein_sequence_from_annotation(record: Dict[str, Any], protein_index: Dict[str, FastaRecord]) -> Optional[str]:
+    candidates = extract_accessions_from_blob(record)
+    for acc in candidates:
+        rec = protein_index.get(acc) or protein_index.get(accession_base(acc))
+        if rec and rec.sequence:
+            return rec.sequence
+    return None
+
+
+def resolve_segment_protein_annotation(
+    ann_records: Sequence[Dict[str, Any]],
+    protein_index: Dict[str, FastaRecord],
+    segment: str,
+    virus_name: str,
+) -> Tuple[str, str, bool]:
+    patterns = compile_product_patterns()
+    best_seq = ""
+    best_label = ""
+    nss_flag = False
+    for rec in ann_records:
+        raw_blob = json.dumps(rec, ensure_ascii=False)
+        text = raw_blob.lower()
+        if segment == "S":
+            if matches_product(text, patterns["NSs"]):
+                nss_flag = True
+            if matches_product(text, patterns["N"]):
+                seq = extract_protein_sequence_from_annotation(rec, protein_index)
+                if seq and len(seq) > len(best_seq):
+                    best_seq = seq
+                    best_label = "N"
+        elif segment == "M":
+            if matches_product(text, patterns["GPC"]):
+                seq = extract_protein_sequence_from_annotation(rec, protein_index)
+                if seq and len(seq) > len(best_seq):
+                    best_seq = seq
+                    best_label = "GPC"
+        elif segment == "L":
+            if matches_product(text, patterns["RdRp"]):
+                seq = extract_protein_sequence_from_annotation(rec, protein_index)
+                if seq and len(seq) > len(best_seq):
+                    best_seq = seq
+                    best_label = "RdRp"
+    if segment == "S" and any(name in virus_name.lower() for name in ["puumala", "tula"]) and nss_flag:
+        return best_seq, best_label or "N", True
+    return best_seq, best_label, nss_flag
+
+
+def compute_kmer_counts(sequence: str, k: int = KMER_K) -> Dict[str, float]:
+    counts: Dict[str, float] = {}
+    if not sequence or len(sequence) < k:
+        return counts
+    for i in range(len(sequence) - k + 1):
+        kmer = sequence[i : i + k]
+        counts[kmer] = counts.get(kmer, 0.0) + 1.0
+    total = sum(counts.values())
+    if total:
+        for kmer in counts:
+            counts[kmer] /= total
+    return counts
+
+
+def pearson_correlation(xs: Sequence[float], ys: Sequence[float]) -> float:
+    if not xs or not ys or len(xs) != len(ys):
+        return 0.0
+    mean_x = sum(xs) / len(xs)
+    mean_y = sum(ys) / len(ys)
+    num = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys))
+    denom_x = sum((x - mean_x) ** 2 for x in xs)
+    denom_y = sum((y - mean_y) ** 2 for y in ys)
+    if denom_x == 0 or denom_y == 0:
+        return 0.0
+    return num / (denom_x**0.5 * denom_y**0.5)
+
+
+def select_hsic_lasso_features(
+    matrix: Sequence[Dict[str, float]],
+    labels: Sequence[str],
+    max_features: int = HSIC_LASSO_MAX_FEATURES,
+) -> List[str]:
+    if not matrix or not labels:
+        return []
+    feature_names = sorted({k for row in matrix for k in row.keys()})
+    label_values = {label: idx for idx, label in enumerate(sorted(set(labels)))}
+    label_vector = [label_values[label] for label in labels]
+    scores: Dict[str, float] = {}
+    for feature in feature_names:
+        values = [row.get(feature, 0.0) for row in matrix]
+        mean_val = sum(values) / len(values) if values else 0.0
+        between = sum((label_vector[i] - sum(label_vector) / len(label_vector)) * (values[i] - mean_val) for i in range(len(values)))
+        variance = sum((v - mean_val) ** 2 for v in values)
+        scores[feature] = abs(between) / (variance + 1e-9)
+    sorted_features = sorted(scores, key=lambda f: scores[f], reverse=True)
+    selected: List[str] = []
+    for feature in sorted_features:
+        if len(selected) >= max_features:
+            break
+        feature_values = [row.get(feature, 0.0) for row in matrix]
+        if any(abs(pearson_correlation(feature_values, [row.get(existing, 0.0) for row in matrix])) > 0.92 for existing in selected):
+            continue
+        selected.append(feature)
+    return selected
+
+
+def normalize_matrix_columns(rows: Sequence[Dict[str, Any]], feature_names: Sequence[str]) -> None:
+    for feature in feature_names:
+        values = [float(row.get(feature, 0.0)) for row in rows]
+        mean = sum(values) / len(values) if values else 0.0
+        std = (sum((v - mean) ** 2 for v in values) / len(values)) ** 0.5 if values else 0.0
+        if std <= 0:
+            continue
+        for row in rows:
+            row[feature] = (float(row.get(feature, 0.0)) - mean) / std
+
+
+def compute_protein_distance(seq1: str, seq2: str) -> float:
+    if not seq1 or not seq2:
+        return 1.0
+    len1, len2 = len(seq1), len(seq2)
+    if len1 == 0 or len2 == 0:
+        return 1.0
+    mismatches = sum(1 for a, b in zip(seq1, seq2) if a != b)
+    mismatches += abs(len1 - len2)
+    return mismatches / max(len1, len2)
+
+
+def cluster_species_by_ped(isolates: Sequence[IsolateRecord]) -> Dict[str, int]:
+    clusters: Dict[str, int] = {}
+    species_groups: DefaultDict[str, List[IsolateRecord]] = defaultdict(list)
+    for isolate in isolates:
+        species_groups[isolate.species_taxid].append(isolate)
+    for species_taxid, members in species_groups.items():
+        if len(members) == 1:
+            clusters[members[0].strict_isolate_key] = 0
+            continue
+        component: Dict[str, int] = {}
+        next_id = 0
+        for isolate in members:
+            if isolate.strict_isolate_key in component:
+                continue
+            stack = [isolate]
+            component[isolate.strict_isolate_key] = next_id
+            while stack:
+                current = stack.pop()
+                for other in members:
+                    if other.strict_isolate_key in component:
+                        continue
+                    if compute_protein_distance(current.concatenated_protein_aa, other.concatenated_protein_aa) <= PED_SPECIES_THRESHOLD:
+                        component[other.strict_isolate_key] = next_id
+                        stack.append(other)
+            next_id += 1
+        clusters.update(component)
+    return clusters
+
+
+# ---------------------------------------------------------------------------
+# Accession transformation
+# ---------------------------------------------------------------------------
+
+
+def transform_one_record(
+    record: Dict[str, Any],
+    annotation_index: Dict[str, List[Dict[str, Any]]],
+    biosample_index: Dict[str, BioSampleInfo],
+    genomic_index: Dict[str, FastaRecord],
+    cds_index: Dict[str, FastaRecord],
+    protein_index: Dict[str, FastaRecord],
+) -> Tuple[Optional[AccessionRecord], Optional[Dict[str, Any]]]:
+    try:
+        flat = flatten_json(record)
+        accession = first_nonempty(record.get("accession"), flat.get("accession"), flat.get("nucleotideAccession"))
+        if not accession:
+            candidates = extract_accessions_from_blob(record)
+            accession = candidates[0] if candidates else "UNKNOWN_ACCESSION"
+        acc_base = accession_base(accession)
+
+        ann_matches = uniq(annotation_index.get(accession, []) + annotation_index.get(acc_base, []))
+        annotation = extract_annotation_evidence(ann_matches, protein_index)
+
+        biosample_candidates = extract_biosample_candidates(record)
+        biosample_acc = first_nonempty(
+            biosample_candidates,
+            flat.get("bioSampleAccession"),
+            flat.get("biosample.accession"),
+            flat.get("biosample"),
+        ) or ""
+        biosample_info = biosample_index.get(biosample_acc.upper()) if biosample_acc else None
+
+        flat_contexts = [flat] + [flatten_json(x) for x in ann_matches]
+        if biosample_info:
+            flat_contexts.append(flatten_json(asdict(biosample_info)))
+
+        virus_name = first_nonempty(flat.get("virus.organismName"), flat.get("organismName"), flat.get("organism.organismName")) or ""
+        virus_taxid = first_nonempty(flat.get("virus.taxId"), flat.get("taxId"), flat.get("organism.taxId")) or ""
+
+        genus_name = ""
+        genus_taxid = ""
+        lineage = record.get("virus", {}).get("lineage", []) if isinstance(record.get("virus"), dict) else []
+        if isinstance(lineage, list):
+            for item in lineage:
+                if isinstance(item, dict) and item.get("name") == "Orthohantavirus":
+                    genus_name = clean_text(item.get("name")) or ""
+                    genus_taxid = str(item.get("taxId") or "")
+
+        isolate = first_nonempty(flat.get("isolate.name"), flat.get("virus.isolate"), biosample_info.isolate if biosample_info else None) or ""
+        strain = first_nonempty(flat.get("strain"), flat.get("virus.strain"), biosample_info.strain if biosample_info else None) or ""
+        collection_date = first_nonempty(flat.get("isolate.collectionDate"), flat.get("collectionDate"), biosample_info.collection_date if biosample_info else None) or ""
+        geographic = first_nonempty(flat.get("location.geographicLocation"), biosample_info.geographic_location if biosample_info else None) or ""
+        country, region = split_geo(geographic)
+
+        host_name, host_taxid, host_source = choose_host(flat_contexts, biosample_info)
+        isolation_source = first_nonempty(flat.get("isolate.source"), biosample_info.isolation_source if biosample_info else None) or ""
+        tissue = first_nonempty(flat.get("tissue"), biosample_info.tissue if biosample_info else None) or ""
+        host_role = determine_host_role(host_name, host_taxid, host_source, isolation_source, json.dumps([record, biosample_info.__dict__] if biosample_info else [record], ensure_ascii=False))
+        year = extract_year(collection_date)
+
+        genomic_rec = genomic_index.get(accession) or genomic_index.get(acc_base)
+        cds_rec = cds_index.get(accession) or cds_index.get(acc_base)
+        nt_len = (genomic_rec.length if genomic_rec else 0) or (cds_rec.length if cds_rec else 0)
+
+        segment, segment_source, segment_warnings = choose_segment(flat_contexts, annotation, nt_len)
+        nt_sequence = genomic_rec.sequence if genomic_rec and genomic_rec.sequence else cds_rec.sequence if cds_rec and cds_rec.sequence else ""
+        completeness = determine_completeness(
+            flat_contexts,
+            segment,
+            nt_len,
+            json.dumps([record] + ann_matches, ensure_ascii=False),
+            nt_sequence=nt_sequence,
+        )
+
+        protein_accessions = []
+        for p_acc in annotation.protein_accessions:
+            rec = protein_index.get(p_acc) or protein_index.get(accession_base(p_acc))
+            protein_accessions.append(rec.accession if rec else p_acc)
+        protein_accessions = uniq(protein_accessions)
+
+        protein_aa = ""
+        protein_product = ""
+        nss_overlap_flag = False
+        if segment in {"S", "M"}:
+            protein_aa, protein_product, nss_overlap_flag = resolve_segment_protein_annotation(
+                ann_matches,
+                protein_index,
+                segment,
+                virus_name,
+            )
+            if protein_aa:
+                qc_id = f"protein_{protein_product}"
+                if qc_id not in protein_accessions:
+                    protein_accessions.append(qc_id)
+
+        isolate_or_strain = isolate or strain
+        strict_isolate_key = ""
+        group_key, grouping_tier, group_confidence = build_group_key(
+            species_taxid=virus_taxid,
+            biosample=biosample_acc,
+            isolate=isolate,
+            strain=strain,
+            collection_date=collection_date,
+            location=geographic,
+            host_name=host_name,
+            accession=accession,
+        )
+
+        qc = QCFlags(
+            missing_segment=(segment == ""),
+            segment_from_heuristic=(segment_source == "length_heuristic"),
+            missing_host=(host_name == ""),
+            missing_biosample=(biosample_acc == ""),
+            missing_isolate_and_strain=(not isolate and not strain),
+            lab_host_flag=is_lab_host_record(json.dumps(record, ensure_ascii=False)),
+            missing_genomic_sequence=(genomic_rec is None),
+            missing_protein_link=(len(protein_accessions) == 0),
+            unexpected_length_for_segment=expected_length_warning(segment, nt_len),
+        )
+
+        rec = AccessionRecord(
+            accession=accession,
+            accession_base=acc_base,
+            species_name=virus_name,
+            species_taxid=virus_taxid,
+            genus_name=genus_name,
+            genus_taxid=genus_taxid,
+            segment=segment,
+            segment_source=segment_source,
+            completeness=completeness,
+            nt_length=nt_len,
+            biosample=biosample_acc,
+            bioproject=first_nonempty(flat.get("bioprojects"), flat.get("bioProjectAccession"), flat.get("bioproject.accession")) or "",
+            isolate=isolate,
+            strain=strain,
+            collection_date=collection_date,
+            year=year,
+            location=geographic,
+            country=country,
+            region=region,
+            host_name=host_name,
+            host_taxid=host_taxid,
+            host_source=host_source,
+            host_role=host_role,
+            isolation_source=isolation_source,
+            tissue_source=tissue,
+            protein_accessions=protein_accessions,
+            annotation_products=annotation.product_names,
+            protein_aa=protein_aa,
+            protein_product=protein_product,
+            nss_overlap_flag=nss_overlap_flag,
+            strict_isolate_key=strict_isolate_key,
+            group_key=group_key,
+            grouping_tier=grouping_tier,
+            group_confidence=group_confidence,
+            is_refseq=accession.startswith(("NC_", "NM_", "NP_", "YP_", "XM_", "XP_", "XR_", "NR_")),
+            warning_flags=uniq(segment_warnings + qc.to_messages()),
+        )
+
+        qc_row = {
+            "accession": accession,
+            "group_key": group_key,
+            "grouping_tier": grouping_tier,
+            "group_confidence": group_confidence,
+            "segment": segment,
+            "completeness": completeness,
+            "warnings": ";".join(rec.warning_flags),
+        }
+        return rec, qc_row
+    except Exception as exc:
+        logging.exception("Failed to transform accession record")
+        return None, {"accession": "", "group_key": "", "segment": "", "completeness": "", "warnings": f"transform_error:{exc}"}
+
+
+# ---------------------------------------------------------------------------
+# Grouping and exports
+# ---------------------------------------------------------------------------
+
+
+def group_accessions(accessions: Sequence[AccessionRecord]) -> List[VirusGroupRecord]:
+    grouped: DefaultDict[str, List[AccessionRecord]] = defaultdict(list)
+    for rec in accessions:
+        grouped[rec.group_key].append(rec)
+
+    out: List[VirusGroupRecord] = []
+    for key, members in grouped.items():
+        species_name = Counter([m.species_name for m in members if m.species_name]).most_common(1)
+        species_taxid = Counter([m.species_taxid for m in members if m.species_taxid]).most_common(1)
+        host_name = Counter([m.host_name for m in members if m.host_name]).most_common(1)
+        host_taxid = Counter([m.host_taxid for m in members if m.host_taxid]).most_common(1)
+        country = Counter([m.country for m in members if m.country]).most_common(1)
+        year = Counter([m.year for m in members if m.year]).most_common(1)
+        biosample = Counter([m.biosample for m in members if m.biosample]).most_common(1)
+        isolate = Counter([m.isolate for m in members if m.isolate]).most_common(1)
+        strain = Counter([m.strain for m in members if m.strain]).most_common(1)
+
+        s_acc = sorted({m.accession for m in members if m.segment == "S"})
+        m_acc = sorted({m.accession for m in members if m.segment == "M"})
+        l_acc = sorted({m.accession for m in members if m.segment == "L"})
+        complete_segments = sorted({m.segment for m in members if m.segment in {"S", "M", "L"} and is_complete_status(m.completeness)})
+
+        if complete_segments == ["L", "M", "S"]:
+            completeness_class = "complete_triplet"
+        elif len(complete_segments) >= 1:
+            completeness_class = "partial_group_with_complete_segment"
+        else:
+            completeness_class = "no_complete_segment"
+
+        out.append(VirusGroupRecord(
+            group_key=key,
+            species_name=species_name[0][0] if species_name else "",
+            species_taxid=species_taxid[0][0] if species_taxid else "",
+            host_name=host_name[0][0] if host_name else "",
+            host_taxid=host_taxid[0][0] if host_taxid else "",
+            country=country[0][0] if country else "",
+            year=year[0][0] if year else "",
+            biosample=biosample[0][0] if biosample else "",
+            isolate=isolate[0][0] if isolate else "",
+            strain=strain[0][0] if strain else "",
+            group_confidence=max(m.group_confidence for m in members),
+            group_size=len(members),
+            s_accessions=s_acc,
+            m_accessions=m_acc,
+            l_accessions=l_acc,
+            complete_segments=complete_segments,
+            completeness_class=completeness_class,
+            all_hosts=sorted({m.host_name for m in members if m.host_name}),
+            all_accessions=sorted({m.accession for m in members}),
+        ))
+    return out
+
+
+
+def choose_best_segment_record(records: Sequence[AccessionRecord]) -> Optional[AccessionRecord]:
+    if not records:
+        return None
+    rank = {
+        "complete": 4,
+        "coding_complete_only": 4,
+        "likely_complete": 3,
+        "partial_or_unknown": 2,
+        "unknown": 1,
+    }
+    return sorted(records, key=lambda rec: (rank.get(rec.completeness, 0), rec.nt_length), reverse=True)[0]
+
+
+def build_strict_isolate_records(accessions: Sequence[AccessionRecord]) -> List[IsolateRecord]:
+    groups: DefaultDict[str, List[AccessionRecord]] = defaultdict(list)
+    for rec in accessions:
+        groups[rec.group_key].append(rec)
+
+    isolates: List[IsolateRecord] = []
+    for key, members in groups.items():
+        s_rec = choose_best_segment_record([r for r in members if r.segment == "S"])
+        m_rec = choose_best_segment_record([r for r in members if r.segment == "M"])
+        l_rec = choose_best_segment_record([r for r in members if r.segment == "L"])
+        if not (s_rec or m_rec or l_rec):
+            continue
+
+        protein_warnings: List[str] = []
+        s_evidence = s_rec.protein_product if s_rec else ""
+        m_evidence = m_rec.protein_product if m_rec else ""
+        l_evidence = l_rec.protein_product if l_rec else ""
+        s_accessions = s_rec.protein_accessions if s_rec else []
+        m_accessions = m_rec.protein_accessions if m_rec else []
+        l_accessions = l_rec.protein_accessions if l_rec else []
+
+        concatenated_protein = ""
+        if s_rec and m_rec and s_rec.protein_aa and m_rec.protein_aa:
+            concatenated_protein = s_rec.protein_aa + m_rec.protein_aa
+        else:
+            protein_warnings.append("missing_n_or_gpc_sequence")
+
+        taxid_counts = Counter([r.species_taxid for r in [s_rec, m_rec, l_rec] if r and r.species_taxid])
+        most_common_taxid = taxid_counts.most_common(1)[0][0] if taxid_counts else ""
+        taxonomic_incongruence = any(
+            r and r.species_taxid and r.species_taxid != most_common_taxid
+            for r in [s_rec, m_rec, l_rec]
+        )
+        reassortment_candidate = taxonomic_incongruence
+
+        segment_complete = {
+            "S": is_strict_complete_segment(s_rec) if s_rec else False,
+            "M": is_strict_complete_segment(m_rec) if m_rec else False,
+            "L": is_strict_complete_segment(l_rec) if l_rec else False,
+        }
+        complete_count = sum(segment_complete.values())
+        if complete_count == 3:
+            coding_complete_status = "coding_complete_triplet"
+        elif complete_count == 2:
+            coding_complete_status = "near_complete_triplet"
+        elif complete_count == 1:
+            coding_complete_status = "partial_triplet"
+        else:
+            coding_complete_status = "incomplete_triplet"
+
+        mosaic_flag = bool(
+            (bool(s_rec and m_rec) and s_rec.collection_date != m_rec.collection_date)
+            or (bool(s_rec and l_rec) and s_rec.collection_date != l_rec.collection_date)
+            or (bool(m_rec and l_rec) and m_rec.collection_date != l_rec.collection_date)
+            or (bool(s_rec and m_rec) and s_rec.location != m_rec.location)
+            or (bool(s_rec and l_rec) and s_rec.location != l_rec.location)
+            or (bool(m_rec and l_rec) and m_rec.location != l_rec.location)
+        )
+
+        strict_key = ""
+        if s_rec and s_rec.biosample and (s_rec.isolate or s_rec.strain):
+            strict_key = f"{s_rec.species_taxid}|{s_rec.biosample}|{s_rec.isolate or s_rec.strain}"
+        elif m_rec and m_rec.biosample and (m_rec.isolate or m_rec.strain):
+            strict_key = f"{m_rec.species_taxid}|{m_rec.biosample}|{m_rec.isolate or m_rec.strain}"
+        elif l_rec and l_rec.biosample and (l_rec.isolate or l_rec.strain):
+            strict_key = f"{l_rec.species_taxid}|{l_rec.biosample}|{l_rec.isolate or l_rec.strain}"
+        else:
+            strict_key = key
+
+        s_name = s_rec.species_name if s_rec else ""
+        m_name = m_rec.species_name if m_rec else ""
+        l_name = l_rec.species_name if l_rec else ""
+        host_name = (s_rec.host_name if s_rec else "") or (m_rec.host_name if m_rec else "") or (l_rec.host_name if l_rec else "")
+        host_taxid = (s_rec.host_taxid if s_rec else "") or (m_rec.host_taxid if m_rec else "") or (l_rec.host_taxid if l_rec else "")
+        host_source = (s_rec.host_source if s_rec else "") or (m_rec.host_source if m_rec else "") or (l_rec.host_source if l_rec else "")
+        isolation_source = (s_rec.isolation_source if s_rec else "") or (m_rec.isolation_source if m_rec else "") or (l_rec.isolation_source if l_rec else "")
+        collection_date = (s_rec.collection_date if s_rec else "") or (m_rec.collection_date if m_rec else "") or (l_rec.collection_date if l_rec else "")
+        location = (s_rec.location if s_rec else "") or (m_rec.location if m_rec else "") or (l_rec.location if l_rec else "")
+        country = (s_rec.country if s_rec else "") or (m_rec.country if m_rec else "") or (l_rec.country if l_rec else "")
+        region = (s_rec.region if s_rec else "") or (m_rec.region if m_rec else "") or (l_rec.region if l_rec else "")
+        biosample = (s_rec.biosample if s_rec else "") or (m_rec.biosample if m_rec else "") or (l_rec.biosample if l_rec else "")
+        isolate = (s_rec.isolate if s_rec else "") or (m_rec.isolate if m_rec else "") or (l_rec.isolate if l_rec else "")
+        strain = (s_rec.strain if s_rec else "") or (m_rec.strain if m_rec else "") or (l_rec.strain if l_rec else "")
+        warning_flags = uniq([*(s_rec.warning_flags if s_rec else []), *(m_rec.warning_flags if m_rec else []), *(l_rec.warning_flags if l_rec else [])])
+
+        isolates.append(IsolateRecord(
+            strict_isolate_key=strict_key,
+            species_name=s_name or m_name or l_name or "",
+            species_taxid=most_common_taxid,
+            species_cluster_id="",
+            biosample=biosample,
+            isolate=isolate,
+            strain=strain,
+            host_name=host_name,
+            host_taxid=host_taxid,
+            host_role=determine_host_role(host_name, host_taxid, host_source, isolation_source, json.dumps([asdict(r) for r in [s_rec, m_rec, l_rec] if r], ensure_ascii=False)),
+            collection_date=collection_date,
+            location=location,
+            country=country,
+            region=region,
+            grouping_tier=members[0].grouping_tier,
+            grouping_confidence=max(m.group_confidence for m in members),
+            s_accession=s_rec.accession if s_rec else "",
+            m_accession=m_rec.accession if m_rec else "",
+            l_accession=l_rec.accession if l_rec else "",
+            s_completeness=s_rec.completeness if s_rec else "unknown",
+            m_completeness=m_rec.completeness if m_rec else "unknown",
+            l_completeness=l_rec.completeness if l_rec else "unknown",
+            s_nt_length=s_rec.nt_length if s_rec else 0,
+            m_nt_length=m_rec.nt_length if m_rec else 0,
+            l_nt_length=l_rec.nt_length if l_rec else 0,
+            concatenated_protein_aa=concatenated_protein,
+            coding_complete_status=coding_complete_status,
+            mosaic_flag=mosaic_flag,
+            taxonomic_incongruence_warning=taxonomic_incongruence,
+            reassortment_candidate_warning=reassortment_candidate,
+            ns_s_overlapping_orf=s_rec.nss_overlap_flag if s_rec else False,
+            species_divergence_flag=False,
+            s_protein_evidence=s_evidence,
+            m_protein_evidence=m_evidence,
+            l_protein_evidence=l_evidence,
+            s_protein_accessions=s_accessions,
+            m_protein_accessions=m_accessions,
+            l_protein_accessions=l_accessions,
+            missing_protein_warnings=uniq(protein_warnings),
+            host_source=host_source,
+            raw_metadata={
+                "group_key": key,
+                "grouping_tier": members[0].grouping_tier,
+                "group_confidence": max(m.group_confidence for m in members),
+                "biosample": biosample,
+            },
+            warnings=uniq([*protein_warnings, *warning_flags]),
+        ))
+
+    if isolates:
+        cluster_map = cluster_species_by_ped(isolates)
+        for isolate in isolates:
+            isolate.species_cluster_id = f"{isolate.species_taxid}.cluster{cluster_map.get(isolate.strict_isolate_key, 0)}"
+            isolate.species_divergence_flag = cluster_map.get(isolate.strict_isolate_key, 0) != 0
+    return isolates
+
+
+def build_host_table(accessions: Sequence[AccessionRecord], isolates: Sequence[IsolateRecord]) -> List[Dict[str, Any]]:
+    hosts: Dict[Tuple[str, str], HostRecord] = {}
+    for rec in accessions:
+        key = (rec.host_name or "", rec.host_taxid or "")
+        if not any(key):
+            continue
+        entry = hosts.get(key)
+        host_role = determine_host_role(rec.host_name, rec.host_taxid, rec.host_source, rec.isolation_source, json.dumps(rec.annotation_products, ensure_ascii=False))
+        if entry is None:
+            hosts[key] = HostRecord(
+                host_name=rec.host_name,
+                host_taxid=rec.host_taxid,
+                host_role=host_role,
+                host_source=rec.host_source,
+                representative_biosample=rec.biosample,
+                representative_isolate=rec.isolate,
+                accession_count=1,
+                isolate_count=0,
+                example_species=rec.species_name,
+            )
+        else:
+            entry.accession_count += 1
+            entry.host_role = entry.host_role or host_role
+            entry.representative_biosample = entry.representative_biosample or rec.biosample
+            entry.representative_isolate = entry.representative_isolate or rec.isolate
+            entry.example_species = entry.example_species or rec.species_name
+
+    for isolate in isolates:
+        key = (isolate.host_name or "", isolate.host_taxid or "")
+        if not any(key):
+            continue
+        entry = hosts.get(key)
+        if entry is None:
+            hosts[key] = HostRecord(
+                host_name=isolate.host_name,
+                host_taxid=isolate.host_taxid,
+                host_role=isolate.host_role,
+                host_source="isolate",
+                representative_biosample=isolate.biosample,
+                representative_isolate=isolate.isolate,
+                accession_count=0,
+                isolate_count=1,
+                example_species=isolate.species_name,
+            )
+        else:
+            entry.isolate_count += 1
+            entry.host_role = entry.host_role or isolate.host_role
+            entry.example_species = entry.example_species or isolate.species_name
+    return [asdict(rec) for rec in hosts.values()]
+
+
+def build_ml_feature_matrix(isolates: Sequence[IsolateRecord]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    matrices: List[Dict[str, float]] = []
+    labels: List[str] = []
+    for isolate in isolates:
+        if not isolate.concatenated_protein_aa:
+            continue
+        counts = compute_kmer_counts(isolate.concatenated_protein_aa, KMER_K)
+        if not counts:
+            continue
+        matrices.append(counts)
+        labels.append(isolate.host_taxid or isolate.species_taxid)
+        row = {
+            "strict_isolate_key": isolate.strict_isolate_key,
+            "species_name": isolate.species_name,
+            "species_taxid": isolate.species_taxid,
+            "host_name": isolate.host_name,
+            "host_taxid": isolate.host_taxid,
+            "host_role": isolate.host_role,
+        }
+        rows.append(row)
+
+    selected_features = select_hsic_lasso_features(matrices, labels)
+    for row, counts in zip(rows, matrices):
+        for feature in selected_features:
+            row[f"kmer_{feature}"] = counts.get(feature, 0.0)
+    normalize_matrix_columns(rows, [f"kmer_{feature}" for feature in selected_features])
+    return rows
+
+
+def build_suppressed_rows(accessions: Sequence[AccessionRecord], isolates: Sequence[IsolateRecord]) -> List[Dict[str, Any]]:
+    gold_accessions = {iso.s_accession for iso in isolates} | {iso.m_accession for iso in isolates} | {iso.l_accession for iso in isolates}
+    rows: List[Dict[str, Any]] = []
+    for rec in accessions:
+        if rec.accession in gold_accessions:
+            continue
+        rows.append({
+            "accession": rec.accession,
+            "species_name": rec.species_name,
+            "species_taxid": rec.species_taxid,
+            "segment": rec.segment,
+            "completeness": rec.completeness,
+            "biosample": rec.biosample,
+            "isolate": rec.isolate,
+            "strain": rec.strain,
+            "collection_date": rec.collection_date,
+            "location": rec.location,
+            "host_name": rec.host_name,
+            "host_taxid": rec.host_taxid,
+            "suppression_reason": ";".join(rec.warning_flags or ["suppressed_incomplete_isolate"]),
+        })
+    return rows
+
+
+def build_isolate_rows(isolates: Sequence[IsolateRecord]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for isolate in isolates:
+        rows.append({
+            "strict_isolate_key": isolate.strict_isolate_key,
+            "species_name": isolate.species_name,
+            "species_taxid": isolate.species_taxid,
+            "species_cluster_id": isolate.species_cluster_id,
+            "biosample": isolate.biosample,
+            "isolate": isolate.isolate,
+            "strain": isolate.strain,
+            "host_name": isolate.host_name,
+            "host_taxid": isolate.host_taxid,
+            "host_role": isolate.host_role,
+            "collection_date": isolate.collection_date,
+            "location": isolate.location,
+            "country": isolate.country,
+            "region": isolate.region,
+            "s_accession": isolate.s_accession,
+            "m_accession": isolate.m_accession,
+            "l_accession": isolate.l_accession,
+            "s_completeness": isolate.s_completeness,
+            "m_completeness": isolate.m_completeness,
+            "l_completeness": isolate.l_completeness,
+            "s_nt_length": isolate.s_nt_length,
+            "m_nt_length": isolate.m_nt_length,
+            "l_nt_length": isolate.l_nt_length,
+            "concatenated_protein_aa": isolate.concatenated_protein_aa,
+            "mosaic_flag": int(isolate.mosaic_flag),
+            "reassortment_candidate_warning": int(isolate.reassortment_candidate_warning),
+            "taxonomic_incongruence_warning": int(isolate.taxonomic_incongruence_warning),
+            "ns_s_overlapping_orf": int(isolate.ns_s_overlapping_orf),
+            "species_divergence_flag": int(isolate.species_divergence_flag),
+            "warnings": ";".join(isolate.warnings),
+        })
+    return rows
+
+
+def build_host_rows(host_records: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return host_records
+
+
+def build_ml_label_rows(feature_rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [
+        {
+            "strict_isolate_key": row["strict_isolate_key"],
+            "host_taxid": row["host_taxid"],
+            "species_taxid": row["species_taxid"],
+            "host_role": row["host_role"],
+        }
+        for row in feature_rows
+    ]
+
+
+def build_ml_segments(accessions: Sequence[AccessionRecord]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for rec in accessions:
+        if rec.segment in {"S", "M", "L"} and rec.host_name:
+            rows.append({
+                "accession": rec.accession,
+                "segment": rec.segment,
+                "species_name": rec.species_name,
+                "species_taxid": rec.species_taxid,
+                "host_name": rec.host_name,
+                "host_taxid": rec.host_taxid,
+                "country": rec.country,
+                "year": rec.year,
+                "biosample": rec.biosample,
+                "completeness": rec.completeness,
+                "group_key": rec.group_key,
+            })
+    return rows
+
+
+
+def summarize(accessions: Sequence[AccessionRecord], groups: Sequence[VirusGroupRecord], qc_rows: Sequence[Dict[str, Any]], paths: InputPaths) -> Dict[str, Any]:
+    catalog = load_dataset_catalog(paths.dataset_catalog) if paths.dataset_catalog.exists() else {}
+    summary = {
+        "input_root": str(paths.root),
+        "data_dir": str(paths.data_dir),
+        "records_total": len(accessions),
+        "groups_total": len(groups),
+        "records_with_biosample": sum(1 for r in accessions if r.biosample),
+        "records_with_host": sum(1 for r in accessions if r.host_name),
+        "segment_counts": dict(Counter(r.segment or "unresolved" for r in accessions)),
+        "completeness_counts": dict(Counter(r.completeness for r in accessions)),
+        "group_completeness_counts": dict(Counter(g.completeness_class for g in groups)),
+        "qc_warning_counts": dict(Counter(w for row in qc_rows for w in row.get("warnings", "").split(";") if w)),
+        "provenance": {
+            "generated_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+            "dataset_catalog_api_version": catalog.get("apiVersion") or catalog.get("api_version") or "unknown",
+            "dataset_catalog_md5": md5sum(paths.dataset_catalog),
+            "input_md5": {
+                "data_report.jsonl": md5sum(paths.data_report),
+                "annotation_report.jsonl": md5sum(paths.annotation_report),
+                "biosample_report.jsonl": md5sum(paths.biosample_report),
+                "dataset_catalog.json": md5sum(paths.dataset_catalog),
+            },
+            "input_files": [
+                str(paths.data_report),
+                str(paths.annotation_report),
+                str(paths.biosample_report),
+                str(paths.dataset_catalog),
+            ],
+        },
+        "output_files": {
+            "accession_table": str(paths.output_dir / "ortho_accession_table.parquet"),
+            "virus_table": str(paths.output_dir / "ortho_virus_table.parquet"),
+            "isolate_table": str(paths.output_dir / "ortho_isolate_table.parquet"),
+            "host_table": str(paths.output_dir / "ortho_host_table.parquet"),
+            "ml_feature_matrix": str(paths.output_dir / "ortho_ml_feature_matrix.parquet"),
+            "suppressed_table": str(paths.output_dir / "ortho_suppressed.parquet"),
+            "ml_segments": str(paths.output_dir / "ortho_ml_segments.parquet"),
+            "qc_report": str(paths.output_dir / "ortho_qc_report.parquet"),
+            "summary_json": str(paths.output_dir / "ortho_summary.json"),
+            "log_file": str(paths.log_file),
+        },
+        "outputs": {
+            "isolate_csv": str(paths.output_dir / "ortho_isolate_table.parquet"),
+            "host_csv": str(paths.output_dir / "ortho_host_table.parquet"),
+            "ml_feature_csv": str(paths.output_dir / "ortho_ml_feature_matrix.parquet"),
+            "suppressed_csv": str(paths.output_dir / "ortho_suppressed.parquet"),
+        },
+        "output_schema": {
+            name: {"columns": columns} for name, columns in OUTPUT_TABLE_SCHEMAS.items()
+        },
+    }
+    return summary
+
+
+# ---------------------------------------------------------------------------
+# Main pipeline
+# ---------------------------------------------------------------------------
+
+
+def run_pipeline(paths: InputPaths, threads: int = 4) -> None:
+    logging.info("Loading JSONL reports")
+    data_records = list(iter_jsonl(paths.data_report))
+    annotation_records = list(iter_jsonl(paths.annotation_report))
+    biosample_records = list(iter_jsonl(paths.biosample_report))
+
+    logging.info("Building annotation and biosample indexes")
+    annotation_index = build_annotation_index(annotation_records)
+    biosample_index = build_biosample_index(biosample_records)
+
+    logging.info("Parsing FASTA files")
+    genomic_index = parse_fasta(paths.genomic_fasta)
+    cds_index = parse_fasta(paths.cds_fasta)
+    protein_index = parse_fasta(paths.protein_fasta)
+
+    logging.info("Transforming accession records in parallel")
+    accession_records: List[AccessionRecord] = []
+    qc_rows: List[Dict[str, Any]] = []
+
+    with ThreadPoolExecutor(max_workers=max(1, threads)) as ex:
+        futures = [
+            ex.submit(
+                transform_one_record,
+                rec,
+                annotation_index,
+                biosample_index,
+                genomic_index,
+                cds_index,
+                protein_index,
+            )
+            for rec in data_records
+        ]
+        for fut in futures:
+            acc_rec, qc_row = fut.result()
+            if acc_rec is not None:
+                accession_records.append(acc_rec)
+            if qc_row is not None:
+                qc_rows.append(qc_row)
+
+    logging.info("Grouping accessions into virus-level records")
+    virus_groups = group_accessions(accession_records)
+
+    logging.info("Building strict S/M/L isolate records")
+    isolate_records = build_strict_isolate_records(accession_records)
+
+    logging.info("Building host table")
+    host_rows = build_host_table(accession_records, isolate_records)
+
+    logging.info("Building ML feature matrix")
+    ml_feature_rows = build_ml_feature_matrix(isolate_records)
+
+    logging.info("Building suppressed accession table")
+    suppressed_rows = build_suppressed_rows(accession_records, isolate_records)
+
+    accession_rows = []
+    for r in accession_records:
+        accession_rows.append({
+            "accession": r.accession,
+            "species_name": r.species_name,
+            "species_taxid": r.species_taxid,
+            "genus_name": r.genus_name,
+            "genus_taxid": r.genus_taxid,
+            "segment": r.segment,
+            "segment_source": r.segment_source,
+            "completeness": r.completeness,
+            "nt_length": r.nt_length,
+            "biosample": r.biosample,
+            "bioproject": r.bioproject,
+            "isolate": r.isolate,
+            "strain": r.strain,
+            "collection_date": r.collection_date,
+            "year": r.year,
+            "location": r.location,
+            "country": r.country,
+            "region": r.region,
+            "host_name": r.host_name,
+            "host_taxid": r.host_taxid,
+            "host_source": r.host_source,
+            "isolation_source": r.isolation_source,
+            "tissue_source": r.tissue_source,
+            "protein_accessions": ";".join(r.protein_accessions),
+            "annotation_products": ";".join(r.annotation_products),
+            "group_key": r.group_key,
+            "group_confidence": r.group_confidence,
+            "is_refseq": int(r.is_refseq),
+            "warning_flags": ";".join(r.warning_flags),
+        })
+
+    virus_rows = []
+    for g in virus_groups:
+        virus_rows.append({
+            "group_key": g.group_key,
+            "species_name": g.species_name,
+            "species_taxid": g.species_taxid,
+            "host_name": g.host_name,
+            "host_taxid": g.host_taxid,
+            "country": g.country,
+            "year": g.year,
+            "biosample": g.biosample,
+            "isolate": g.isolate,
+            "strain": g.strain,
+            "group_confidence": g.group_confidence,
+            "group_size": g.group_size,
+            "s_accessions": ";".join(g.s_accessions),
+            "m_accessions": ";".join(g.m_accessions),
+            "l_accessions": ";".join(g.l_accessions),
+            "complete_segments": ";".join(g.complete_segments),
+            "completeness_class": g.completeness_class,
+            "all_hosts": ";".join(g.all_hosts),
+            "all_accessions": ";".join(g.all_accessions),
+        })
+
+    logging.info("Writing outputs")
+    ml_rows = build_ml_segments(accession_records)
+    isolate_rows = build_isolate_rows(isolate_records)
+
+    safe_write_parquet(
+        paths.output_dir / "ortho_accession_table.parquet",
+        accession_rows,
+    )
+    safe_write_parquet(
+        paths.output_dir / "ortho_virus_table.parquet",
+        virus_rows,
+    )
+    safe_write_parquet(
+        paths.output_dir / "ortho_isolate_table.parquet",
+        isolate_rows,
+    )
+    safe_write_parquet(
+        paths.output_dir / "ortho_host_table.parquet",
+        host_rows,
+    )
+    safe_write_parquet(
+        paths.output_dir / "ortho_ml_feature_matrix.parquet",
+        ml_feature_rows,
+    )
+    safe_write_parquet(
+        paths.output_dir / "ortho_ml_segments.parquet",
+        ml_rows,
+    )
+    safe_write_parquet(
+        paths.output_dir / "ortho_suppressed.parquet",
+        suppressed_rows,
+    )
+    safe_write_parquet(
+        paths.output_dir / "ortho_qc_report.parquet",
+        qc_rows,
+    )
+
+    summary = summarize(accession_records, virus_groups, qc_rows, paths)
+    summary["outputs"]["isolate_csv"] = str(paths.output_dir / "ortho_isolate_table.parquet")
+    summary["outputs"]["host_csv"] = str(paths.output_dir / "ortho_host_table.parquet")
+    summary["outputs"]["ml_feature_csv"] = str(paths.output_dir / "ortho_ml_feature_matrix.parquet")
+    summary["outputs"]["suppressed_csv"] = str(paths.output_dir / "ortho_suppressed.parquet")
+    safe_write_json(paths.output_dir / "ortho_summary.json", summary)
+
+    logging.info("Done")
+    logging.info("Accession records: %s", len(accession_records))
+    logging.info("Virus groups: %s", len(virus_groups))
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
+def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Orthohantavirus NCBI Datasets production pipeline")
+    parser.add_argument("--input", required=False, default=".", help="Path to the unzipped NCBI package root containing all_hanta/ncbi_dataset/data")
+    parser.add_argument("--output", required=False, help="Path to write outputs; defaults to <input>/output")
+    parser.add_argument("--threads", type=int, default=max(1, min(8, (os.cpu_count() or 4))), help="Number of worker threads")
+    parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
+    return parser.parse_args(argv)
+
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    args = parse_args(argv)
+    paths = resolve_inputs(Path(args.input), output=Path(args.output) if args.output else None)
+    configure_logging(paths.log_file, verbose=args.verbose)
+    logging.info("Starting Orthohantavirus production pipeline")
+    logging.info("Input root: %s", paths.root)
+    logging.info("Output dir: %s", paths.output_dir)
+    run_pipeline(paths, threads=args.threads)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
