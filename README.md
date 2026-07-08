@@ -9,34 +9,25 @@ A reproducible pipeline for downloading **NCBI Orthohantavirus** genomes, integr
 Download all available **Orthohantavirus** genome records together with their associated metadata, coding sequences (CDS), proteins, and BioSample information.
 
 ```bash
-datasets download virus genome taxon 1980442 \
-    --include genome,biosample,cds,protein \
-    --filename ortho.zip
+datasets download virus genome taxon 1980442   
+--include genome,cds,protein,annotation,biosample
+--filename all_hanta.zip
 ```
 
 Extract the downloaded package:
 
 ```bash
-unzip ortho.zip -d ortho
-```
-
-Generate a metadata table:
-
-```bash
-dataformat tsv virus-genome \
-    --package ortho.zip \
-    --fields accession,segment,completeness,length,biosample-acc,'virus-infraspecific-isolate','virus-infraspecific-strain','isolate-collection-date',geo-location,host-name \
-    > metadata.tsv
+unzip all_hanta.zip -d all_hanta
 ```
 
 ---
 
-## Step 2 — Build the ML-Ready Dataset
+## Step 2 — Run Pthyon to Build the ML-Ready Dataset
 
 Run the pipeline by passing the path to the unzipped package root:
 
 ```bash
-python all_hanta52.py --input /path/to/unzipped_package
+python3 all_hanta.py
 ```
 
 ---
@@ -62,8 +53,6 @@ host role classification, and reassortment candidate detection.
 
 ## Required Input Files
 
-The script resolves inputs from the following path relative to `--input`:
-
 ```
 <input>/all_hanta/ncbi_dataset/data/
 
@@ -75,9 +64,6 @@ genomic.fna
 cds.fna
 protein.faa
 ```
-
-Input paths are resolved dynamically from the `--input` argument and are **not hard-coded**.
-
 ---
 
 ## Data Integration
