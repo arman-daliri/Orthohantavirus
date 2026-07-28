@@ -22,3 +22,27 @@
 2026-07-08 17:29:30,073 | INFO | Done
 2026-07-08 17:29:30,073 | INFO | Accession records: 15991
 2026-07-08 17:29:30,073 | INFO | Virus groups: 11049
+2026-07-28 15:43:55,496 | INFO | Starting Orthohantavirus production pipeline
+2026-07-28 15:43:55,497 | INFO | Input root: C:\git-projects\Orthohantavirus
+2026-07-28 15:43:55,498 | INFO | Output dir: C:\git-projects\Orthohantavirus\output
+2026-07-28 15:43:55,498 | INFO | Loading JSONL reports
+2026-07-28 15:43:56,829 | INFO | Building indexes
+2026-07-28 15:43:57,287 | INFO | Parsing FASTA files
+2026-07-28 15:43:57,802 | INFO | Transforming accession records
+2026-07-28 15:44:30,581 | INFO | Grouping accessions
+2026-07-28 15:44:31,203 | INFO | Building isolate records
+2026-07-28 15:44:43,250 | INFO | Building host table
+2026-07-28 15:44:43,408 | INFO | Building ML feature matrix
+2026-07-28 15:48:43,840 | INFO | Building suppressed accession table
+2026-07-28 15:48:43,960 | INFO | Writing outputs
+2026-07-28 15:48:44,335 | INFO | Wrote 15991 rows to C:\git-projects\Orthohantavirus\output\ortho_accession_table.parquet
+2026-07-28 15:48:44,413 | INFO | Wrote 11049 rows to C:\git-projects\Orthohantavirus\output\ortho_virus_table.parquet
+2026-07-28 15:48:44,602 | INFO | Wrote 10665 rows to C:\git-projects\Orthohantavirus\output\ortho_isolate_table.parquet
+2026-07-28 15:48:44,614 | INFO | Wrote 261 rows to C:\git-projects\Orthohantavirus\output\ortho_host_table.parquet
+2026-07-28 15:48:44,722 | INFO | Wrote 2335 rows to C:\git-projects\Orthohantavirus\output\ortho_ml_feature_matrix.parquet
+2026-07-28 15:48:44,881 | INFO | Wrote 14129 rows to C:\git-projects\Orthohantavirus\output\ortho_ml_segments.parquet
+2026-07-28 15:48:44,899 | INFO | Wrote 906 rows to C:\git-projects\Orthohantavirus\output\ortho_suppressed.parquet
+2026-07-28 15:48:44,968 | INFO | Wrote 15991 rows to C:\git-projects\Orthohantavirus\output\ortho_qc_report.parquet
+2026-07-28 15:48:45,082 | INFO | Done
+2026-07-28 15:48:45,082 | INFO | Accession records: 15991
+2026-07-28 15:48:45,083 | INFO | Virus groups: 11049

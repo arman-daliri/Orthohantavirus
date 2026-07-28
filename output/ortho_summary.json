@@ -1,6 +1,6 @@
 {
-  "input_root": "/home/victorfrankestein/Documents/Orthohantavirus",
-  "data_dir": "/home/victorfrankestein/Documents/Orthohantavirus/all_hanta/ncbi_dataset/data",
+  "input_root": "C:\\git-projects\\Orthohantavirus",
+  "data_dir": "C:\\git-projects\\Orthohantavirus\\all_hanta\\ncbi_dataset\\data",
   "records_total": 15991,
   "groups_total": 11049,
   "records_with_biosample": 87,
@@ -35,39 +35,33 @@
     "multiple_segment_text_hits": 1
   },
   "provenance": {
-    "generated_at": "2026-07-08T13:29:29Z",
+    "generated_at": "2026-07-28T11:48:45Z",
     "dataset_catalog_api_version": "V2",
-    "dataset_catalog_md5": "b84f8e3f489f4d22bf7a978a0377f933",
+    "dataset_catalog_md5": "470d6e0997e37286bb71900482a15d23",
     "input_md5": {
-      "data_report.jsonl": "9c228361ec1892882d118876fcdd263e",
-      "annotation_report.jsonl": "01c54fe5aabe9fcf2c2092d5fb709ec4",
-      "biosample_report.jsonl": "1600e666055e53426c80ce843632ee16",
-      "dataset_catalog.json": "b84f8e3f489f4d22bf7a978a0377f933"
+      "data_report.jsonl": "24dcee9c3c910a59c67093ab818135e7",
+      "annotation_report.jsonl": "00a962603e4e43214ca776350608b5ec",
+      "biosample_report.jsonl": "bbdf4cb95081d64941996effacce43b4",
+      "dataset_catalog.json": "470d6e0997e37286bb71900482a15d23"
     },
     "input_files": [
-      "/home/victorfrankestein/Documents/Orthohantavirus/all_hanta/ncbi_dataset/data/data_report.jsonl",
-      "/home/victorfrankestein/Documents/Orthohantavirus/all_hanta/ncbi_dataset/data/annotation_report.jsonl",
-      "/home/victorfrankestein/Documents/Orthohantavirus/all_hanta/ncbi_dataset/data/biosample_report.jsonl",
-      "/home/victorfrankestein/Documents/Orthohantavirus/all_hanta/ncbi_dataset/data/dataset_catalog.json"
+      "C:\\git-projects\\Orthohantavirus\\all_hanta\\ncbi_dataset\\data\\data_report.jsonl",
+      "C:\\git-projects\\Orthohantavirus\\all_hanta\\ncbi_dataset\\data\\annotation_report.jsonl",
+      "C:\\git-projects\\Orthohantavirus\\all_hanta\\ncbi_dataset\\data\\biosample_report.jsonl",
+      "C:\\git-projects\\Orthohantavirus\\all_hanta\\ncbi_dataset\\data\\dataset_catalog.json"
     ]
   },
   "output_files": {
-    "accession_table": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_accession_table.parquet",
-    "virus_table": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_virus_table.parquet",
-    "isolate_table": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_isolate_table.parquet",
-    "host_table": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_host_table.parquet",
-    "ml_feature_matrix": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_ml_feature_matrix.parquet",
-    "suppressed_table": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_suppressed.parquet",
-    "ml_segments": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_ml_segments.parquet",
-    "qc_report": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_qc_report.parquet",
-    "summary_json": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_summary.json",
-    "log_file": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_pipeline.log"
-  },
-  "outputs": {
-    "isolate_csv": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_isolate_table.parquet",
-    "host_csv": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_host_table.parquet",
-    "ml_feature_csv": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_ml_feature_matrix.parquet",
-    "suppressed_csv": "/home/victorfrankestein/Documents/Orthohantavirus/output/ortho_suppressed.parquet"
+    "accession_table": "C:\\git-projects\\Orthohantavirus\\output\\ortho_accession_table.parquet",
+    "virus_table": "C:\\git-projects\\Orthohantavirus\\output\\ortho_virus_table.parquet",
+    "isolate_table": "C:\\git-projects\\Orthohantavirus\\output\\ortho_isolate_table.parquet",
+    "host_table": "C:\\git-projects\\Orthohantavirus\\output\\ortho_host_table.parquet",
+    "ml_feature_matrix": "C:\\git-projects\\Orthohantavirus\\output\\ortho_ml_feature_matrix.parquet",
+    "suppressed_table": "C:\\git-projects\\Orthohantavirus\\output\\ortho_suppressed.parquet",
+    "ml_segments": "C:\\git-projects\\Orthohantavirus\\output\\ortho_ml_segments.parquet",
+    "qc_report": "C:\\git-projects\\Orthohantavirus\\output\\ortho_qc_report.parquet",
+    "summary_json": "C:\\git-projects\\Orthohantavirus\\output\\ortho_summary.json",
+    "log_file": "C:\\git-projects\\Orthohantavirus\\output\\ortho_pipeline.log"
   },
   "output_schema": {
     "ortho_accession_table.parquet": {

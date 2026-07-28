@@ -1,53 +1,13 @@
 #!/usr/bin/env python3
-"""
-Orthohantavirus production pipeline
-==================================
+"""Orthohantavirus NCBI Datasets production pipeline.
 
-Purpose
--------
-Parse an NCBI Datasets Orthohantavirus package and produce accession-level,
-virus-level, and QC outputs without over-inferring biology that is already
-present in the package metadata.
-
-Design principles
------------------
-1. Treat data_report.jsonl as the primary accession-level metadata source.
-2. Treat biosample_report.jsonl as the preferred host metadata source.
-3. Treat annotation_report.jsonl as supporting evidence for QC, not as the
-   first source of segment identity when explicit segment metadata exists.
-4. Group accessions conservatively: species + biosample + isolate/strain first,
-   then controlled fallbacks.
-5. Keep incomplete viruses; classify completeness rather than discarding them.
-6. Do not infer reassortment from host labels.
-7. Use sequence files mainly as attachments and validation layers.
-
-Usage
------
-python all_hanta.py --input /path/to/unzipped_package [--output /path/to/output] [--threads N] [--verbose]
-
-Expected package layout
------------------------
-<root>/ncbi_dataset/data/
-    data_report.jsonl
-    annotation_report.jsonl
-    biosample_report.jsonl
-    genomic.fna
-    cds.fna
-    protein.faa
-
-Outputs
--------
-output/
-    ortho_accession_table.parquet
-    ortho_virus_table.parquet
-    ortho_isolate_table.parquet
-    ortho_host_table.parquet
-    ortho_ml_feature_matrix.parquet
-    ortho_ml_segments.parquet
-    ortho_suppressed.parquet
-    ortho_qc_report.parquet
-    ortho_summary.json
-    ortho_pipeline.log
+The script ingests an NCBI Datasets package for Orthohantavirus and produces:
+- accession-level records
+- virus-level group records
+- isolate-level records
+- host-level records
+- ML-ready feature tables
+- QC and suppression tables
 """
 
 from __future__ import annotations
@@ -59,33 +19,21 @@ import logging
 import os
 import re
 import sys
-from datetime import UTC, datetime
-
-import pandas as pd
-# Requires:
-# pip install pandas pyarrow
 from collections import Counter, defaultdict
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, DefaultDict, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
+import pandas as pd
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-__version__ = "1.0.0"
+__version__ = "1.1.1"
 
 ACCESSION_RE = re.compile(r"[A-Z]{1,4}_?\d{4,}(?:\.\d+)?")
 BIOSAMPLE_RE = re.compile(r"\bSAM[NED]?[A-Z]?\d+\b", re.I)
 YEAR_RE = re.compile(r"(19|20)\d{2}")
 
-COMPLETE_LENGTH_MIN = {
-    "L": 6000,
-    "M": 3200,
-    "S": 1200,
-}
+COMPLETE_LENGTH_MIN = {"L": 6000, "M": 3200, "S": 1200}
 
 OUTPUT_TABLE_SCHEMAS = {
     "ortho_accession_table.parquet": [
@@ -115,8 +63,7 @@ OUTPUT_TABLE_SCHEMAS = {
         "accession_count", "isolate_count", "example_species",
     ],
     "ortho_ml_feature_matrix.parquet": [
-        "strict_isolate_key", "species_name", "species_taxid", "host_name", "host_taxid", "host_role",
-        "kmer_*",
+        "strict_isolate_key", "species_name", "species_taxid", "host_name", "host_taxid", "host_role", "kmer_*",
     ],
     "ortho_ml_segments.parquet": [
         "accession", "segment", "species_name", "species_taxid", "host_name", "host_taxid", "country", "year",
@@ -132,45 +79,18 @@ OUTPUT_TABLE_SCHEMAS = {
 }
 
 SEGMENT_TEXT_PATTERNS = {
-    "L": [
-        r"\bsegment\s*l\b",
-        r"\blarge\b",
-        r"\bpolymerase\b",
-        r"\brdrp\b",
-        r"rna[- ]dependent rna polymerase",
-        r"\bl protein\b",
-    ],
-    "M": [
-        r"\bsegment\s*m\b",
-        r"\bmedium\b",
-        r"glycoprotein precursor",
-        r"\bglycoprotein\b",
-        r"\bgpc\b",
-        r"\bgn\b",
-        r"\bgc\b",
-        r"\bg1\b",
-        r"\bg2\b",
-    ],
-    "S": [
-        r"\bsegment\s*s\b",
-        r"\bsmall\b",
-        r"\bnucleocapsid\b",
-        r"\bnucleoprotein\b",
-        r"\bn protein\b",
-        r"\bnp\b",
-    ],
+    "L": [r"\bsegment\s*l\b", r"\blarge\b", r"\bpolymerase\b", r"\brdrp\b", r"rna[- ]dependent rna polymerase", r"\bl protein\b"],
+    "M": [r"\bsegment\s*m\b", r"\bmedium\b", r"glycoprotein precursor", r"\bglycoprotein\b", r"\bgpc\b", r"\bgn\b", r"\bgc\b", r"\bg1\b", r"\bg2\b"],
+    "S": [r"\bsegment\s*s\b", r"\bsmall\b", r"\bnucleocapsid\b", r"\bnucleoprotein\b", r"\bn protein\b", r"\bnp\b"],
 }
 
-LAB_HOST_TERMS = [
-    "vero",
-    "cell line",
-    "cell-line",
-    "cell culture",
-    "passage",
-    "passaged",
-    "adapted",
-    "in vitro",
-]
+LAB_HOST_TERMS = ["vero", "cell line", "cell-line", "cell culture", "passage", "passaged", "adapted", "in vitro"]
+PROTEIN_PRODUCT_PATTERNS = {
+    "N": [r"\bnucleocapsid\b", r"\bnucleoprotein\b", r"\bnp\b", r"\bn protein\b"],
+    "GPC": [r"\bglycoprotein precursor\b", r"\bglycoprotein\b", r"\bgpc\b", r"\bgn\b", r"\bgc\b", r"\bg1\b", r"\bg2\b"],
+    "NSs": [r"\bns s\b", r"\bnon[- ]structural protein s\b", r"\bns s protein\b", r"\bns s orf\b", r"\bns s overlapping\b", r"\bns s overlap\b"],
+    "RdRp": [r"\bpolymerase\b", r"\brdrp\b", r"rna[- ]dependent rna polymerase", r"\bl protein\b", r"\blarge protein\b"],
+}
 
 DATA_REPORT = "data_report.jsonl"
 ANNOTATION_REPORT = "annotation_report.jsonl"
@@ -178,55 +98,12 @@ BIOSAMPLE_REPORT = "biosample_report.jsonl"
 GENOMIC_FASTA = "genomic.fna"
 CDS_FASTA = "cds.fna"
 PROTEIN_FASTA = "protein.faa"
-SUPPRESSED_CSV = "ortho_suppressed.csv"
-ISOLATE_CSV = "ortho_isolate_table.csv"
-HOST_CSV = "ortho_host_table.csv"
-ML_FEATURE_CSV = "ortho_ml_feature_matrix.csv"
 KMER_K = 3
-CORRELATION_MAX_FEATURES = 200
 PED_SPECIES_THRESHOLD = 0.1
 N_AMBIGUOUS_THRESHOLD = 100
 TERMINAL_MOTIF_5 = "UAGUAGUAG"
 TERMINAL_MOTIF_3 = "AUCAUCAUCUG"
-TRIPLET_SEGMENTS = {"S", "M", "L"}
 
-PROTEIN_PRODUCT_PATTERNS = {
-    "N": [
-        r"\bnucleocapsid\b",
-        r"\bnucleoprotein\b",
-        r"\bnp\b",
-        r"\bN protein\b",
-    ],
-    "GPC": [
-        r"\bglycoprotein precursor\b",
-        r"\bglycoprotein\b",
-        r"\bgpc\b",
-        r"\bGn\b",
-        r"\bGc\b",
-        r"\bG1\b",
-        r"\bG2\b",
-    ],
-    "NSs": [
-        r"\bns s\b",
-        r"\bnon[- ]structural protein s\b",
-        r"\bns s protein\b",
-        r"\bns s orf\b",
-        r"\bns s overlapping\b",
-        r"\bns s overlap\b",
-    ],
-    "RdRp": [
-        r"\bpolymerase\b",
-        r"\brdRp\b",
-        r"\brna[- ]dependent rna polymerase\b",
-        r"\bl protein\b",
-        r"\blarge protein\b",
-    ],
-}
-
-
-# ---------------------------------------------------------------------------
-# Dataclasses
-# ---------------------------------------------------------------------------
 
 @dataclass
 class InputPaths:
@@ -272,27 +149,6 @@ class BioSampleInfo:
     strain: Optional[str] = None
     isolate: Optional[str] = None
     raw_attributes: Dict[str, str] = field(default_factory=dict)
-
-
-@dataclass
-class QCFlags:
-    missing_segment: bool = False
-    segment_from_heuristic: bool = False
-    segment_annotation_conflict: bool = False
-    missing_host: bool = False
-    missing_biosample: bool = False
-    missing_isolate_and_strain: bool = False
-    lab_host_flag: bool = False
-    missing_genomic_sequence: bool = False
-    missing_protein_link: bool = False
-    unexpected_length_for_segment: bool = False
-
-    def to_messages(self) -> List[str]:
-        msgs: List[str] = []
-        for key, value in asdict(self).items():
-            if value:
-                msgs.append(key)
-        return msgs
 
 
 @dataclass
@@ -417,11 +273,6 @@ class HostRecord:
     example_species: str
 
 
-# ---------------------------------------------------------------------------
-# Utility helpers
-# ---------------------------------------------------------------------------
-
-
 def configure_logging(log_file: Path, verbose: bool = False) -> None:
     log_file.parent.mkdir(parents=True, exist_ok=True)
     level = logging.DEBUG if verbose else logging.INFO
@@ -430,7 +281,6 @@ def configure_logging(log_file: Path, verbose: bool = False) -> None:
         format="%(asctime)s | %(levelname)s | %(message)s",
         handlers=[logging.FileHandler(log_file, encoding="utf-8"), logging.StreamHandler(sys.stdout)],
     )
-
 
 
 def clean_text(value: Any) -> Optional[str]:
@@ -448,7 +298,6 @@ def clean_text(value: Any) -> Optional[str]:
     return re.sub(r"\s+", " ", text).strip()
 
 
-
 def first_nonempty(*values: Any) -> Optional[str]:
     for value in values:
         if isinstance(value, list):
@@ -463,7 +312,6 @@ def first_nonempty(*values: Any) -> Optional[str]:
     return None
 
 
-
 def uniq(values: Iterable[Any]) -> List[Any]:
     seen = set()
     out = []
@@ -475,10 +323,8 @@ def uniq(values: Iterable[Any]) -> List[Any]:
     return out
 
 
-
 def accession_base(accession: str) -> str:
     return accession.split(".")[0] if accession else ""
-
 
 
 def flatten_json(obj: Any, prefix: str = "") -> Dict[str, Any]:
@@ -497,7 +343,6 @@ def flatten_json(obj: Any, prefix: str = "") -> Dict[str, Any]:
     return out
 
 
-
 def iter_jsonl(path: Path) -> Iterator[Dict[str, Any]]:
     with path.open("r", encoding="utf-8") as handle:
         for line_no, line in enumerate(handle, start=1):
@@ -513,6 +358,8 @@ def iter_jsonl(path: Path) -> Iterator[Dict[str, Any]]:
 
 
 def md5sum(path: Path) -> str:
+    if not path.exists():
+        return ""
     digest = hashlib.md5()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(8192), b""):
@@ -521,6 +368,8 @@ def md5sum(path: Path) -> str:
 
 
 def load_dataset_catalog(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
 
@@ -532,7 +381,6 @@ def extract_year(text: Optional[str]) -> str:
     return m.group(0) if m else ""
 
 
-
 def split_geo(geo: str) -> Tuple[str, str]:
     if not geo:
         return "", ""
@@ -542,23 +390,19 @@ def split_geo(geo: str) -> Tuple[str, str]:
     return geo.strip(), ""
 
 
-
 def safe_write_parquet(path: Path, rows: Sequence[Dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    df = pd.DataFrame(rows)
-    df.to_parquet(path, engine="pyarrow", index=False)
-    logging.info("Wrote %s rows to %s", len(df), path)
+    if not rows:
+        pd.DataFrame().to_parquet(path, engine="pyarrow", index=False)
+        return
+    pd.DataFrame(rows).to_parquet(path, engine="pyarrow", index=False)
+    logging.info("Wrote %s rows to %s", len(rows), path)
 
 
 def safe_write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, ensure_ascii=False, indent=2)
-
-
-# ---------------------------------------------------------------------------
-# Path detection
-# ---------------------------------------------------------------------------
 
 
 def resolve_inputs(root: Path, output: Optional[Path] = None) -> InputPaths:
@@ -594,31 +438,19 @@ def resolve_inputs(root: Path, output: Optional[Path] = None) -> InputPaths:
     )
 
 
-# ---------------------------------------------------------------------------
-# FASTA parsing
-# ---------------------------------------------------------------------------
-
-
 def parse_fasta(path: Optional[Path]) -> Dict[str, FastaRecord]:
-    index: Dict[str, FastaRecord] = {}
     if path is None or not path.exists():
-        return index
-
+        return {}
+    index: Dict[str, FastaRecord] = {}
     header: Optional[str] = None
-    seq_parts: List[str] = []
+    parts: List[str] = []
 
-    def commit(raw_header: str, parts: List[str]) -> None:
+    def commit(raw_header: str, seq_parts: List[str]) -> None:
         desc = raw_header[1:].strip()
         acc = desc.split()[0]
         base = accession_base(acc)
-        seq = "".join(parts)
-        rec = FastaRecord(
-            accession=acc,
-            accession_base=base,
-            header=desc,
-            sequence=seq,
-            length=len(seq),
-        )
+        seq = "".join(seq_parts)
+        rec = FastaRecord(accession=acc, accession_base=base, header=desc, sequence=seq, length=len(seq))
         index[acc] = rec
         if base and base not in index:
             index[base] = rec
@@ -628,24 +460,18 @@ def parse_fasta(path: Optional[Path]) -> Dict[str, FastaRecord]:
             line = line.rstrip("\n")
             if line.startswith(">"):
                 if header is not None:
-                    commit(header, seq_parts)
+                    commit(header, parts)
                 header = line
-                seq_parts = []
+                parts = []
             else:
-                seq_parts.append(line.strip())
+                parts.append(line.strip())
         if header is not None:
-            commit(header, seq_parts)
+            commit(header, parts)
     return index
-
-
-# ---------------------------------------------------------------------------
-# Annotation and biosample indexes
-# ---------------------------------------------------------------------------
 
 
 def extract_accessions_from_blob(obj: Any) -> List[str]:
     return uniq(ACCESSION_RE.findall(json.dumps(obj, ensure_ascii=False)))
-
 
 
 def build_annotation_index(records: Sequence[Dict[str, Any]]) -> DefaultDict[str, List[Dict[str, Any]]]:
@@ -659,24 +485,22 @@ def build_annotation_index(records: Sequence[Dict[str, Any]]) -> DefaultDict[str
     return idx
 
 
-
 def extract_biosample_candidates(obj: Any) -> List[str]:
     found: List[str] = []
 
-    def walk(x: Any) -> None:
-        if isinstance(x, dict):
-            for k, v in x.items():
-                lk = str(k).lower()
-                if lk in {"biosample", "biosampleaccession", "biosample_acc"} and isinstance(v, str):
+    def walk(value: Any) -> None:
+        if isinstance(value, dict):
+            for k, v in value.items():
+                if str(k).lower() in {"biosample", "biosampleaccession", "biosample_acc"} and isinstance(v, str):
                     m = BIOSAMPLE_RE.search(v)
                     if m:
                         found.append(m.group(0).upper())
                 walk(v)
-        elif isinstance(x, list):
-            for item in x:
+        elif isinstance(value, list):
+            for item in value:
                 walk(item)
-        elif isinstance(x, str):
-            m = BIOSAMPLE_RE.search(x)
+        elif isinstance(value, str):
+            m = BIOSAMPLE_RE.search(value)
             if m:
                 found.append(m.group(0).upper())
 
@@ -684,17 +508,14 @@ def extract_biosample_candidates(obj: Any) -> List[str]:
     return uniq(found)
 
 
-
 def normalize_attr_name(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
-
 
 
 def parse_biosample_record(rec: Dict[str, Any]) -> BioSampleInfo:
     flat = flatten_json(rec)
     accession = first_nonempty(rec.get("accession"), flat.get("accession")) or ""
     info = BioSampleInfo(accession=accession)
-
     attrs = rec.get("attributes", [])
     attr_map: Dict[str, str] = {}
     if isinstance(attrs, list):
@@ -705,7 +526,6 @@ def parse_biosample_record(rec: Dict[str, Any]) -> BioSampleInfo:
             value = clean_text(item.get("value"))
             if name and value:
                 attr_map[name] = value
-
     info.raw_attributes = attr_map
     info.host = first_nonempty(attr_map.get("host"), flat.get("host"))
     info.host_taxid = first_nonempty(attr_map.get("host_taxid"), flat.get("host.taxId"), flat.get("host.taxid"))
@@ -718,7 +538,6 @@ def parse_biosample_record(rec: Dict[str, Any]) -> BioSampleInfo:
     return info
 
 
-
 def build_biosample_index(records: Sequence[Dict[str, Any]]) -> Dict[str, BioSampleInfo]:
     out: Dict[str, BioSampleInfo] = {}
     for rec in records:
@@ -729,13 +548,11 @@ def build_biosample_index(records: Sequence[Dict[str, Any]]) -> Dict[str, BioSam
     return out
 
 
-
 def extract_annotation_evidence(annotation_records: Sequence[Dict[str, Any]], protein_index: Dict[str, FastaRecord]) -> AnnotationEvidence:
     evidence = AnnotationEvidence(raw_hits=len(annotation_records))
     products: List[str] = []
     links: List[str] = []
     prot_accs: List[str] = []
-
     for rec in annotation_records:
         links.extend(extract_accessions_from_blob(rec))
         blob = json.dumps(rec, ensure_ascii=False)
@@ -744,38 +561,27 @@ def extract_annotation_evidence(annotation_records: Sequence[Dict[str, Any]], pr
         for acc in extract_accessions_from_blob(rec):
             if acc in protein_index or accession_base(acc) in protein_index:
                 prot_accs.append(acc)
-
     evidence.accession_links = uniq(links)
     evidence.product_names = uniq(products)
     evidence.protein_accessions = uniq(prot_accs)
     return evidence
 
 
-# ---------------------------------------------------------------------------
-# Segment, completeness, host, grouping
-# ---------------------------------------------------------------------------
-
-
 def segment_from_explicit_fields(flat_contexts: Sequence[Dict[str, Any]]) -> Optional[str]:
     for flat in flat_contexts:
-        value = first_nonempty(
-            flat.get("segment"),
-            flat.get("virus.segment"),
-            flat.get("annotation.segment"),
-        )
+        value = first_nonempty(flat.get("segment"), flat.get("virus.segment"), flat.get("annotation.segment"))
         if not value:
             continue
         v = value.strip().upper()
         if v in {"S", "M", "L"}:
             return v
-        if v in {"SMALL"}:
+        if v == "SMALL":
             return "S"
-        if v in {"MEDIUM"}:
+        if v == "MEDIUM":
             return "M"
-        if v in {"LARGE"}:
+        if v == "LARGE":
             return "L"
     return None
-
 
 
 def segment_from_text_evidence(texts: Sequence[str]) -> Tuple[Optional[str], List[str]]:
@@ -798,12 +604,10 @@ def segment_from_text_evidence(texts: Sequence[str]) -> Tuple[Optional[str], Lis
     return best, uniq(warnings)
 
 
-
 def choose_segment(flat_contexts: Sequence[Dict[str, Any]], annotation: AnnotationEvidence, nt_len: int) -> Tuple[str, str, List[str]]:
     explicit = segment_from_explicit_fields(flat_contexts)
     if explicit:
         return explicit, "explicit_metadata", []
-
     texts: List[str] = []
     for flat in flat_contexts:
         for k, v in flat.items():
@@ -814,11 +618,9 @@ def choose_segment(flat_contexts: Sequence[Dict[str, Any]], annotation: Annotati
                 else:
                     texts.append(str(v))
     texts.extend(annotation.product_names)
-
     seg, warnings = segment_from_text_evidence(texts)
     if seg:
         return seg, "annotation_text", warnings
-
     if nt_len:
         if nt_len >= COMPLETE_LENGTH_MIN["L"]:
             return "L", "length_heuristic", ["segment_from_length_only"]
@@ -826,84 +628,66 @@ def choose_segment(flat_contexts: Sequence[Dict[str, Any]], annotation: Annotati
             return "M", "length_heuristic", ["segment_from_length_only"]
         if nt_len >= COMPLETE_LENGTH_MIN["S"]:
             return "S", "length_heuristic", ["segment_from_length_only"]
-
     return "", "unresolved", ["segment_unresolved"]
 
+
+def count_ambiguous_n(sequence: str) -> int:
+    return sequence.upper().count("N") if sequence else 0
+
+
+def has_terminal_motif(sequence: str) -> bool:
+    if not sequence:
+        return False
+    seq = sequence.upper().replace("T", "U")
+    if seq.startswith(TERMINAL_MOTIF_5) and seq.endswith(TERMINAL_MOTIF_3):
+        return True
+    if seq.startswith(TERMINAL_MOTIF_5) or seq.endswith(TERMINAL_MOTIF_3):
+        return True
+    return sequence.upper().startswith(TERMINAL_MOTIF_5.replace("U", "T")) or sequence.upper().endswith(TERMINAL_MOTIF_3.replace("U", "T"))
 
 
 def determine_completeness(flat_contexts: Sequence[Dict[str, Any]], segment: str, nt_len: int, raw_blob: str, nt_sequence: Optional[str] = None) -> str:
     structured = None
     for flat in flat_contexts:
-        structured = first_nonempty(
-            flat.get("completeness"),
-            flat.get("nucleotideCompleteness"),
-            flat.get("nucleotide.completeness"),
-        )
+        structured = first_nonempty(flat.get("completeness"), flat.get("nucleotideCompleteness"), flat.get("nucleotide.completeness"))
         if structured:
             break
-
     if structured:
         low = structured.lower()
         if low == "complete":
             return "complete"
         if "partial" in low:
             return "partial"
-
     low_blob = raw_blob.lower()
     if "complete genome" in low_blob or "complete sequence" in low_blob:
         return "complete"
     if "complete cds" in low_blob and "partial" not in low_blob:
         return "coding_complete_only"
-
-    n_count = count_ambiguous_n(nt_sequence or "")
-    if n_count > N_AMBIGUOUS_THRESHOLD:
+    if count_ambiguous_n(nt_sequence or "") > N_AMBIGUOUS_THRESHOLD:
         return "partial_or_unknown"
-
-    motif = has_terminal_motif(nt_sequence or "")
     if segment and nt_len and nt_len >= COMPLETE_LENGTH_MIN.get(segment, 10**9):
-        if motif:
-            return "coding_complete"
-        return "likely_complete"
+        return "coding_complete" if has_terminal_motif(nt_sequence or "") else "likely_complete"
     if nt_len:
         return "partial_or_unknown"
     return "unknown"
-
 
 
 def is_complete_status(status: str) -> bool:
     return status in {"complete", "coding_complete_only", "likely_complete", "coding_complete"}
 
 
-
 def choose_host(flat_contexts: Sequence[Dict[str, Any]], biosample: Optional[BioSampleInfo]) -> Tuple[str, str, str]:
     if biosample and biosample.host:
         return biosample.host, clean_text(biosample.host_taxid) or "", "biosample"
-
     for flat in flat_contexts:
-        host = first_nonempty(
-            flat.get("host.organismName"),
-            flat.get("host.scientificName"),
-            flat.get("hostName"),
-            flat.get("host"),
-        )
+        host = first_nonempty(flat.get("host.organismName"), flat.get("host.scientificName"), flat.get("hostName"), flat.get("host"))
         if host:
             host_taxid = first_nonempty(flat.get("host.taxId"), flat.get("host.taxid")) or ""
             return host, host_taxid, "data_report"
-
     return "", "", "missing"
 
 
-
-def build_group_key(
-    species_taxid: str,
-    biosample: str,
-    isolate: str,
-    strain: str,
-    collection_date: str,
-    location: str,
-    host_name: str,
-    accession: str,
-) -> Tuple[str, str, float]:
+def build_group_key(species_taxid: str, biosample: str, isolate: str, strain: str, collection_date: str, location: str, host_name: str, accession: str) -> Tuple[str, str, float]:
     isolate_or_strain = isolate or strain
     if species_taxid and biosample and isolate_or_strain:
         return f"species_biosample_isolate|{species_taxid}|{biosample}|{isolate_or_strain}", "tier_1", 1.0
@@ -923,7 +707,6 @@ def is_lab_host_record(raw_blob: str) -> bool:
     return any(term in low for term in LAB_HOST_TERMS)
 
 
-
 def expected_length_warning(segment: str, nt_len: int) -> bool:
     if not segment or not nt_len:
         return False
@@ -936,99 +719,52 @@ def expected_length_warning(segment: str, nt_len: int) -> bool:
     return False
 
 
-def count_ambiguous_n(sequence: str) -> int:
-    if not sequence:
-        return 0
-    return sequence.upper().count("N")
-
-
-def has_terminal_motif(sequence: str) -> bool:
-    if not sequence:
-        return False
-    seq = sequence.upper().replace("T", "U")
-    five = TERMINAL_MOTIF_5
-    three = TERMINAL_MOTIF_3
-    if seq.startswith(five) and seq.endswith(three):
-        return True
-    if seq.startswith(five) or seq.endswith(three):
-        return True
-    dna5 = five.replace("U", "T")
-    dna3 = three.replace("U", "T")
-    if sequence.upper().startswith(dna5) or sequence.upper().endswith(dna3):
-        return True
-    return False
-
-
-def is_strict_complete_segment(rec: AccessionRecord) -> bool:
-    if not rec.segment or rec.segment not in COMPLETE_LENGTH_MIN:
-        return False
-    if rec.completeness not in {"complete", "coding_complete_only", "likely_complete", "coding_complete"}:
-        return False
-    return rec.nt_length >= COMPLETE_LENGTH_MIN[rec.segment]
-
-
 def determine_host_role(host_name: str, host_taxid: str, host_source: str, isolation_source: str, raw_blob: str) -> str:
     low_name = (host_name or "").lower()
     low_source = (host_source or "").lower()
     low_iso = (isolation_source or "").lower()
     low_blob = (raw_blob or "").lower()
-
     if host_taxid == "9606" or "human" in low_name or "homo sapiens" in low_name:
         return "spillover_host"
     if any(term in low_name for term in LAB_HOST_TERMS) or any(term in low_source for term in LAB_HOST_TERMS) or any(term in low_iso for term in LAB_HOST_TERMS) or any(term in low_blob for term in LAB_HOST_TERMS):
         return "laboratory_host"
-
     excreta_terms = ["urine", "feces", "faeces", "saliva", "stool", "fecal", "urinary", "salivary", "excreta"]
     if any(term in low_iso for term in excreta_terms) or any(term in low_source for term in excreta_terms) or any(term in low_blob for term in excreta_terms):
         return "reservoir_candidate"
-
     reservoir_terms = ["salivary gland", "kidney", "liver", "lung"]
     if any(term in low_iso for term in reservoir_terms) or any(term in low_source for term in reservoir_terms):
         return "potential_host"
-
     serology_terms = ["serum", "serology", "antibody", "igg", "igm", "sero"]
     if any(term in low_iso for term in serology_terms) or any(term in low_source for term in serology_terms) or any(term in low_blob for term in serology_terms):
         return "spillover_host"
-
     if host_name:
         return "potential_host"
     return "unknown"
 
 
 def compile_product_patterns() -> Dict[str, List[re.Pattern]]:
-    return {
-        key: [re.compile(pat, flags=re.I) for pat in patterns]
-        for key, patterns in PROTEIN_PRODUCT_PATTERNS.items()
-    }
+    return {key: [re.compile(pat, flags=re.I) for pat in patterns] for key, patterns in PROTEIN_PRODUCT_PATTERNS.items()}
 
 
 def matches_product(text: str, patterns: List[re.Pattern]) -> bool:
-    low = text.lower()
-    return any(p.search(low) for p in patterns)
+    return any(pattern.search(text.lower()) for pattern in patterns)
 
 
 def extract_protein_sequence_from_annotation(record: Dict[str, Any], protein_index: Dict[str, FastaRecord]) -> Optional[str]:
-    candidates = extract_accessions_from_blob(record)
-    for acc in candidates:
+    for acc in extract_accessions_from_blob(record):
         rec = protein_index.get(acc) or protein_index.get(accession_base(acc))
         if rec and rec.sequence:
             return rec.sequence
     return None
 
 
-def resolve_segment_protein_annotation(
-    ann_records: Sequence[Dict[str, Any]],
-    protein_index: Dict[str, FastaRecord],
-    segment: str,
-    virus_name: str,
-) -> Tuple[str, str, bool]:
+def resolve_segment_protein_annotation(ann_records: Sequence[Dict[str, Any]], protein_index: Dict[str, FastaRecord], segment: str, virus_name: str) -> Tuple[str, str, bool]:
     patterns = compile_product_patterns()
     best_seq = ""
     best_label = ""
     nss_flag = False
     for rec in ann_records:
-        raw_blob = json.dumps(rec, ensure_ascii=False)
-        text = raw_blob.lower()
+        text = json.dumps(rec, ensure_ascii=False).lower()
         if segment == "S":
             if matches_product(text, patterns["NSs"]):
                 nss_flag = True
@@ -1078,14 +814,10 @@ def pearson_correlation(xs: Sequence[float], ys: Sequence[float]) -> float:
     denom_y = sum((y - mean_y) ** 2 for y in ys)
     if denom_x == 0 or denom_y == 0:
         return 0.0
-    return num / (denom_x**0.5 * denom_y**0.5)
+    return num / ((denom_x * denom_y) ** 0.5)
 
 
-def select_correlation_features(
-    matrix: Sequence[Dict[str, float]],
-    labels: Sequence[str],
-    max_features: int = CORRELATION_MAX_FEATURES,
-) -> List[str]:
+def select_correlation_features(matrix: Sequence[Dict[str, float]], labels: Sequence[str], max_features: int = 200) -> List[str]:
     if not matrix or not labels:
         return []
     feature_names = sorted({k for row in matrix for k in row.keys()})
@@ -1098,9 +830,8 @@ def select_correlation_features(
         between = sum((label_vector[i] - sum(label_vector) / len(label_vector)) * (values[i] - mean_val) for i in range(len(values)))
         variance = sum((v - mean_val) ** 2 for v in values)
         scores[feature] = abs(between) / (variance + 1e-9)
-    sorted_features = sorted(scores, key=lambda f: scores[f], reverse=True)
     selected: List[str] = []
-    for feature in sorted_features:
+    for feature in sorted(scores, key=lambda k: scores[k], reverse=True):
         if len(selected) >= max_features:
             break
         feature_values = [row.get(feature, 0.0) for row in matrix]
@@ -1122,15 +853,9 @@ def normalize_matrix_columns(rows: Sequence[Dict[str, Any]], feature_names: Sequ
 
 
 def compute_protein_distance(seq1: str, seq2: str) -> float:
-    """Approximate pairwise distance using character-level Hamming distance on
-    unaligned sequences. This is a fast heuristic suitable for coarse clustering;
-    it is NOT a substitution-model-corrected phylogenetic distance. Report as an
-    approximation in any publication."""
     if not seq1 or not seq2:
         return 1.0
     len1, len2 = len(seq1), len(seq2)
-    if len1 == 0 or len2 == 0:
-        return 1.0
     mismatches = sum(1 for a, b in zip(seq1, seq2) if a != b)
     mismatches += abs(len1 - len2)
     return mismatches / max(len1, len2)
@@ -1165,11 +890,6 @@ def cluster_species_by_ped(isolates: Sequence[IsolateRecord]) -> Dict[str, int]:
     return clusters
 
 
-# ---------------------------------------------------------------------------
-# Accession transformation
-# ---------------------------------------------------------------------------
-
-
 def transform_one_record(
     record: Dict[str, Any],
     annotation_index: Dict[str, List[Dict[str, Any]]],
@@ -1190,12 +910,7 @@ def transform_one_record(
         annotation = extract_annotation_evidence(ann_matches, protein_index)
 
         biosample_candidates = extract_biosample_candidates(record)
-        biosample_acc = first_nonempty(
-            biosample_candidates,
-            flat.get("bioSampleAccession"),
-            flat.get("biosample.accession"),
-            flat.get("biosample"),
-        ) or ""
+        biosample_acc = first_nonempty(biosample_candidates, flat.get("bioSampleAccession"), flat.get("biosample.accession"), flat.get("biosample")) or ""
         biosample_info = biosample_index.get(biosample_acc.upper()) if biosample_acc else None
 
         flat_contexts = [flat] + [flatten_json(x) for x in ann_matches]
@@ -1204,7 +919,6 @@ def transform_one_record(
 
         virus_name = first_nonempty(flat.get("virus.organismName"), flat.get("organismName"), flat.get("organism.organismName")) or ""
         virus_taxid = first_nonempty(flat.get("virus.taxId"), flat.get("taxId"), flat.get("organism.taxId")) or ""
-
         genus_name = ""
         genus_taxid = ""
         lineage = record.get("virus", {}).get("lineage", []) if isinstance(record.get("virus"), dict) else []
@@ -1219,7 +933,6 @@ def transform_one_record(
         collection_date = first_nonempty(flat.get("isolate.collectionDate"), flat.get("collectionDate"), biosample_info.collection_date if biosample_info else None) or ""
         geographic = first_nonempty(flat.get("location.geographicLocation"), biosample_info.geographic_location if biosample_info else None) or ""
         country, region = split_geo(geographic)
-
         host_name, host_taxid, host_source = choose_host(flat_contexts, biosample_info)
         isolation_source = first_nonempty(flat.get("isolate.source"), biosample_info.isolation_source if biosample_info else None) or ""
         tissue = first_nonempty(flat.get("tissue"), biosample_info.tissue if biosample_info else None) or ""
@@ -1229,18 +942,11 @@ def transform_one_record(
         genomic_rec = genomic_index.get(accession) or genomic_index.get(acc_base)
         cds_rec = cds_index.get(accession) or cds_index.get(acc_base)
         nt_len = (genomic_rec.length if genomic_rec else 0) or (cds_rec.length if cds_rec else 0)
-
         segment, segment_source, segment_warnings = choose_segment(flat_contexts, annotation, nt_len)
         nt_sequence = genomic_rec.sequence if genomic_rec and genomic_rec.sequence else cds_rec.sequence if cds_rec and cds_rec.sequence else ""
-        completeness = determine_completeness(
-            flat_contexts,
-            segment,
-            nt_len,
-            json.dumps([record] + ann_matches, ensure_ascii=False),
-            nt_sequence=nt_sequence,
-        )
+        completeness = determine_completeness(flat_contexts, segment, nt_len, json.dumps([record] + ann_matches, ensure_ascii=False), nt_sequence=nt_sequence)
 
-        protein_accessions = []
+        protein_accessions: List[str] = []
         for p_acc in annotation.protein_accessions:
             rec = protein_index.get(p_acc) or protein_index.get(accession_base(p_acc))
             protein_accessions.append(rec.accession if rec else p_acc)
@@ -1250,19 +956,12 @@ def transform_one_record(
         protein_product = ""
         nss_overlap_flag = False
         if segment in {"S", "M"}:
-            protein_aa, protein_product, nss_overlap_flag = resolve_segment_protein_annotation(
-                ann_matches,
-                protein_index,
-                segment,
-                virus_name,
-            )
+            protein_aa, protein_product, nss_overlap_flag = resolve_segment_protein_annotation(ann_matches, protein_index, segment, virus_name)
             if protein_aa:
                 qc_id = f"protein_{protein_product}"
                 if qc_id not in protein_accessions:
                     protein_accessions.append(qc_id)
 
-        isolate_or_strain = isolate or strain
-        strict_isolate_key = ""
         group_key, grouping_tier, group_confidence = build_group_key(
             species_taxid=virus_taxid,
             biosample=biosample_acc,
@@ -1274,17 +973,18 @@ def transform_one_record(
             accession=accession,
         )
 
-        qc = QCFlags(
-            missing_segment=(segment == ""),
-            segment_from_heuristic=(segment_source == "length_heuristic"),
-            missing_host=(host_name == ""),
-            missing_biosample=(biosample_acc == ""),
-            missing_isolate_and_strain=(not isolate and not strain),
-            lab_host_flag=is_lab_host_record(json.dumps(record, ensure_ascii=False)),
-            missing_genomic_sequence=(genomic_rec is None),
-            missing_protein_link=(len(protein_accessions) == 0),
-            unexpected_length_for_segment=expected_length_warning(segment, nt_len),
-        )
+        warning_flags = uniq([
+            *segment_warnings,
+            *( ["missing_segment"] if segment == "" else []),
+            *( ["segment_from_heuristic"] if segment_source == "length_heuristic" else []),
+            *( ["missing_host"] if not host_name else []),
+            *( ["missing_biosample"] if not biosample_acc else []),
+            *( ["missing_isolate_and_strain"] if not isolate and not strain else []),
+            *( ["lab_host_flag"] if is_lab_host_record(json.dumps(record, ensure_ascii=False)) else []),
+            *( ["missing_genomic_sequence"] if genomic_rec is None else []),
+            *( ["missing_protein_link"] if len(protein_accessions) == 0 else []),
+            *( ["unexpected_length_for_segment"] if expected_length_warning(segment, nt_len) else []),
+        ])
 
         rec = AccessionRecord(
             accession=accession,
@@ -1317,12 +1017,12 @@ def transform_one_record(
             protein_aa=protein_aa,
             protein_product=protein_product,
             nss_overlap_flag=nss_overlap_flag,
-            strict_isolate_key=strict_isolate_key,
+            strict_isolate_key="",
             group_key=group_key,
             grouping_tier=grouping_tier,
             group_confidence=group_confidence,
             is_refseq=accession.startswith(("NC_", "NM_", "NP_", "YP_", "XM_", "XP_", "XR_", "NR_")),
-            warning_flags=uniq(segment_warnings + qc.to_messages()),
+            warning_flags=[item for item in warning_flags if item],
         )
 
         qc_row = {
@@ -1340,16 +1040,10 @@ def transform_one_record(
         return None, {"accession": "", "group_key": "", "segment": "", "completeness": "", "warnings": f"transform_error:{exc}"}
 
 
-# ---------------------------------------------------------------------------
-# Grouping and exports
-# ---------------------------------------------------------------------------
-
-
 def group_accessions(accessions: Sequence[AccessionRecord]) -> List[VirusGroupRecord]:
     grouped: DefaultDict[str, List[AccessionRecord]] = defaultdict(list)
     for rec in accessions:
         grouped[rec.group_key].append(rec)
-
     out: List[VirusGroupRecord] = []
     for key, members in grouped.items():
         species_name = Counter([m.species_name for m in members if m.species_name]).most_common(1)
@@ -1361,19 +1055,16 @@ def group_accessions(accessions: Sequence[AccessionRecord]) -> List[VirusGroupRe
         biosample = Counter([m.biosample for m in members if m.biosample]).most_common(1)
         isolate = Counter([m.isolate for m in members if m.isolate]).most_common(1)
         strain = Counter([m.strain for m in members if m.strain]).most_common(1)
-
-        s_acc = sorted({m.accession for m in members if m.segment == "S"})
-        m_acc = sorted({m.accession for m in members if m.segment == "M"})
-        l_acc = sorted({m.accession for m in members if m.segment == "L"})
+        s_accessions = sorted({m.accession for m in members if m.segment == "S"})
+        m_accessions = sorted({m.accession for m in members if m.segment == "M"})
+        l_accessions = sorted({m.accession for m in members if m.segment == "L"})
         complete_segments = sorted({m.segment for m in members if m.segment in {"S", "M", "L"} and is_complete_status(m.completeness)})
-
         if complete_segments == ["L", "M", "S"]:
             completeness_class = "complete_triplet"
         elif len(complete_segments) >= 1:
             completeness_class = "partial_group_with_complete_segment"
         else:
             completeness_class = "no_complete_segment"
-
         out.append(VirusGroupRecord(
             group_key=key,
             species_name=species_name[0][0] if species_name else "",
@@ -1387,9 +1078,9 @@ def group_accessions(accessions: Sequence[AccessionRecord]) -> List[VirusGroupRe
             strain=strain[0][0] if strain else "",
             group_confidence=max(m.group_confidence for m in members),
             group_size=len(members),
-            s_accessions=s_acc,
-            m_accessions=m_acc,
-            l_accessions=l_acc,
+            s_accessions=s_accessions,
+            m_accessions=m_accessions,
+            l_accessions=l_accessions,
             complete_segments=complete_segments,
             completeness_class=completeness_class,
             all_hosts=sorted({m.host_name for m in members if m.host_name}),
@@ -1398,17 +1089,10 @@ def group_accessions(accessions: Sequence[AccessionRecord]) -> List[VirusGroupRe
     return out
 
 
-
 def choose_best_segment_record(records: Sequence[AccessionRecord]) -> Optional[AccessionRecord]:
     if not records:
         return None
-    rank = {
-        "complete": 4,
-        "coding_complete_only": 4,
-        "likely_complete": 3,
-        "partial_or_unknown": 2,
-        "unknown": 1,
-    }
+    rank = {"complete": 4, "coding_complete_only": 4, "likely_complete": 3, "partial_or_unknown": 2, "unknown": 1}
     return sorted(records, key=lambda rec: (rank.get(rec.completeness, 0), rec.nt_length), reverse=True)[0]
 
 
@@ -1426,13 +1110,6 @@ def build_strict_isolate_records(accessions: Sequence[AccessionRecord]) -> List[
             continue
 
         protein_warnings: List[str] = []
-        s_evidence = s_rec.protein_product if s_rec else ""
-        m_evidence = m_rec.protein_product if m_rec else ""
-        l_evidence = l_rec.protein_product if l_rec else ""
-        s_accessions = s_rec.protein_accessions if s_rec else []
-        m_accessions = m_rec.protein_accessions if m_rec else []
-        l_accessions = l_rec.protein_accessions if l_rec else []
-
         concatenated_protein = ""
         if s_rec and m_rec and s_rec.protein_aa and m_rec.protein_aa:
             concatenated_protein = s_rec.protein_aa + m_rec.protein_aa
@@ -1441,17 +1118,8 @@ def build_strict_isolate_records(accessions: Sequence[AccessionRecord]) -> List[
 
         taxid_counts = Counter([r.species_taxid for r in [s_rec, m_rec, l_rec] if r and r.species_taxid])
         most_common_taxid = taxid_counts.most_common(1)[0][0] if taxid_counts else ""
-        taxonomic_incongruence = any(
-            r and r.species_taxid and r.species_taxid != most_common_taxid
-            for r in [s_rec, m_rec, l_rec]
-        )
-        reassortment_candidate = taxonomic_incongruence
-
-        segment_complete = {
-            "S": is_strict_complete_segment(s_rec) if s_rec else False,
-            "M": is_strict_complete_segment(m_rec) if m_rec else False,
-            "L": is_strict_complete_segment(l_rec) if l_rec else False,
-        }
+        taxonomic_incongruence = any(r and r.species_taxid and r.species_taxid != most_common_taxid for r in [s_rec, m_rec, l_rec])
+        segment_complete = {"S": is_complete_status(s_rec.completeness) if s_rec else False, "M": is_complete_status(m_rec.completeness) if m_rec else False, "L": is_complete_status(l_rec.completeness) if l_rec else False}
         complete_count = sum(segment_complete.values())
         if complete_count == 3:
             coding_complete_status = "coding_complete_triplet"
@@ -1463,12 +1131,12 @@ def build_strict_isolate_records(accessions: Sequence[AccessionRecord]) -> List[
             coding_complete_status = "incomplete_triplet"
 
         mosaic_flag = bool(
-            (bool(s_rec and m_rec) and s_rec.collection_date != m_rec.collection_date)
-            or (bool(s_rec and l_rec) and s_rec.collection_date != l_rec.collection_date)
-            or (bool(m_rec and l_rec) and m_rec.collection_date != l_rec.collection_date)
-            or (bool(s_rec and m_rec) and s_rec.location != m_rec.location)
-            or (bool(s_rec and l_rec) and s_rec.location != l_rec.location)
-            or (bool(m_rec and l_rec) and m_rec.location != l_rec.location)
+            (s_rec and m_rec and s_rec.collection_date != m_rec.collection_date)
+            or (s_rec and l_rec and s_rec.collection_date != l_rec.collection_date)
+            or (m_rec and l_rec and m_rec.collection_date != l_rec.collection_date)
+            or (s_rec and m_rec and s_rec.location != m_rec.location)
+            or (s_rec and l_rec and s_rec.location != l_rec.location)
+            or (m_rec and l_rec and m_rec.location != l_rec.location)
         )
 
         strict_key = ""
@@ -1481,9 +1149,6 @@ def build_strict_isolate_records(accessions: Sequence[AccessionRecord]) -> List[
         else:
             strict_key = key
 
-        s_name = s_rec.species_name if s_rec else ""
-        m_name = m_rec.species_name if m_rec else ""
-        l_name = l_rec.species_name if l_rec else ""
         host_name = (s_rec.host_name if s_rec else "") or (m_rec.host_name if m_rec else "") or (l_rec.host_name if l_rec else "")
         host_taxid = (s_rec.host_taxid if s_rec else "") or (m_rec.host_taxid if m_rec else "") or (l_rec.host_taxid if l_rec else "")
         host_source = (s_rec.host_source if s_rec else "") or (m_rec.host_source if m_rec else "") or (l_rec.host_source if l_rec else "")
@@ -1499,7 +1164,7 @@ def build_strict_isolate_records(accessions: Sequence[AccessionRecord]) -> List[
 
         isolates.append(IsolateRecord(
             strict_isolate_key=strict_key,
-            species_name=s_name or m_name or l_name or "",
+            species_name=(s_rec.species_name if s_rec else "") or (m_rec.species_name if m_rec else "") or (l_rec.species_name if l_rec else "") or "",
             species_taxid=most_common_taxid,
             species_cluster_id="",
             biosample=biosample,
@@ -1527,23 +1192,18 @@ def build_strict_isolate_records(accessions: Sequence[AccessionRecord]) -> List[
             coding_complete_status=coding_complete_status,
             mosaic_flag=mosaic_flag,
             taxonomic_incongruence_warning=taxonomic_incongruence,
-            reassortment_candidate_warning=reassortment_candidate,
+            reassortment_candidate_warning=taxonomic_incongruence,
             ns_s_overlapping_orf=s_rec.nss_overlap_flag if s_rec else False,
             species_divergence_flag=False,
-            s_protein_evidence=s_evidence,
-            m_protein_evidence=m_evidence,
-            l_protein_evidence=l_evidence,
-            s_protein_accessions=s_accessions,
-            m_protein_accessions=m_accessions,
-            l_protein_accessions=l_accessions,
+            s_protein_evidence=s_rec.protein_product if s_rec else "",
+            m_protein_evidence=m_rec.protein_product if m_rec else "",
+            l_protein_evidence=l_rec.protein_product if l_rec else "",
+            s_protein_accessions=s_rec.protein_accessions if s_rec else [],
+            m_protein_accessions=m_rec.protein_accessions if m_rec else [],
+            l_protein_accessions=l_rec.protein_accessions if l_rec else [],
             missing_protein_warnings=uniq(protein_warnings),
             host_source=host_source,
-            raw_metadata={
-                "group_key": key,
-                "grouping_tier": members[0].grouping_tier,
-                "group_confidence": max(m.group_confidence for m in members),
-                "biosample": biosample,
-            },
+            raw_metadata={"group_key": key, "grouping_tier": members[0].grouping_tier, "group_confidence": max(m.group_confidence for m in members), "biosample": biosample},
             warnings=uniq([*protein_warnings, *warning_flags]),
         ))
 
@@ -1564,41 +1224,20 @@ def build_host_table(accessions: Sequence[AccessionRecord], isolates: Sequence[I
         entry = hosts.get(key)
         host_role = determine_host_role(rec.host_name, rec.host_taxid, rec.host_source, rec.isolation_source, json.dumps(rec.annotation_products, ensure_ascii=False))
         if entry is None:
-            hosts[key] = HostRecord(
-                host_name=rec.host_name,
-                host_taxid=rec.host_taxid,
-                host_role=host_role,
-                host_source=rec.host_source,
-                representative_biosample=rec.biosample,
-                representative_isolate=rec.isolate,
-                accession_count=1,
-                isolate_count=0,
-                example_species=rec.species_name,
-            )
+            hosts[key] = HostRecord(host_name=rec.host_name, host_taxid=rec.host_taxid, host_role=host_role, host_source=rec.host_source, representative_biosample=rec.biosample, representative_isolate=rec.isolate, accession_count=1, isolate_count=0, example_species=rec.species_name)
         else:
             entry.accession_count += 1
             entry.host_role = entry.host_role or host_role
             entry.representative_biosample = entry.representative_biosample or rec.biosample
             entry.representative_isolate = entry.representative_isolate or rec.isolate
             entry.example_species = entry.example_species or rec.species_name
-
     for isolate in isolates:
         key = (isolate.host_name or "", isolate.host_taxid or "")
         if not any(key):
             continue
         entry = hosts.get(key)
         if entry is None:
-            hosts[key] = HostRecord(
-                host_name=isolate.host_name,
-                host_taxid=isolate.host_taxid,
-                host_role=isolate.host_role,
-                host_source="isolate",
-                representative_biosample=isolate.biosample,
-                representative_isolate=isolate.isolate,
-                accession_count=0,
-                isolate_count=1,
-                example_species=isolate.species_name,
-            )
+            hosts[key] = HostRecord(host_name=isolate.host_name, host_taxid=isolate.host_taxid, host_role=isolate.host_role, host_source="isolate", representative_biosample=isolate.biosample, representative_isolate=isolate.isolate, accession_count=0, isolate_count=1, example_species=isolate.species_name)
         else:
             entry.isolate_count += 1
             entry.host_role = entry.host_role or isolate.host_role
@@ -1618,16 +1257,7 @@ def build_ml_feature_matrix(isolates: Sequence[IsolateRecord]) -> List[Dict[str,
             continue
         matrices.append(counts)
         labels.append(isolate.host_taxid or isolate.species_taxid)
-        row = {
-            "strict_isolate_key": isolate.strict_isolate_key,
-            "species_name": isolate.species_name,
-            "species_taxid": isolate.species_taxid,
-            "host_name": isolate.host_name,
-            "host_taxid": isolate.host_taxid,
-            "host_role": isolate.host_role,
-        }
-        rows.append(row)
-
+        rows.append({"strict_isolate_key": isolate.strict_isolate_key, "species_name": isolate.species_name, "species_taxid": isolate.species_taxid, "host_name": isolate.host_name, "host_taxid": isolate.host_taxid, "host_role": isolate.host_role})
     selected_features = select_correlation_features(matrices, labels)
     for row, counts in zip(rows, matrices):
         for feature in selected_features:
@@ -1688,16 +1318,16 @@ def build_isolate_rows(isolates: Sequence[IsolateRecord]) -> List[Dict[str, Any]
             "m_nt_length": isolate.m_nt_length,
             "l_nt_length": isolate.l_nt_length,
             "concatenated_protein_aa": isolate.concatenated_protein_aa,
-        "coding_complete_status": isolate.coding_complete_status,
-        "grouping_tier": isolate.grouping_tier,
-        "grouping_confidence": isolate.grouping_confidence,
-        "s_protein_evidence": isolate.s_protein_evidence,
-        "m_protein_evidence": isolate.m_protein_evidence,
-        "l_protein_evidence": isolate.l_protein_evidence,
-        "s_protein_accessions": ";".join(isolate.s_protein_accessions),
-        "m_protein_accessions": ";".join(isolate.m_protein_accessions),
-        "l_protein_accessions": ";".join(isolate.l_protein_accessions),
-        "missing_protein_warnings": ";".join(isolate.missing_protein_warnings),
+            "coding_complete_status": isolate.coding_complete_status,
+            "grouping_tier": isolate.grouping_tier,
+            "grouping_confidence": isolate.grouping_confidence,
+            "s_protein_evidence": isolate.s_protein_evidence,
+            "m_protein_evidence": isolate.m_protein_evidence,
+            "l_protein_evidence": isolate.l_protein_evidence,
+            "s_protein_accessions": ";".join(isolate.s_protein_accessions),
+            "m_protein_accessions": ";".join(isolate.m_protein_accessions),
+            "l_protein_accessions": ";".join(isolate.l_protein_accessions),
+            "missing_protein_warnings": ";".join(isolate.missing_protein_warnings),
             "mosaic_flag": int(isolate.mosaic_flag),
             "reassortment_candidate_warning": int(isolate.reassortment_candidate_warning),
             "taxonomic_incongruence_warning": int(isolate.taxonomic_incongruence_warning),
@@ -1706,22 +1336,6 @@ def build_isolate_rows(isolates: Sequence[IsolateRecord]) -> List[Dict[str, Any]
             "warnings": ";".join(isolate.warnings),
         })
     return rows
-
-
-def build_host_rows(host_records: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    return host_records
-
-
-def build_ml_label_rows(feature_rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    return [
-        {
-            "strict_isolate_key": row["strict_isolate_key"],
-            "host_taxid": row["host_taxid"],
-            "species_taxid": row["species_taxid"],
-            "host_role": row["host_role"],
-        }
-        for row in feature_rows
-    ]
 
 
 def build_ml_segments(accessions: Sequence[AccessionRecord]) -> List[Dict[str, Any]]:
@@ -1744,10 +1358,9 @@ def build_ml_segments(accessions: Sequence[AccessionRecord]) -> List[Dict[str, A
     return rows
 
 
-
 def summarize(accessions: Sequence[AccessionRecord], groups: Sequence[VirusGroupRecord], qc_rows: Sequence[Dict[str, Any]], paths: InputPaths) -> Dict[str, Any]:
-    catalog = load_dataset_catalog(paths.dataset_catalog) if paths.dataset_catalog.exists() else {}
-    summary = {
+    catalog = load_dataset_catalog(paths.dataset_catalog)
+    return {
         "input_root": str(paths.root),
         "data_dir": str(paths.data_dir),
         "records_total": len(accessions),
@@ -1768,12 +1381,7 @@ def summarize(accessions: Sequence[AccessionRecord], groups: Sequence[VirusGroup
                 "biosample_report.jsonl": md5sum(paths.biosample_report),
                 "dataset_catalog.json": md5sum(paths.dataset_catalog),
             },
-            "input_files": [
-                str(paths.data_report),
-                str(paths.annotation_report),
-                str(paths.biosample_report),
-                str(paths.dataset_catalog),
-            ],
+            "input_files": [str(paths.data_report), str(paths.annotation_report), str(paths.biosample_report), str(paths.dataset_catalog)],
         },
         "output_files": {
             "accession_table": str(paths.output_dir / "ortho_accession_table.parquet"),
@@ -1787,31 +1395,17 @@ def summarize(accessions: Sequence[AccessionRecord], groups: Sequence[VirusGroup
             "summary_json": str(paths.output_dir / "ortho_summary.json"),
             "log_file": str(paths.log_file),
         },
-        "outputs": {
-            "isolate_csv": str(paths.output_dir / "ortho_isolate_table.parquet"),
-            "host_csv": str(paths.output_dir / "ortho_host_table.parquet"),
-            "ml_feature_csv": str(paths.output_dir / "ortho_ml_feature_matrix.parquet"),
-            "suppressed_csv": str(paths.output_dir / "ortho_suppressed.parquet"),
-        },
-        "output_schema": {
-            name: {"columns": columns} for name, columns in OUTPUT_TABLE_SCHEMAS.items()
-        },
+        "output_schema": {name: {"columns": columns} for name, columns in OUTPUT_TABLE_SCHEMAS.items()},
     }
-    return summary
 
 
-# ---------------------------------------------------------------------------
-# Main pipeline
-# ---------------------------------------------------------------------------
-
-
-def run_pipeline(paths: InputPaths, threads: int = 4) -> None:
+def run_pipeline(paths: InputPaths) -> None:
     logging.info("Loading JSONL reports")
     data_records = list(iter_jsonl(paths.data_report))
     annotation_records = list(iter_jsonl(paths.annotation_report))
     biosample_records = list(iter_jsonl(paths.biosample_report))
 
-    logging.info("Building annotation and biosample indexes")
+    logging.info("Building indexes")
     annotation_index = build_annotation_index(annotation_records)
     biosample_index = build_biosample_index(biosample_records)
 
@@ -1820,34 +1414,20 @@ def run_pipeline(paths: InputPaths, threads: int = 4) -> None:
     cds_index = parse_fasta(paths.cds_fasta)
     protein_index = parse_fasta(paths.protein_fasta)
 
-    logging.info("Transforming accession records in parallel")
+    logging.info("Transforming accession records")
     accession_records: List[AccessionRecord] = []
     qc_rows: List[Dict[str, Any]] = []
+    for rec in data_records:
+        acc_rec, qc_row = transform_one_record(rec, annotation_index, biosample_index, genomic_index, cds_index, protein_index)
+        if acc_rec is not None:
+            accession_records.append(acc_rec)
+        if qc_row is not None:
+            qc_rows.append(qc_row)
 
-    with ThreadPoolExecutor(max_workers=max(1, threads)) as ex:
-        futures = [
-            ex.submit(
-                transform_one_record,
-                rec,
-                annotation_index,
-                biosample_index,
-                genomic_index,
-                cds_index,
-                protein_index,
-            )
-            for rec in data_records
-        ]
-        for fut in futures:
-            acc_rec, qc_row = fut.result()
-            if acc_rec is not None:
-                accession_records.append(acc_rec)
-            if qc_row is not None:
-                qc_rows.append(qc_row)
-
-    logging.info("Grouping accessions into virus-level records")
+    logging.info("Grouping accessions")
     virus_groups = group_accessions(accession_records)
 
-    logging.info("Building strict S/M/L isolate records")
+    logging.info("Building isolate records")
     isolate_records = build_strict_isolate_records(accession_records)
 
     logging.info("Building host table")
@@ -1860,106 +1440,75 @@ def run_pipeline(paths: InputPaths, threads: int = 4) -> None:
     suppressed_rows = build_suppressed_rows(accession_records, isolate_records)
 
     accession_rows = []
-    for r in accession_records:
+    for rec in accession_records:
         accession_rows.append({
-            "accession": r.accession,
-            "species_name": r.species_name,
-            "species_taxid": r.species_taxid,
-            "genus_name": r.genus_name,
-            "genus_taxid": r.genus_taxid,
-            "segment": r.segment,
-            "segment_source": r.segment_source,
-            "completeness": r.completeness,
-            "nt_length": r.nt_length,
-            "biosample": r.biosample,
-            "bioproject": r.bioproject,
-            "isolate": r.isolate,
-            "strain": r.strain,
-            "collection_date": r.collection_date,
-            "year": r.year,
-            "location": r.location,
-            "country": r.country,
-            "region": r.region,
-            "host_name": r.host_name,
-            "host_taxid": r.host_taxid,
-            "host_source": r.host_source,
-        "host_role": r.host_role,
-            "isolation_source": r.isolation_source,
-            "tissue_source": r.tissue_source,
-            "protein_accessions": ";".join(r.protein_accessions),
-            "annotation_products": ";".join(r.annotation_products),
-            "group_key": r.group_key,
-            "group_confidence": r.group_confidence,
-            "is_refseq": int(r.is_refseq),
-            "warning_flags": ";".join(r.warning_flags),
+            "accession": rec.accession,
+            "species_name": rec.species_name,
+            "species_taxid": rec.species_taxid,
+            "genus_name": rec.genus_name,
+            "genus_taxid": rec.genus_taxid,
+            "segment": rec.segment,
+            "segment_source": rec.segment_source,
+            "completeness": rec.completeness,
+            "nt_length": rec.nt_length,
+            "biosample": rec.biosample,
+            "bioproject": rec.bioproject,
+            "isolate": rec.isolate,
+            "strain": rec.strain,
+            "collection_date": rec.collection_date,
+            "year": rec.year,
+            "location": rec.location,
+            "country": rec.country,
+            "region": rec.region,
+            "host_name": rec.host_name,
+            "host_taxid": rec.host_taxid,
+            "host_source": rec.host_source,
+            "host_role": rec.host_role,
+            "isolation_source": rec.isolation_source,
+            "tissue_source": rec.tissue_source,
+            "protein_accessions": ";".join(rec.protein_accessions),
+            "annotation_products": ";".join(rec.annotation_products),
+            "group_key": rec.group_key,
+            "group_confidence": rec.group_confidence,
+            "is_refseq": int(rec.is_refseq),
+            "warning_flags": ";".join(rec.warning_flags),
         })
 
     virus_rows = []
-    for g in virus_groups:
+    for group in virus_groups:
         virus_rows.append({
-            "group_key": g.group_key,
-            "species_name": g.species_name,
-            "species_taxid": g.species_taxid,
-            "host_name": g.host_name,
-            "host_taxid": g.host_taxid,
-            "country": g.country,
-            "year": g.year,
-            "biosample": g.biosample,
-            "isolate": g.isolate,
-            "strain": g.strain,
-            "group_confidence": g.group_confidence,
-            "group_size": g.group_size,
-            "s_accessions": ";".join(g.s_accessions),
-            "m_accessions": ";".join(g.m_accessions),
-            "l_accessions": ";".join(g.l_accessions),
-            "complete_segments": ";".join(g.complete_segments),
-            "completeness_class": g.completeness_class,
-            "all_hosts": ";".join(g.all_hosts),
-            "all_accessions": ";".join(g.all_accessions),
+            "group_key": group.group_key,
+            "species_name": group.species_name,
+            "species_taxid": group.species_taxid,
+            "host_name": group.host_name,
+            "host_taxid": group.host_taxid,
+            "country": group.country,
+            "year": group.year,
+            "biosample": group.biosample,
+            "isolate": group.isolate,
+            "strain": group.strain,
+            "group_confidence": group.group_confidence,
+            "group_size": group.group_size,
+            "s_accessions": ";".join(group.s_accessions),
+            "m_accessions": ";".join(group.m_accessions),
+            "l_accessions": ";".join(group.l_accessions),
+            "complete_segments": ";".join(group.complete_segments),
+            "completeness_class": group.completeness_class,
+            "all_hosts": ";".join(group.all_hosts),
+            "all_accessions": ";".join(group.all_accessions),
         })
 
     logging.info("Writing outputs")
-    ml_rows = build_ml_segments(accession_records)
-    isolate_rows = build_isolate_rows(isolate_records)
-
-    safe_write_parquet(
-        paths.output_dir / "ortho_accession_table.parquet",
-        accession_rows,
-    )
-    safe_write_parquet(
-        paths.output_dir / "ortho_virus_table.parquet",
-        virus_rows,
-    )
-    safe_write_parquet(
-        paths.output_dir / "ortho_isolate_table.parquet",
-        isolate_rows,
-    )
-    safe_write_parquet(
-        paths.output_dir / "ortho_host_table.parquet",
-        host_rows,
-    )
-    safe_write_parquet(
-        paths.output_dir / "ortho_ml_feature_matrix.parquet",
-        ml_feature_rows,
-    )
-    safe_write_parquet(
-        paths.output_dir / "ortho_ml_segments.parquet",
-        ml_rows,
-    )
-    safe_write_parquet(
-        paths.output_dir / "ortho_suppressed.parquet",
-        suppressed_rows,
-    )
-    safe_write_parquet(
-        paths.output_dir / "ortho_qc_report.parquet",
-        qc_rows,
-    )
+    safe_write_parquet(paths.output_dir / "ortho_accession_table.parquet", accession_rows)
+    safe_write_parquet(paths.output_dir / "ortho_virus_table.parquet", virus_rows)
+    safe_write_parquet(paths.output_dir / "ortho_isolate_table.parquet", build_isolate_rows(isolate_records))
+    safe_write_parquet(paths.output_dir / "ortho_host_table.parquet", host_rows)
+    safe_write_parquet(paths.output_dir / "ortho_ml_feature_matrix.parquet", ml_feature_rows)
+    safe_write_parquet(paths.output_dir / "ortho_ml_segments.parquet", build_ml_segments(accession_records))
+    safe_write_parquet(paths.output_dir / "ortho_suppressed.parquet", suppressed_rows)
+    safe_write_parquet(paths.output_dir / "ortho_qc_report.parquet", qc_rows)
 
     summary = summarize(accession_records, virus_groups, qc_rows, paths)
-    summary["outputs"]["isolate_csv"] = str(paths.output_dir / "ortho_isolate_table.parquet")
-    summary["outputs"]["host_csv"] = str(paths.output_dir / "ortho_host_table.parquet")
-    summary["outputs"]["ml_feature_csv"] = str(paths.output_dir / "ortho_ml_feature_matrix.parquet")
-    summary["outputs"]["suppressed_csv"] = str(paths.output_dir / "ortho_suppressed.parquet")
     safe_write_json(paths.output_dir / "ortho_summary.json", summary)
 
     logging.info("Done")
@@ -1967,19 +1516,12 @@ def run_pipeline(paths: InputPaths, threads: int = 4) -> None:
     logging.info("Virus groups: %s", len(virus_groups))
 
 
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
-
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Orthohantavirus NCBI Datasets production pipeline")
-    parser.add_argument("--input", required=False, default=".", help="Path to the unzipped NCBI package root containing all_hanta/ncbi_dataset/data")
+    parser.add_argument("--input", required=False, default=".", help="Path to the package root containing all_hanta/ncbi_dataset/data")
     parser.add_argument("--output", required=False, help="Path to write outputs; defaults to <input>/output")
-    parser.add_argument("--threads", type=int, default=max(1, min(8, (os.cpu_count() or 4))), help="Number of worker threads")
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
     return parser.parse_args(argv)
-
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -1989,7 +1531,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     logging.info("Starting Orthohantavirus production pipeline")
     logging.info("Input root: %s", paths.root)
     logging.info("Output dir: %s", paths.output_dir)
-    run_pipeline(paths, threads=args.threads)
+    run_pipeline(paths)
     return 0
 
 
