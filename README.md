@@ -49,8 +49,9 @@ python all_hanta.py --input . --output output
 | `--cluster-threshold` | `0.02` | Cosine k-mer distance for within-species single-linkage clustering |
 | `--max-features` | `200` | Number of top-variance k-mer features in the ML matrix |
 | `--min-species-size` | `8` | Minimum assessable isolates before divergence diagnostics are computed |
-| `--threads` | cpu count | Accepted for compatibility; the transform is GIL-bound and runs serially |
 | `--verbose` | off | Debug logging |
+
+The transform is GIL-bound and runs serially; a full run takes ~16s on the 15,991-record package.
 
 Requires Python 3.11+ (uses `datetime.UTC`) with `pandas`, `pyarrow`, `numpy`. No alignment or
 phylogenetics dependencies.
@@ -262,8 +263,8 @@ maximum-likelihood inference. These clusters are an alignment-free proxy and are
 | `ortho_species_table.parquet` | 39 × 32 | One row per canonical ICTV species: merged taxids, legacy synonyms, risk profile, segment and host counts |
 | `ortho_isolate_table.parquet` | 9,904 × 52 | Reconstructed isolates with S/M/L representatives, triplet status, concatenated protein, divergence diagnostics |
 | `ortho_host_table.parquet` | 253 × 13 | One row per host taxon with risk prior and virus species carried |
-| `ortho_risk_table.parquet` | 9,904 × 32 | Pathogenicity class, CFR band, citation, and an auditable additive `surveillance_priority_score` |
-| `ortho_segment_divergence.parquet` | 9,904 × 18 | Per-segment nearest neighbours and rank separations — **diagnostics, not reassortment calls** |
+| `ortho_risk_table.parquet` | 9,904 × 31 | Pathogenicity class, CFR band, citation, and an auditable additive `surveillance_priority_score` |
+| `ortho_segment_divergence.parquet` | 9,904 × 17 | Per-segment nearest neighbours and rank separations — **diagnostics, not reassortment calls** |
 | `ortho_ml_feature_matrix.parquet` | 7,529 × 228 | Raw features + labels, with `group_id` and `year` for leakage-free CV |
 | `ortho_ml_segments.parquet` | 15,781 × 19 | Segment-level table for per-segment models |
 | `ortho_suppressed.parquet` | 1,021 × 16 | Non-representative accessions with the reason |

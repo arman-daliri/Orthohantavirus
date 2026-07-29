@@ -32,16 +32,17 @@ import argparse
 import hashlib
 import json
 import logging
-import os
 import re
 import sys
 import traceback
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, DefaultDict, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
+import numpy as np
 import pandas as pd
 
 # --------------------------------------------------------------------------------------
@@ -56,12 +57,19 @@ DATA_REPORT = "data_report.jsonl"
 ANNOTATION_REPORT = "annotation_report.jsonl"
 BIOSAMPLE_REPORT = "biosample_report.jsonl"
 GENOMIC_FASTA = "genomic.fna"
-CDS_FASTA = "cds.fna"
 PROTEIN_FASTA = "protein.faa"
 MD5SUM_FILE = "md5sum.txt"
 
-BIOSAMPLE_RE = re.compile(r"\bSAM[NED][A-Z]?\d+\b", re.I)
 YEAR_RE = re.compile(r"(19|20)\d{2}")
+# Hot-path patterns. clean_text alone runs ~930k times per invocation, so these are
+# compiled once here rather than re-resolved from re's cache on every call.
+WHITESPACE_RE = re.compile(r"\s+")
+NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+HEX_HASH_RE = re.compile(r"[0-9A-F]{1,8}")
+MD5_RE = re.compile(r"[0-9a-fA-F]{32}")
+SEGMENT_STRIP_RE = re.compile(r"[^a-z0-9;\s()/-]+")
+SEGMENT_PUNCT_RE = re.compile(r"[;()/_-]+")
+ATTR_NAME_RE = re.compile(r"[^a-z0-9]+")
 
 # ICTV Hantaviridae segment sizes: S 1.2-2.1 kb, M 3.4-3.8 kb, L 6.5-6.6 kb.
 # https://ictv.global/report/chapter/hantaviridae/hantaviridae/mammantavirinae/orthohantavirus
@@ -71,6 +79,8 @@ SEGMENT_LENGTH_RANGE = {"S": (1200, 2100), "M": (3400, 3800), "L": (6300, 6800)}
 COMPLETE_LENGTH_MIN = {"S": 1100, "M": 3200, "L": 6000}
 # Beyond these a record is almost certainly a multi-segment concatenation or a mis-label.
 SEGMENT_LENGTH_ABSURD_MAX = {"S": 3000, "M": 5000, "L": 8000}
+# How far below the ICTV lower bound a COMPLETE record may fall before it is flagged.
+COMPLETE_LENGTH_TOLERANCE = 0.85
 
 KMER_K = 3
 
@@ -106,20 +116,33 @@ SEGMENT_FIELD_RULES: List[Tuple[re.Pattern, str]] = [
 ]
 
 # Derived from the 122 distinct CDS product names in annotation_report.jsonl.
+#
+# Two related but deliberately different questions are asked of a product name:
+#   - which SEGMENT does it imply?  (loose: any nonstructural mention implies S)
+#   - which PROTEIN ROLE is it?     (strict: only a true NSs product counts as NSs)
+# The shared fragments are defined once here so the two rule tables cannot drift, while
+# the intentional differences stay visible as explicit additions.
+_RDRP = r"polymerase|\brdrp\b|\bl protein\b|^l$"
+_GPC = r"glyco|\bgpc\b|\bg1\b|\bg2\b|\bgn\b|\bgc\b|envelope|polyprotein"
+_N = r"nucleocapsid|nucleoprotein|\bn protein\b"
+_NSS_STRICT = r"\bnss\b|small non-?structural|non-?structural protein s"
+
 # Order matters: polymerase is checked before glycoprotein because a few deflines
 # mention both.
 PRODUCT_SEGMENT_RULES: List[Tuple[re.Pattern, str]] = [
-    (re.compile(r"polymerase|\brdrp\b|\bl protein\b|\blarge protein\b|^l$"), "L"),
-    (re.compile(r"glyco|\bgpc\b|\bg1\b|\bg2\b|\bgn\b|\bgc\b|envelope|polyprotein|m segment"), "M"),
-    (re.compile(r"nucleocapsid|nucleoprotein|\bn protein\b|\bnss?\b|nonstructural|non-structural"), "S"),
+    (re.compile(_RDRP + r"|\blarge protein\b"), "L"),
+    (re.compile(_GPC + r"|m segment"), "M"),
+    # Looser than the NSs role rule on purpose: a bare "nonstructural protein" pins the
+    # record to S without asserting it is the NSs product.
+    (re.compile(_N + r"|\bnss?\b|nonstructural|non-structural"), "S"),
 ]
 
 # Which protein a product name represents, used for per-segment protein selection.
 PRODUCT_ROLE_RULES: List[Tuple[re.Pattern, str]] = [
-    (re.compile(r"\bnss\b|small non-?structural|non-?structural protein s"), "NSs"),
-    (re.compile(r"polymerase|\brdrp\b|\bl protein\b|^l$"), "RdRp"),
-    (re.compile(r"glyco|\bgpc\b|\bg1\b|\bg2\b|\bgn\b|\bgc\b|envelope|polyprotein"), "GPC"),
-    (re.compile(r"nucleocapsid|nucleoprotein|\bn protein\b"), "N"),
+    (re.compile(_NSS_STRICT), "NSs"),
+    (re.compile(_RDRP), "RdRp"),
+    (re.compile(_GPC), "GPC"),
+    (re.compile(_N), "N"),
 ]
 
 SEGMENT_PRIMARY_PRODUCT = {"S": "N", "M": "GPC", "L": "RdRp"}
@@ -342,7 +365,7 @@ def audit_reservoir_curation(accessions: Sequence["AccessionRecord"]) -> List[Di
         if not counts:
             continue
         curated = RESERVOIR_GENUS_ORDER.get(entry["reservoir"].split()[0], "")
-        modal = counts.most_common(1)[0][0]
+        modal = mode(counts)
         if not curated:
             findings.append({"species": species, "issue": "reservoir genus not in RESERVOIR_GENUS_ORDER",
                              "curated_reservoir": entry["reservoir"], "modal_observed_host": ""})
@@ -350,16 +373,55 @@ def audit_reservoir_curation(accessions: Sequence["AccessionRecord"]) -> List[Di
             findings.append({
                 "species": species, "issue": "curated reservoir order disagrees with data",
                 "curated_reservoir": f"{entry['reservoir']} ({curated})",
-                "modal_observed_host": f"{hosts[species].most_common(1)[0][0]} ({modal})"})
+                "modal_observed_host": f"{mode(hosts[species])} ({modal})"})
     return findings
 
-# Reservoir-host order -> baseline human-risk prior. Shrew (Eulipotyphla), mole and bat
+# Single source of truth for the mammalian orders this dataset contains: the host role
+# each implies, and the baseline human-risk prior. Shrew (Eulipotyphla), mole and bat
 # borne hantaviruses are regarded as non-pathogenic to humans (PMC10459939).
+# 'Soricomorpha' and 'Insectivora' are superseded names for Eulipotyphla that still
+# appear in older NCBI lineages.
+HOST_ORDER_ROLE = {
+    "Rodentia": "reservoir_rodent",
+    "Eulipotyphla": "reservoir_shrew_mole",
+    "Soricomorpha": "reservoir_shrew_mole",
+    "Insectivora": "reservoir_shrew_mole",
+    "Chiroptera": "reservoir_bat",
+    "Primates": "spillover_host_primate",
+    "Carnivora": "",
+    "Lagomorpha": "",
+    "Artiodactyla": "",
+}
+
 HOST_ORDER_RISK_PRIOR = {
     "Rodentia": "rodent_borne_risk_possible",
     "Eulipotyphla": "shrew_mole_borne_low_risk",
     "Chiroptera": "bat_borne_low_risk",
     "Primates": "human_or_primate_derived",
+}
+
+# Disease syndrome -> pathogenicity class. TULV's 'rare_opportunistic' is kept out of
+# pathogenic_hfrs deliberately: lumping its handful of mild case reports with HTNV/DOBV
+# would put 2,123 records into the same class as the viruses that drive HFRS mortality.
+SYNDROME_TO_PATHOGENICITY = {
+    "HCPS": "pathogenic_hcps",
+    "HFRS": "pathogenic_hfrs",
+    "HFRS/NE": "pathogenic_hfrs",
+    "rare_opportunistic": "rare_or_opportunistic",
+    "suspected": "suspected",
+    "suspected_HFRS": "suspected",
+    "none_known": "no_known_human_disease",
+}
+
+# Weights for surveillance_priority. Named here because the score is explicitly meant to
+# be audited and re-weighted downstream.
+SURVEILLANCE_WEIGHTS = {
+    "cfr_by_band": {3: 4.0, 2: 2.5, 1: 1.0, 0: 0.0, -1: 0.5},
+    "human_spillover": 2.0,
+    "taxonomic_incongruence": 1.5,
+    "host_jump": 1.0,
+    "complete_triplet": 1.0,
+    "nss_orf": 0.5,
 }
 
 # Reassortment frequency reported in the literature, used only as a prior for reporting
@@ -391,7 +453,6 @@ class InputPaths:
     dataset_catalog: Path
     md5sum_file: Optional[Path]
     genomic_fasta: Optional[Path]
-    cds_fasta: Optional[Path]
     protein_fasta: Optional[Path]
     output_dir: Path
     log_file: Path
@@ -451,7 +512,6 @@ class BioSampleInfo:
 @dataclass
 class AccessionRecord:
     accession: str
-    accession_base: str
     sequence_hash: str
     species_name: str
     species_taxid: str
@@ -506,7 +566,6 @@ class IsolateRecord:
     species_name: str
     species_taxid: str
     species_status: str
-    ranks: Dict[str, str]
     biosample: str
     isolate: str
     strain: str
@@ -574,7 +633,6 @@ class SegmentDivergenceProfile:
     m_rank_offset: float
     taxonomic_incongruence: bool
     reassortment_status: str
-    triage_rank: float
     reported_species_prior: str
 
 
@@ -605,7 +663,7 @@ def clean_text(value: Any) -> Optional[str]:
     if text.lower() in {"none", "null", "nan", "na", "n/a", "unknown", "missing",
                         "not collected", "not provided", "not applicable", "restricted access"}:
         return None
-    return re.sub(r"\s+", " ", text).strip()
+    return WHITESPACE_RE.sub(" ", text).strip()
 
 
 def first_nonempty(*values: Any) -> Optional[str]:
@@ -631,6 +689,11 @@ def uniq(values: Iterable[Any]) -> List[Any]:
             seen.add(key)
             out.append(value)
     return out
+
+
+def mode(counter: Counter, default: str = "") -> str:
+    """Most frequent key, or `default` when the counter is empty."""
+    return counter.most_common(1)[0][0] if counter else default
 
 
 def accession_base(accession: str) -> str:
@@ -669,7 +732,7 @@ def split_geo(geo: str) -> Tuple[str, str]:
 
 def normalize_key_text(value: str) -> str:
     """Collapse case, whitespace and punctuation so 'PUUV/Foo-01' and 'puuv foo 01' agree."""
-    return re.sub(r"[^a-z0-9]+", "", (value or "").lower())
+    return NON_ALNUM_RE.sub("", (value or "").lower())
 
 
 def safe_write_parquet(path: Path, rows: Sequence[Dict[str, Any]]) -> None:
@@ -765,7 +828,7 @@ def parse_md5sum_file(path: Path) -> Dict[str, str]:
         if len(parts) != 2:
             continue
         digest, rel_path = parts[0].strip(), parts[1].strip().lstrip("*")
-        if re.fullmatch(r"[0-9a-fA-F]{32}", digest):
+        if MD5_RE.fullmatch(digest):
             expected[Path(rel_path).name] = digest.lower()
     return expected
 
@@ -847,7 +910,7 @@ def normalize_sequence_hash(value: Any) -> str:
     if not text:
         return ""
     text = text.strip().upper()
-    if not re.fullmatch(r"[0-9A-F]{1,8}", text):
+    if not HEX_HASH_RE.fullmatch(text):
         return text
     return text.zfill(8)
 
@@ -906,31 +969,29 @@ def resolve_species(record: Dict[str, Any]) -> SpeciesAssignment:
     return SpeciesAssignment(species_name, species_taxid, observed_taxid, observed_name, status, ranks)
 
 
-def build_species_canonical_taxid_map(assignments: Sequence[SpeciesAssignment]) -> Dict[str, str]:
-    """Pick one canonical taxid per species name -- the most frequent, ties broken by size.
-
-    NCBI keeps the retired species taxid on records released before the ICTV rename, so
-    the same binomial legitimately carries two taxids (e.g. puumalaense 3052493 / 1980486).
-    """
-    per_name: DefaultDict[str, Counter] = defaultdict(Counter)
-    for item in assignments:
-        if item.canonical_taxid:
-            per_name[item.canonical_name][item.canonical_taxid] += 1
-    resolved: Dict[str, str] = {}
-    for name, counts in per_name.items():
-        resolved[name] = max(counts.items(), key=lambda kv: (kv[1], int(kv[0]) if kv[0].isdigit() else 0))[0]
-    return resolved
+# Cache for resolve_host_taxonomy, keyed on host taxid. Verified safe against this
+# package: all 253 distinct host taxids carry a consistent organismName and lineage, so
+# one walk per taxid replaces one walk per record (15,991 -> 253).
+#
+# Deliberately NOT done for resolve_species: 3 of 551 virus taxids carry more than one
+# organismName or lineage (e.g. taxid 1980456 appears as both 'Orthohantavirus andesense'
+# and 'Andes orthohantavirus'), and even (taxid, organismName) still collides for
+# 'Lanka hantavirus'. Caching there would silently change the observed_organism column.
+_HOST_TAXONOMY_CACHE: Dict[str, Tuple[str, str, str, str]] = {}
 
 
 def resolve_host_taxonomy(record: Dict[str, Any]) -> Tuple[str, str, str, str]:
     """Return (host_name, host_taxid, order, family) from host.lineage."""
     host = record.get("host") or {}
-    name = clean_text(host.get("organismName")) or ""
     taxid = str(host.get("taxId") or "")
+    cached = _HOST_TAXONOMY_CACHE.get(taxid) if taxid else None
+    if cached is not None:
+        return cached
+
+    name = clean_text(host.get("organismName")) or ""
     order = ""
     family = ""
-    order_names = {"Rodentia", "Eulipotyphla", "Chiroptera", "Primates", "Carnivora",
-                   "Lagomorpha", "Artiodactyla", "Soricomorpha", "Insectivora"}
+    order_names = HOST_ORDER_ROLE.keys()
     for node in host.get("lineage") or []:
         if not isinstance(node, dict):
             continue
@@ -940,7 +1001,11 @@ def resolve_host_taxonomy(record: Dict[str, Any]) -> Tuple[str, str, str, str]:
         elif node_name.endswith("idae"):
             # lineage runs broad -> narrow, so the last -idae node is the family rank.
             family = node_name
-    return name, taxid, order, family
+
+    result = (name, taxid, order, family)
+    if taxid:
+        _HOST_TAXONOMY_CACHE[taxid] = result
+    return result
 
 
 # --------------------------------------------------------------------------------------
@@ -959,9 +1024,9 @@ def normalize_segment_field(value: Any) -> str:
     text = clean_text(value)
     if not text:
         return ""
-    low = re.sub(r"[^a-z0-9;\s()/-]+", " ", text.lower())
-    low = re.sub(r"[;()/_-]+", " ", low)
-    low = re.sub(r"\s+", " ", low).strip()
+    low = SEGMENT_STRIP_RE.sub(" ", text.lower())
+    low = SEGMENT_PUNCT_RE.sub(" ", low)
+    low = WHITESPACE_RE.sub(" ", low).strip()
     if not low or low in {"anonymous", "unknown", "unnamed"}:
         return ""
     for pattern, segment in SEGMENT_FIELD_RULES:
@@ -1075,7 +1140,7 @@ def length_anomaly(segment: str, nt_len: int, completeness: str) -> str:
         return "length_exceeds_segment_maximum"
     if completeness == "complete":
         lo, _hi = SEGMENT_LENGTH_RANGE[segment]
-        if nt_len < lo * 0.85:
+        if nt_len < lo * COMPLETE_LENGTH_TOLERANCE:
             return "complete_but_shorter_than_ictv_range"
     return ""
 
@@ -1150,7 +1215,7 @@ def select_primary_protein(hits: Sequence[ProteinHit], segment: str) -> Tuple[st
 
 
 def normalize_attr_name(name: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
+    return ATTR_NAME_RE.sub("_", name.strip().lower()).strip("_")
 
 
 def parse_biosample_record(record: Dict[str, Any]) -> BioSampleInfo:
@@ -1202,16 +1267,8 @@ def determine_host_role(host_name: str, host_taxid: str, host_order: str,
         return "laboratory_host"
     if host_taxid == "9606" or host_name == "Homo sapiens":
         return "spillover_host_human"
-    if host_order in {"Rodentia"}:
-        return "reservoir_rodent"
-    if host_order in {"Eulipotyphla", "Soricomorpha", "Insectivora"}:
-        return "reservoir_shrew_mole"
-    if host_order == "Chiroptera":
-        return "reservoir_bat"
-    if host_order == "Primates":
-        return "spillover_host_primate"
     if host_order:
-        return f"other_host_{host_order.lower()}"
+        return HOST_ORDER_ROLE.get(host_order) or f"other_host_{host_order.lower()}"
     if host_name:
         return "host_unranked"
     if isolation_source:
@@ -1357,7 +1414,6 @@ def transform_one_record(
 
         result = AccessionRecord(
             accession=accession,
-            accession_base=acc_base,
             sequence_hash=sequence_hash,
             species_name=species.canonical_name,
             species_taxid=species.canonical_taxid,
@@ -1530,9 +1586,8 @@ def build_isolate_records(accessions: Sequence[AccessionRecord]) -> List[Isolate
         isolates.append(IsolateRecord(
             isolate_key=key,
             species_name=pick("species_name"),
-            species_taxid=taxid_counts.most_common(1)[0][0] if taxid_counts else "",
+            species_taxid=mode(taxid_counts),
             species_status=pick("species_status"),
-            ranks=ordered[0].ranks,
             biosample=pick("biosample"),
             isolate=pick("isolate"),
             strain=pick("strain"),
@@ -1630,25 +1685,32 @@ def flag_cross_species_labels(isolates: Sequence[IsolateRecord]) -> None:
 
 
 def kmer_profile(sequence: str, k: int = KMER_K) -> Dict[str, int]:
-    counts: Dict[str, int] = {}
     if not sequence or len(sequence) < k:
-        return counts
-    for i in range(len(sequence) - k + 1):
-        kmer = sequence[i:i + k]
-        counts[kmer] = counts.get(kmer, 0) + 1
-    return counts
+        return {}
+    return Counter(sequence[i:i + k] for i in range(len(sequence) - k + 1))
 
 
 def profiles_to_matrix(profiles: Sequence[Dict[str, int]]) -> Tuple[Any, List[str]]:
     """Stack k-mer profiles into an L1-normalised numpy matrix over the observed vocabulary."""
-    import numpy as np
-
     vocabulary = sorted({kmer for profile in profiles for kmer in profile})
     position = {kmer: i for i, kmer in enumerate(vocabulary)}
-    matrix = np.zeros((len(profiles), len(vocabulary)), dtype=np.float64)
+
+    # Fill via one fancy-indexed assignment rather than a scalar write per cell. These
+    # profiles are sparse (~6% dense for the full ML table), so the per-cell loop was
+    # doing millions of individual numpy writes to place a few million values.
+    rows: List[int] = []
+    cols: List[int] = []
+    vals: List[float] = []
     for row, profile in enumerate(profiles):
-        for kmer, count in profile.items():
-            matrix[row, position[kmer]] = count
+        rows.extend([row] * len(profile))
+        cols.extend(position[kmer] for kmer in profile)
+        vals.extend(profile.values())
+
+    matrix = np.zeros((len(profiles), len(vocabulary)), dtype=np.float64)
+    if vals:
+        matrix[np.fromiter(rows, dtype=np.intp, count=len(rows)),
+               np.fromiter(cols, dtype=np.intp, count=len(cols))] = np.fromiter(
+                   vals, dtype=np.float64, count=len(vals))
     totals = matrix.sum(axis=1, keepdims=True)
     totals[totals == 0] = 1.0
     return matrix / totals, vocabulary
@@ -1656,8 +1718,6 @@ def profiles_to_matrix(profiles: Sequence[Dict[str, int]]) -> Tuple[Any, List[st
 
 def cosine_distance_matrix(matrix: Any) -> Any:
     """Pairwise cosine distance in [0, 1]."""
-    import numpy as np
-
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     norms[norms == 0] = 1.0
     unit = matrix / norms
@@ -1667,8 +1727,6 @@ def cosine_distance_matrix(matrix: Any) -> Any:
 
 def single_linkage_clusters(distances: Any, threshold: float) -> List[int]:
     """Union-find single-linkage clustering on a dense distance matrix."""
-    import numpy as np
-
     size = distances.shape[0]
     parent = list(range(size))
 
@@ -1768,8 +1826,6 @@ def compute_segment_divergence(
     taxonomic_incongruence: NCBI assigning an isolate's segments to different species.
     That is a metadata fact, not an inference, and it is reported separately.
     """
-    import numpy as np
-
     profiles: List[SegmentDivergenceProfile] = []
     by_species: DefaultDict[str, List[IsolateRecord]] = defaultdict(list)
 
@@ -1780,7 +1836,7 @@ def compute_segment_divergence(
             s_distance=0.0, m_distance=0.0, l_distance=0.0,
             sl_rank_separation=0.0, m_rank_offset=0.0,
             taxonomic_incongruence=isolate.taxonomic_incongruence,
-            reassortment_status="not_assessable", triage_rank=0.0,
+            reassortment_status="not_assessable",
             reported_species_prior=REPORTED_REASSORTMENT.get(species, "not reported"))
 
     for isolate in isolates:
@@ -1850,7 +1906,6 @@ def compute_segment_divergence(
                 m_rank_offset=round(m_offset, 4),
                 taxonomic_incongruence=isolate.taxonomic_incongruence,
                 reassortment_status="requires_phylogenetic_confirmation",
-                triage_rank=round(m_offset, 4),
                 reported_species_prior=prior,
             ))
     return profiles
@@ -1861,8 +1916,14 @@ def compute_segment_divergence(
 # --------------------------------------------------------------------------------------
 
 
+@lru_cache(maxsize=None)
 def species_risk_profile(species_name: str) -> Dict[str, Any]:
-    """Look up curated risk metadata. Unlisted species are 'unknown', never 'safe'."""
+    """Look up curated risk metadata. Unlisted species are 'unknown', never 'safe'.
+
+    Cached: this is a pure function over ~39 distinct species but is called once per row
+    in every table builder, ~91k times per run. Callers must treat the returned dict as
+    read-only.
+    """
     entry = SPECIES_RISK.get(species_name)
     if entry is None:
         return {
@@ -1879,21 +1940,7 @@ def species_risk_profile(species_name: str) -> Dict[str, Any]:
         }
     band = entry["cfr_band"]
     syndrome = entry["syndrome"]
-    if syndrome in {"HCPS"}:
-        pathogenicity = "pathogenic_hcps"
-    elif syndrome in {"HFRS", "HFRS/NE"}:
-        pathogenicity = "pathogenic_hfrs"
-    elif syndrome == "rare_opportunistic":
-        # Kept out of pathogenic_hfrs deliberately: lumping TULV's handful of mild case
-        # reports with HTNV/DOBV would put 2,123 records into the same class as the
-        # viruses that actually drive HFRS mortality.
-        pathogenicity = "rare_or_opportunistic"
-    elif syndrome in {"suspected", "suspected_HFRS"}:
-        pathogenicity = "suspected"
-    elif syndrome == "none_known":
-        pathogenicity = "no_known_human_disease"
-    else:
-        pathogenicity = "unknown"
+    pathogenicity = SYNDROME_TO_PATHOGENICITY.get(syndrome, "unknown")
     return {
         "virus_abbrev": entry["abbrev"],
         "disease_syndrome": syndrome,
@@ -1941,13 +1988,14 @@ def surveillance_priority(
     score would have propagated an artefact of sample size into a ranking meant to guide
     surveillance. Only taxonomic_incongruence -- a metadata fact -- contributes.
     """
-    cfr_term = {3: 4.0, 2: 2.5, 1: 1.0, 0: 0.0, -1: 0.5}.get(int(risk["cfr_band"]), 0.5)
-    spillover_term = 2.0 if isolate.host_role == "spillover_host_human" else 0.0
-    incongruence_term = 1.5 if isolate.taxonomic_incongruence else 0.0
-    jump_term = 1.0 if host_jump_status(
+    weights = SURVEILLANCE_WEIGHTS
+    cfr_term = weights["cfr_by_band"].get(int(risk["cfr_band"]), 0.5)
+    spillover_term = weights["human_spillover"] if isolate.host_role == "spillover_host_human" else 0.0
+    incongruence_term = weights["taxonomic_incongruence"] if isolate.taxonomic_incongruence else 0.0
+    jump_term = weights["host_jump"] if host_jump_status(
         isolate.host_order, risk["reservoir_order"]) == "host_order_mismatch" else 0.0
-    completeness_term = 1.0 if isolate.has_complete_triplet else 0.0
-    nss_term = 0.5 if isolate.has_nss_orf else 0.0
+    completeness_term = weights["complete_triplet"] if isolate.has_complete_triplet else 0.0
+    nss_term = weights["nss_orf"] if isolate.has_nss_orf else 0.0
     total = (cfr_term + spillover_term + incongruence_term + jump_term
              + completeness_term + nss_term)
     return {
@@ -2067,10 +2115,10 @@ def build_species_rows(accessions: Sequence[AccessionRecord],
             "m_count": segments.get("M", 0),
             "l_count": segments.get("L", 0),
             "distinct_hosts": len(hosts),
-            "top_host": hosts.most_common(1)[0][0] if hosts else "",
+            "top_host": mode(hosts),
             "human_derived_count": sum(1 for r in members if r.host_taxid == "9606"),
             "distinct_countries": len(countries),
-            "top_country": countries.most_common(1)[0][0] if countries else "",
+            "top_country": mode(countries),
             "year_min": years[0] if years else "",
             "year_max": years[-1] if years else "",
         })
@@ -2150,7 +2198,6 @@ def build_segment_divergence_rows(profiles: Sequence[SegmentDivergenceProfile]) 
         "taxonomic_incongruence": int(profile.taxonomic_incongruence),
         "sl_rank_separation": profile.sl_rank_separation,
         "m_rank_offset": profile.m_rank_offset,
-        "triage_rank": profile.triage_rank,
         "s_nearest_neighbour": profile.s_neighbour,
         "m_nearest_neighbour": profile.m_neighbour,
         "l_nearest_neighbour": profile.l_neighbour,
@@ -2200,7 +2247,6 @@ def build_risk_rows(isolates: Sequence[IsolateRecord],
             "reassortment_status": profile.reassortment_status if profile else "not_assessable",
             "taxonomic_incongruence": int(isolate.taxonomic_incongruence),
             "cross_species_partners": ";".join(isolate.cross_species_partners),
-            "divergence_triage_rank": profile.triage_rank if profile else 0.0,
             **terms,
         })
     rows.sort(key=lambda r: r["surveillance_priority_score"], reverse=True)
@@ -2223,12 +2269,12 @@ def build_host_rows(accessions: Sequence[AccessionRecord],
             "host_taxid": taxid,
             "host_order": members[0].host_order,
             "host_family": members[0].host_family,
-            "host_role": Counter(r.host_role for r in members).most_common(1)[0][0],
+            "host_role": mode(Counter(r.host_role for r in members)),
             "host_risk_prior": HOST_ORDER_RISK_PRIOR.get(members[0].host_order, "unknown"),
             "accession_count": len(members),
             "isolate_count": isolate_counts.get((name, taxid), 0),
             "distinct_virus_species": len(species),
-            "top_virus_species": species.most_common(1)[0][0] if species else "",
+            "top_virus_species": mode(species),
             "all_virus_species": ";".join(sorted(species)),
             "representative_biosample": next((r.biosample for r in members if r.biosample), ""),
             "representative_isolate": next((r.isolate for r in members if r.isolate), ""),
@@ -2258,8 +2304,6 @@ def build_ml_tables(
       Random splits over this data overstate accuracy badly, because segments from the
       same outbreak are near-identical.
     """
-    import numpy as np
-
     usable = [i for i in isolates if i.concatenated_protein_aa and not i.is_lab_derived
               and not i.is_vaccine_strain]
     if not usable:
@@ -2449,7 +2493,6 @@ def resolve_inputs(root: Path, output: Optional[Path] = None) -> InputPaths:
         dataset_catalog=required["dataset_catalog"],
         md5sum_file=md5sum_file if md5sum_file.exists() else None,
         genomic_fasta=optional(GENOMIC_FASTA),
-        cds_fasta=optional(CDS_FASTA),
         protein_fasta=optional(PROTEIN_FASTA),
         output_dir=output_dir,
         log_file=output_dir / "ortho_pipeline.log",
@@ -2464,7 +2507,8 @@ def summarize(
     checksums: Sequence[ChecksumResult],
     curation_issues: Sequence[Dict[str, str]],
     paths: InputPaths,
-    args: argparse.Namespace,
+    cluster_threshold: float,
+    min_species_size: int,
 ) -> Dict[str, Any]:
     catalog: Dict[str, Any] = {}
     if paths.dataset_catalog.exists():
@@ -2531,13 +2575,13 @@ def summarize(
             "grouping": "isolate.name-first tier cascade; BioSample is a confirmation signal, not "
                         "the primary key, because it is present on <1% of records.",
             "sequence_distance": "cosine distance on 3-mer amino-acid composition (alignment-free).",
-            "kmer_cluster_threshold": args.cluster_threshold,
+            "kmer_cluster_threshold": cluster_threshold,
             "reassortment": {
                 "status": "NOT CALLED -- classifier withdrawn after failing validation",
                 "what_is_emitted": "per-segment nearest neighbours, k-mer distances, and "
                                    "normalized rank separations (sl_rank_separation, "
                                    "m_rank_offset) as continuous diagnostics only",
-                "min_species_size": args.min_species_size,
+                "min_species_size": min_species_size,
                 "assessable_isolates": sum(1 for d in divergence if d.assessable),
                 "why_withdrawn": "A classifier built on these rank separations produced the "
                                  "inverse of the reported literature ranking: ANDV 72% flagged "
@@ -2665,7 +2709,8 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
     safe_write_json(out / "ortho_feature_scaling.json", scaling)
 
     summary = summarize(accessions, isolates, divergence, qc_rows, checksums,
-                        curation_issues, paths, args)
+                        curation_issues, paths, args.cluster_threshold,
+                        args.min_species_size)
     safe_write_json(out / "ortho_summary.json", summary)
 
     logging.info("Done. %s accessions -> %s species -> %s isolates (%s complete triplets)",
@@ -2682,9 +2727,6 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--input", default=".",
                         help="Package root containing all_hanta/ncbi_dataset/data")
     parser.add_argument("--output", help="Output directory; defaults to <input>/output")
-    parser.add_argument("--threads", type=int, default=max(1, min(8, os.cpu_count() or 4)),
-                        help="Accepted for backwards compatibility; the transform is GIL-bound "
-                             "and now runs serially, so this has no effect")
     parser.add_argument("--allow-checksum-mismatch", action="store_true",
                         help="Continue even if inputs do not match NCBI's md5sum.txt "
                              "(the mismatch is still recorded in ortho_summary.json)")
@@ -2709,8 +2751,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     logging.info("Orthohantavirus pipeline v%s", VERSION)
     logging.info("Package: %s", paths.data_dir)
     logging.info("Output : %s", paths.output_dir)
-    if args.threads != 1:
-        logging.debug("--threads is accepted but unused; the transform is GIL-bound.")
     run_pipeline(paths, args)
     return 0
 

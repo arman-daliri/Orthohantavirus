@@ -327,3 +327,69 @@
 2026-07-30 00:26:55,493 | INFO | Wrote 1021 rows x 16 cols to ortho_suppressed.parquet
 2026-07-30 00:26:55,556 | INFO | Wrote 15991 rows x 11 cols to ortho_qc_report.parquet
 2026-07-30 00:26:55,709 | INFO | Done. 15991 accessions -> 39 species -> 9904 isolates (222 complete triplets)
+2026-07-30 01:27:00,985 | INFO | Orthohantavirus pipeline v2.0.0
+2026-07-30 01:27:00,985 | INFO | Package: C:\git-projects\Orthohantavirus\all_hanta\ncbi_dataset\data
+2026-07-30 01:27:00,985 | INFO | Output : C:\git-projects\Orthohantavirus\output
+2026-07-30 01:27:00,985 | INFO | Verifying package integrity against NCBI md5sum.txt
+2026-07-30 01:27:01,181 | INFO | Integrity: 7/7 files verified against NCBI md5sum.txt
+2026-07-30 01:27:01,181 | INFO | Loading reports
+2026-07-30 01:27:02,111 | INFO |   data_report: 15991 records
+2026-07-30 01:27:02,294 | INFO |   annotation_report: 31982 indexed accessions
+2026-07-30 01:27:02,296 | INFO |   biosample_report: 40 samples
+2026-07-30 01:27:02,296 | INFO | Parsing FASTA
+2026-07-30 01:27:02,738 | INFO |   genomic: 31982 entries, protein: 30964 entries
+2026-07-30 01:27:02,738 | INFO | Transforming accession records
+2026-07-30 01:27:03,897 | INFO |   15991 transformed, 0 failed
+2026-07-30 01:27:03,908 | INFO | Reservoir curation audit: all curated reservoirs agree with observed hosts
+2026-07-30 01:27:03,908 | INFO | Reconstructing isolates
+2026-07-30 01:27:04,208 | INFO |   9904 isolates, 222 complete triplets
+2026-07-30 01:27:04,208 | INFO | Clustering by k-mer distance (threshold 0.020)
+2026-07-30 01:27:07,249 | INFO | Computing per-segment divergence diagnostics
+2026-07-30 01:27:09,419 | INFO |   1689 assessable, 70 with taxonomic incongruence
+2026-07-30 01:27:09,419 | WARNING | Reassortment is NOT called by this pipeline. The k-mer classifier that used to do so failed validation against the literature (it ranked ANDV above PUUV, the exact inverse of reported frequencies) because the metric tracks within-species diversity and sample size, not tree topology. Assessable isolates are marked 'requires_phylogenetic_confirmation'; confirm candidates with MAFFT + IQ-TREE.
+2026-07-30 01:27:09,419 | INFO | Building ML tables
+2026-07-30 01:27:13,193 | INFO | Writing outputs
+2026-07-30 01:27:14,046 | INFO | Wrote 15991 rows x 55 cols to ortho_accession_table.parquet
+2026-07-30 01:27:14,117 | INFO | Wrote 39 rows x 32 cols to ortho_species_table.parquet
+2026-07-30 01:27:14,399 | INFO | Wrote 9904 rows x 52 cols to ortho_isolate_table.parquet
+2026-07-30 01:27:14,441 | INFO | Wrote 253 rows x 13 cols to ortho_host_table.parquet
+2026-07-30 01:27:14,502 | INFO | Wrote 9904 rows x 17 cols to ortho_segment_divergence.parquet
+2026-07-30 01:27:14,639 | INFO | Wrote 9904 rows x 31 cols to ortho_risk_table.parquet
+2026-07-30 01:27:15,141 | INFO | Wrote 7529 rows x 228 cols to ortho_ml_feature_matrix.parquet
+2026-07-30 01:27:15,300 | INFO | Wrote 15781 rows x 19 cols to ortho_ml_segments.parquet
+2026-07-30 01:27:15,349 | INFO | Wrote 1021 rows x 16 cols to ortho_suppressed.parquet
+2026-07-30 01:27:15,418 | INFO | Wrote 15991 rows x 11 cols to ortho_qc_report.parquet
+2026-07-30 01:27:15,544 | INFO | Done. 15991 accessions -> 39 species -> 9904 isolates (222 complete triplets)
+2026-07-30 01:28:37,452 | INFO | Orthohantavirus pipeline v2.0.0
+2026-07-30 01:28:37,452 | INFO | Package: C:\git-projects\Orthohantavirus\all_hanta\ncbi_dataset\data
+2026-07-30 01:28:37,452 | INFO | Output : C:\git-projects\Orthohantavirus\output
+2026-07-30 01:28:37,453 | INFO | Verifying package integrity against NCBI md5sum.txt
+2026-07-30 01:28:37,659 | INFO | Integrity: 7/7 files verified against NCBI md5sum.txt
+2026-07-30 01:28:37,659 | INFO | Loading reports
+2026-07-30 01:28:38,570 | INFO |   data_report: 15991 records
+2026-07-30 01:28:38,753 | INFO |   annotation_report: 31982 indexed accessions
+2026-07-30 01:28:38,755 | INFO |   biosample_report: 40 samples
+2026-07-30 01:28:38,755 | INFO | Parsing FASTA
+2026-07-30 01:28:39,198 | INFO |   genomic: 31982 entries, protein: 30964 entries
+2026-07-30 01:28:39,198 | INFO | Transforming accession records
+2026-07-30 01:28:40,327 | INFO |   15991 transformed, 0 failed
+2026-07-30 01:28:40,338 | INFO | Reservoir curation audit: all curated reservoirs agree with observed hosts
+2026-07-30 01:28:40,338 | INFO | Reconstructing isolates
+2026-07-30 01:28:40,639 | INFO |   9904 isolates, 222 complete triplets
+2026-07-30 01:28:40,640 | INFO | Clustering by k-mer distance (threshold 0.020)
+2026-07-30 01:28:44,130 | INFO | Computing per-segment divergence diagnostics
+2026-07-30 01:28:46,298 | INFO |   1689 assessable, 70 with taxonomic incongruence
+2026-07-30 01:28:46,298 | WARNING | Reassortment is NOT called by this pipeline. The k-mer classifier that used to do so failed validation against the literature (it ranked ANDV above PUUV, the exact inverse of reported frequencies) because the metric tracks within-species diversity and sample size, not tree topology. Assessable isolates are marked 'requires_phylogenetic_confirmation'; confirm candidates with MAFFT + IQ-TREE.
+2026-07-30 01:28:46,298 | INFO | Building ML tables
+2026-07-30 01:28:49,514 | INFO | Writing outputs
+2026-07-30 01:28:50,276 | INFO | Wrote 15991 rows x 55 cols to ortho_accession_table.parquet
+2026-07-30 01:28:50,345 | INFO | Wrote 39 rows x 32 cols to ortho_species_table.parquet
+2026-07-30 01:28:50,616 | INFO | Wrote 9904 rows x 52 cols to ortho_isolate_table.parquet
+2026-07-30 01:28:50,657 | INFO | Wrote 253 rows x 13 cols to ortho_host_table.parquet
+2026-07-30 01:28:50,715 | INFO | Wrote 9904 rows x 17 cols to ortho_segment_divergence.parquet
+2026-07-30 01:28:50,852 | INFO | Wrote 9904 rows x 31 cols to ortho_risk_table.parquet
+2026-07-30 01:28:51,336 | INFO | Wrote 7529 rows x 228 cols to ortho_ml_feature_matrix.parquet
+2026-07-30 01:28:51,480 | INFO | Wrote 15781 rows x 19 cols to ortho_ml_segments.parquet
+2026-07-30 01:28:51,526 | INFO | Wrote 1021 rows x 16 cols to ortho_suppressed.parquet
+2026-07-30 01:28:51,592 | INFO | Wrote 15991 rows x 11 cols to ortho_qc_report.parquet
+2026-07-30 01:28:51,719 | INFO | Done. 15991 accessions -> 39 species -> 9904 isolates (222 complete triplets)
