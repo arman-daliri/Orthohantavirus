@@ -20,6 +20,7 @@ import os
 import re
 import sys
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,7 +28,7 @@ from typing import Any, DefaultDict, Dict, Iterable, Iterator, List, Optional, S
 
 import pandas as pd
 
-__version__ = "1.1.1"
+__version__ = "1.2.0"
 
 ACCESSION_RE = re.compile(r"[A-Z]{1,4}_?\d{4,}(?:\.\d+)?")
 BIOSAMPLE_RE = re.compile(r"\bSAM[NED]?[A-Z]?\d+\b", re.I)
@@ -676,6 +677,14 @@ def is_complete_status(status: str) -> bool:
     return status in {"complete", "coding_complete_only", "likely_complete", "coding_complete"}
 
 
+def is_strict_complete_segment(rec: AccessionRecord) -> bool:
+    if not rec.segment or rec.segment not in COMPLETE_LENGTH_MIN:
+        return False
+    if rec.completeness not in {"complete", "coding_complete_only", "coding_complete", "likely_complete"}:
+        return False
+    return rec.nt_length >= COMPLETE_LENGTH_MIN[rec.segment]
+
+
 def choose_host(flat_contexts: Sequence[Dict[str, Any]], biosample: Optional[BioSampleInfo]) -> Tuple[str, str, str]:
     if biosample and biosample.host:
         return biosample.host, clean_text(biosample.host_taxid) or "", "biosample"
@@ -1119,7 +1128,11 @@ def build_strict_isolate_records(accessions: Sequence[AccessionRecord]) -> List[
         taxid_counts = Counter([r.species_taxid for r in [s_rec, m_rec, l_rec] if r and r.species_taxid])
         most_common_taxid = taxid_counts.most_common(1)[0][0] if taxid_counts else ""
         taxonomic_incongruence = any(r and r.species_taxid and r.species_taxid != most_common_taxid for r in [s_rec, m_rec, l_rec])
-        segment_complete = {"S": is_complete_status(s_rec.completeness) if s_rec else False, "M": is_complete_status(m_rec.completeness) if m_rec else False, "L": is_complete_status(l_rec.completeness) if l_rec else False}
+        segment_complete = {
+            "S": is_strict_complete_segment(s_rec) if s_rec else False,
+            "M": is_strict_complete_segment(m_rec) if m_rec else False,
+            "L": is_strict_complete_segment(l_rec) if l_rec else False,
+        }
         complete_count = sum(segment_complete.values())
         if complete_count == 3:
             coding_complete_status = "coding_complete_triplet"
@@ -1399,7 +1412,7 @@ def summarize(accessions: Sequence[AccessionRecord], groups: Sequence[VirusGroup
     }
 
 
-def run_pipeline(paths: InputPaths) -> None:
+def run_pipeline(paths: InputPaths, threads: int = 4) -> None:
     logging.info("Loading JSONL reports")
     data_records = list(iter_jsonl(paths.data_report))
     annotation_records = list(iter_jsonl(paths.annotation_report))
@@ -1414,15 +1427,20 @@ def run_pipeline(paths: InputPaths) -> None:
     cds_index = parse_fasta(paths.cds_fasta)
     protein_index = parse_fasta(paths.protein_fasta)
 
-    logging.info("Transforming accession records")
+    logging.info("Transforming accession records in parallel")
     accession_records: List[AccessionRecord] = []
     qc_rows: List[Dict[str, Any]] = []
-    for rec in data_records:
-        acc_rec, qc_row = transform_one_record(rec, annotation_index, biosample_index, genomic_index, cds_index, protein_index)
-        if acc_rec is not None:
-            accession_records.append(acc_rec)
-        if qc_row is not None:
-            qc_rows.append(qc_row)
+    with ThreadPoolExecutor(max_workers=max(1, threads)) as ex:
+        futures = [
+            ex.submit(transform_one_record, rec, annotation_index, biosample_index, genomic_index, cds_index, protein_index)
+            for rec in data_records
+        ]
+        for fut in futures:
+            acc_rec, qc_row = fut.result()
+            if acc_rec is not None:
+                accession_records.append(acc_rec)
+            if qc_row is not None:
+                qc_rows.append(qc_row)
 
     logging.info("Grouping accessions")
     virus_groups = group_accessions(accession_records)
@@ -1520,6 +1538,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Orthohantavirus NCBI Datasets production pipeline")
     parser.add_argument("--input", required=False, default=".", help="Path to the package root containing all_hanta/ncbi_dataset/data")
     parser.add_argument("--output", required=False, help="Path to write outputs; defaults to <input>/output")
+    parser.add_argument("--threads", type=int, default=max(1, min(8, (os.cpu_count() or 4))), help="Number of worker threads")
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
     return parser.parse_args(argv)
 
@@ -1531,7 +1550,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     logging.info("Starting Orthohantavirus production pipeline")
     logging.info("Input root: %s", paths.root)
     logging.info("Output dir: %s", paths.output_dir)
-    run_pipeline(paths)
+    run_pipeline(paths, threads=args.threads)
     return 0
 
 
