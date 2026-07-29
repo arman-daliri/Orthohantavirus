@@ -1,236 +1,207 @@
 {
-  "input_root": "C:\\git-projects\\Orthohantavirus",
-  "data_dir": "C:\\git-projects\\Orthohantavirus\\all_hanta\\ncbi_dataset\\data",
-  "records_total": 15991,
-  "groups_total": 11049,
-  "records_with_biosample": 87,
-  "records_with_host": 14272,
+  "pipeline_version": "2.0.0",
+  "generated_at_utc": "2026-07-29T20:26:55Z",
+  "dataset_catalog_api_version": "V2",
+  "integrity": {
+    "model": "verified against NCBI's published md5sum.txt (file level) and nucleotide.sequenceHash / CRC32 (content level)",
+    "md5sum_file_present": true,
+    "all_verified": true,
+    "files": [
+      {
+        "file_name": "annotation_report.jsonl",
+        "expected_md5": "01c54fe5aabe9fcf2c2092d5fb709ec4",
+        "observed_md5": "01c54fe5aabe9fcf2c2092d5fb709ec4",
+        "verified": true,
+        "matched_form": "raw",
+        "diagnosis": "ok"
+      },
+      {
+        "file_name": "biosample_report.jsonl",
+        "expected_md5": "1600e666055e53426c80ce843632ee16",
+        "observed_md5": "1600e666055e53426c80ce843632ee16",
+        "verified": true,
+        "matched_form": "raw",
+        "diagnosis": "ok"
+      },
+      {
+        "file_name": "cds.fna",
+        "expected_md5": "b22483550e07c791df227c488bf59d96",
+        "observed_md5": "b22483550e07c791df227c488bf59d96",
+        "verified": true,
+        "matched_form": "raw",
+        "diagnosis": "ok"
+      },
+      {
+        "file_name": "data_report.jsonl",
+        "expected_md5": "9c228361ec1892882d118876fcdd263e",
+        "observed_md5": "9c228361ec1892882d118876fcdd263e",
+        "verified": true,
+        "matched_form": "raw",
+        "diagnosis": "ok"
+      },
+      {
+        "file_name": "dataset_catalog.json",
+        "expected_md5": "b84f8e3f489f4d22bf7a978a0377f933",
+        "observed_md5": "b84f8e3f489f4d22bf7a978a0377f933",
+        "verified": true,
+        "matched_form": "raw",
+        "diagnosis": "ok"
+      },
+      {
+        "file_name": "genomic.fna",
+        "expected_md5": "05acabbfc1e651d438df241c1960dff4",
+        "observed_md5": "05acabbfc1e651d438df241c1960dff4",
+        "verified": true,
+        "matched_form": "raw",
+        "diagnosis": "ok"
+      },
+      {
+        "file_name": "protein.faa",
+        "expected_md5": "d5b958b81830bbff4f98dac75fca112a",
+        "observed_md5": "d5b958b81830bbff4f98dac75fca112a",
+        "verified": true,
+        "matched_form": "raw",
+        "diagnosis": "ok"
+      }
+    ],
+    "sequence_hash_note": "NCBI strips leading zeros from sequenceHash; values are zero-padded to 8 hex characters before use.",
+    "records_with_sequence_hash": 15991,
+    "distinct_sequence_hashes": 12598
+  },
+  "counts": {
+    "accession_records": 15991,
+    "failed_transforms": 0,
+    "canonical_species": 39,
+    "distinct_observed_organisms": 553,
+    "distinct_observed_taxids": 551,
+    "isolates": 9904,
+    "complete_triplets": 222,
+    "all_segments_present": 1777,
+    "records_with_host": 14272,
+    "records_with_biosample": 87,
+    "human_derived_records": 2091,
+    "lab_host_records": 338,
+    "vaccine_strain_records": 4
+  },
   "segment_counts": {
-    "M": 4549,
-    "L": 4384,
-    "S": 6653,
-    "unresolved": 405
+    "M": 4686,
+    "L": 4441,
+    "S": 6654,
+    "unresolved": 210
+  },
+  "segment_source_counts": {
+    "explicit": 12431,
+    "annotation": 3117,
+    "length_heuristic": 129,
+    "unresolved": 210,
+    "defline": 104
   },
   "completeness_counts": {
     "partial": 14652,
     "complete": 1339
   },
-  "group_completeness_counts": {
-    "no_complete_segment": 10305,
-    "complete_triplet": 214,
-    "partial_group_with_complete_segment": 530
+  "grouping_tier_counts": {
+    "tier_2_species_isolate": 15404,
+    "fallback_accession_only": 500,
+    "tier_1_biosample_isolate": 87
   },
+  "triplet_status_counts": {
+    "all_segments_present_not_all_complete": 1555,
+    "incomplete_triplet": 7923,
+    "coding_complete_triplet": 222,
+    "partial_triplet_with_complete_segment": 204
+  },
+  "host_order_counts": {
+    "Rodentia": 11043,
+    "unranked": 1734,
+    "Primates": 2093,
+    "Eulipotyphla": 1035,
+    "Chiroptera": 83,
+    "Carnivora": 3
+  },
+  "host_role_counts": {
+    "reservoir_rodent": 10833,
+    "unknown": 1541,
+    "spillover_host_human": 2028,
+    "reservoir_shrew_mole": 1035,
+    "laboratory_host": 338,
+    "environmental_or_unspecified": 113,
+    "host_unranked": 15,
+    "reservoir_bat": 83,
+    "other_host_carnivora": 3,
+    "spillover_host_primate": 2
+  },
+  "pathogenicity_counts": {
+    "pathogenic_hfrs": 9253,
+    "rare_or_opportunistic": 2123,
+    "unknown": 2386,
+    "no_known_human_disease": 667,
+    "suspected": 145,
+    "pathogenic_hcps": 1417
+  },
+  "host_jump_counts": {
+    "expected_reservoir_order": 10041,
+    "unknown": 3907,
+    "human_or_primate_spillover": 2010,
+    "host_order_mismatch": 33
+  },
+  "reassortment_status_counts": {
+    "not_assessable": 8215,
+    "requires_phylogenetic_confirmation": 1689
+  },
+  "taxonomic_incongruence_count": 70,
   "qc_warning_counts": {
-    "missing_biosample": 15904,
-    "unexpected_length_for_segment": 5856,
     "missing_host": 1719,
-    "segment_from_length_only": 187,
-    "segment_from_heuristic": 187,
-    "segment_unresolved": 405,
-    "missing_segment": 405,
-    "lab_host_flag": 283,
+    "segment_from_length_only": 129,
+    "segment_unresolved": 210,
+    "species_unclassified": 2386,
+    "lab_host": 338,
+    "missing_collection_date": 3703,
+    "missing_location": 1885,
     "missing_protein_link": 566,
     "missing_isolate_and_strain": 500,
-    "contains_nss_label": 1,
-    "multiple_segment_text_hits": 1
+    "complete_but_shorter_than_ictv_range": 5,
+    "length_exceeds_segment_maximum": 4,
+    "vaccine_strain": 4
   },
-  "provenance": {
-    "generated_at": "2026-07-29T13:43:16Z",
-    "dataset_catalog_api_version": "V2",
-    "dataset_catalog_md5": "470d6e0997e37286bb71900482a15d23",
-    "input_md5": {
-      "data_report.jsonl": "24dcee9c3c910a59c67093ab818135e7",
-      "annotation_report.jsonl": "00a962603e4e43214ca776350608b5ec",
-      "biosample_report.jsonl": "bbdf4cb95081d64941996effacce43b4",
-      "dataset_catalog.json": "470d6e0997e37286bb71900482a15d23"
+  "methods": {
+    "species_resolution": "canonical ICTV species taken from the node below genus Orthohantavirus (taxId 1980442) in virus.lineage, canonicalised by binomial name so legacy and current taxids for the same species merge.",
+    "grouping": "isolate.name-first tier cascade; BioSample is a confirmation signal, not the primary key, because it is present on <1% of records.",
+    "sequence_distance": "cosine distance on 3-mer amino-acid composition (alignment-free).",
+    "kmer_cluster_threshold": 0.02,
+    "reassortment": {
+      "status": "NOT CALLED -- classifier withdrawn after failing validation",
+      "what_is_emitted": "per-segment nearest neighbours, k-mer distances, and normalized rank separations (sl_rank_separation, m_rank_offset) as continuous diagnostics only",
+      "min_species_size": 8,
+      "assessable_isolates": 1689,
+      "why_withdrawn": "A classifier built on these rank separations produced the inverse of the reported literature ranking: ANDV 72% flagged (reported absent or sparse) vs PUUV 7.7% (reported 19.1-32%), and CHOV 100% at n=8. Sweeping the threshold from 0.25 to 0.85 scaled all rates down without changing the ordering. Cosine distance on 3-mer amino-acid composition tracks within-species diversity and sample size, not tree topology.",
+      "to_detect_reassortment_properly": "Build per-segment alignments (MAFFT) and trees (IQ-TREE), then test topological incongruence between the S, M and L trees.",
+      "trustworthy_signal": "taxonomic_incongruence -- NCBI assigning an isolate's segments to different species. This is metadata, not inference, and it does feed the risk score."
     },
-    "input_files": [
-      "C:\\git-projects\\Orthohantavirus\\all_hanta\\ncbi_dataset\\data\\data_report.jsonl",
-      "C:\\git-projects\\Orthohantavirus\\all_hanta\\ncbi_dataset\\data\\annotation_report.jsonl",
-      "C:\\git-projects\\Orthohantavirus\\all_hanta\\ncbi_dataset\\data\\biosample_report.jsonl",
-      "C:\\git-projects\\Orthohantavirus\\all_hanta\\ncbi_dataset\\data\\dataset_catalog.json"
-    ]
-  },
-  "output_files": {
-    "accession_table": "C:\\git-projects\\Orthohantavirus\\output\\ortho_accession_table.parquet",
-    "virus_table": "C:\\git-projects\\Orthohantavirus\\output\\ortho_virus_table.parquet",
-    "isolate_table": "C:\\git-projects\\Orthohantavirus\\output\\ortho_isolate_table.parquet",
-    "host_table": "C:\\git-projects\\Orthohantavirus\\output\\ortho_host_table.parquet",
-    "ml_feature_matrix": "C:\\git-projects\\Orthohantavirus\\output\\ortho_ml_feature_matrix.parquet",
-    "suppressed_table": "C:\\git-projects\\Orthohantavirus\\output\\ortho_suppressed.parquet",
-    "ml_segments": "C:\\git-projects\\Orthohantavirus\\output\\ortho_ml_segments.parquet",
-    "qc_report": "C:\\git-projects\\Orthohantavirus\\output\\ortho_qc_report.parquet",
-    "summary_json": "C:\\git-projects\\Orthohantavirus\\output\\ortho_summary.json",
-    "log_file": "C:\\git-projects\\Orthohantavirus\\output\\ortho_pipeline.log"
-  },
-  "output_schema": {
-    "ortho_accession_table.parquet": {
-      "columns": [
-        "accession",
-        "species_name",
-        "species_taxid",
-        "genus_name",
-        "genus_taxid",
-        "segment",
-        "segment_source",
-        "completeness",
-        "nt_length",
-        "biosample",
-        "bioproject",
-        "isolate",
-        "strain",
-        "collection_date",
-        "year",
-        "location",
-        "country",
-        "region",
-        "host_name",
-        "host_taxid",
-        "host_source",
-        "host_role",
-        "isolation_source",
-        "tissue_source",
-        "protein_accessions",
-        "annotation_products",
-        "group_key",
-        "group_confidence",
-        "is_refseq",
-        "warning_flags"
-      ]
+    "reservoir_curation_audit": {
+      "curated_species": 38,
+      "disagreements_with_data": 0,
+      "details": [],
+      "note": "Curated reservoirs are checked against the modal observed host order on every run. Six of the original entries disagreed with the package's own host annotations and were corrected against the data."
     },
-    "ortho_virus_table.parquet": {
-      "columns": [
-        "group_key",
-        "species_name",
-        "species_taxid",
-        "host_name",
-        "host_taxid",
-        "country",
-        "year",
-        "biosample",
-        "isolate",
-        "strain",
-        "group_confidence",
-        "group_size",
-        "s_accessions",
-        "m_accessions",
-        "l_accessions",
-        "complete_segments",
-        "completeness_class",
-        "all_hosts",
-        "all_accessions"
-      ]
-    },
-    "ortho_isolate_table.parquet": {
-      "columns": [
-        "strict_isolate_key",
-        "species_name",
-        "species_taxid",
-        "species_cluster_id",
-        "biosample",
-        "isolate",
-        "strain",
-        "host_name",
-        "host_taxid",
-        "host_role",
-        "collection_date",
-        "location",
-        "country",
-        "region",
-        "grouping_tier",
-        "grouping_confidence",
-        "s_accession",
-        "m_accession",
-        "l_accession",
-        "s_completeness",
-        "m_completeness",
-        "l_completeness",
-        "s_nt_length",
-        "m_nt_length",
-        "l_nt_length",
-        "concatenated_protein_aa",
-        "coding_complete_status",
-        "mosaic_flag",
-        "taxonomic_incongruence_warning",
-        "reassortment_candidate_warning",
-        "ns_s_overlapping_orf",
-        "species_divergence_flag",
-        "s_protein_evidence",
-        "m_protein_evidence",
-        "l_protein_evidence",
-        "s_protein_accessions",
-        "m_protein_accessions",
-        "l_protein_accessions",
-        "missing_protein_warnings",
-        "warnings"
-      ]
-    },
-    "ortho_host_table.parquet": {
-      "columns": [
-        "host_name",
-        "host_taxid",
-        "host_role",
-        "host_source",
-        "representative_biosample",
-        "representative_isolate",
-        "accession_count",
-        "isolate_count",
-        "example_species"
-      ]
-    },
-    "ortho_ml_feature_matrix.parquet": {
-      "columns": [
-        "strict_isolate_key",
-        "species_name",
-        "species_taxid",
-        "host_name",
-        "host_taxid",
-        "host_role",
-        "kmer_*"
-      ]
-    },
-    "ortho_ml_segments.parquet": {
-      "columns": [
-        "accession",
-        "segment",
-        "species_name",
-        "species_taxid",
-        "host_name",
-        "host_taxid",
-        "country",
-        "year",
-        "biosample",
-        "completeness",
-        "group_key"
-      ]
-    },
-    "ortho_suppressed.parquet": {
-      "columns": [
-        "accession",
-        "species_name",
-        "species_taxid",
-        "segment",
-        "completeness",
-        "biosample",
-        "isolate",
-        "strain",
-        "collection_date",
-        "location",
-        "host_name",
-        "host_taxid",
-        "suppression_reason"
-      ]
-    },
-    "ortho_qc_report.parquet": {
-      "columns": [
-        "accession",
-        "group_key",
-        "grouping_tier",
-        "group_confidence",
-        "segment",
-        "completeness",
-        "warnings"
-      ]
+    "LIMITATION": "Distances here are alignment-free proxies. The ICTV species criterion for Hantaviridae is DEmARC with a pairwise evolutionary distance cutoff of 0.1 under the WAG model, which requires multiple sequence alignment and maximum-likelihood inference. Columns are named kmer_* and never ped_* for this reason. Any published claim about a specific reassortant needs confirmation with a real alignment and phylogeny (e.g. MAFFT + IQ-TREE).",
+    "citations": {
+      "ictv_taxonomy": "https://ictv.global/report/chapter/hantaviridae/hantaviridae/mammantavirinae/orthohantavirus",
+      "pathogenicity_and_cfr": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10459939/",
+      "ecdc_factsheet": "https://www.ecdc.europa.eu/en/infectious-disease-topics/hantavirus-infection/factsheet-orthohantavirus-infections",
+      "reassortment": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6153690/"
     }
+  },
+  "inputs": {
+    "package_dir": "all_hanta",
+    "files": [
+      "annotation_report.jsonl",
+      "biosample_report.jsonl",
+      "cds.fna",
+      "data_report.jsonl",
+      "dataset_catalog.json",
+      "genomic.fna",
+      "protein.faa"
+    ]
   }
 }

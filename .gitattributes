@@ -1,0 +1,27 @@
+# The NCBI Datasets package ships with md5sum.txt containing checksums of the exact
+# bytes NCBI published. Git's core.autocrlf=true rewrites LF to CRLF on checkout for
+# anything it considers text, which changes those bytes and breaks every checksum --
+# and makes results non-reproducible between Linux and Windows checkouts.
+#
+# Marking the package as binary keeps the bytes identical to what NCBI published.
+#
+# NOTE: adding this file does not repair an already-mangled working copy. To fix an
+# existing checkout, run once:
+#
+#     git rm --cached -r all_hanta
+#     git reset --hard
+#
+# then confirm with:  python all_hanta.py --input .   (it verifies before doing any work)
+
+all_hanta/** -text
+
+*.jsonl  -text
+*.fna    -text
+*.faa    -text
+*.fasta  -text
+*.parquet binary
+*.zip    binary
+
+# Keep the project's own text files normalised.
+*.py     text eol=lf
+*.md     text eol=lf
