@@ -28,8 +28,6 @@ from typing import Any, DefaultDict, Dict, Iterable, Iterator, List, Optional, S
 
 import pandas as pd
 
-__version__ = "1.2.0"
-
 ACCESSION_RE = re.compile(r"[A-Z]{1,4}_?\d{4,}(?:\.\d+)?")
 BIOSAMPLE_RE = re.compile(r"\bSAM[NED]?[A-Z]?\d+\b", re.I)
 YEAR_RE = re.compile(r"(19|20)\d{2}")
