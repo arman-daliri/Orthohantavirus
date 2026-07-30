@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.venv/
+
+# The pipeline log is written fresh on every run and records absolute paths for the
+# machine it ran on. output/ortho_pipeline.log is already tracked; untrack it with
+# `git rm --cached output/ortho_pipeline.log` if you would rather it not be committed.
+output/*.log

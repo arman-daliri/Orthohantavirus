@@ -73,6 +73,11 @@ ATTR_NAME_RE = re.compile(r"[^a-z0-9]+")
 
 # ICTV Hantaviridae segment sizes: S 1.2-2.1 kb, M 3.4-3.8 kb, L 6.5-6.6 kb.
 # https://ictv.global/report/chapter/hantaviridae/hantaviridae/mammantavirinae/orthohantavirus
+#
+# S and M are used as ICTV states them. L is widened to 6300-6800 rather than 6500-6600:
+# submitted L segments cluster just outside the ICTV figure at both ends, and tightening to
+# the literal bounds would drop a 6,462 nt record -- unambiguously an L at that length --
+# back to 'unresolved'. It changes no length_anomaly flag either way.
 SEGMENT_LENGTH_RANGE = {"S": (1200, 2100), "M": (3400, 3800), "L": (6300, 6800)}
 # Minimum length at which a segment can plausibly be coding-complete. Slightly below the
 # ICTV lower bound because several validated coding-complete records are trimmed to the ORF.
@@ -396,6 +401,11 @@ HOST_ORDER_ROLE = {
 HOST_ORDER_RISK_PRIOR = {
     "Rodentia": "rodent_borne_risk_possible",
     "Eulipotyphla": "shrew_mole_borne_low_risk",
+    # Same superseded names as in HOST_ORDER_ROLE. They carry no records in this package
+    # but must resolve identically to Eulipotyphla if an older lineage ever appears,
+    # otherwise the same shrew is 'low risk' in one table and 'unknown' in another.
+    "Soricomorpha": "shrew_mole_borne_low_risk",
+    "Insectivora": "shrew_mole_borne_low_risk",
     "Chiroptera": "bat_borne_low_risk",
     "Primates": "human_or_primate_derived",
 }
@@ -473,7 +483,7 @@ class ChecksumResult:
     expected_md5: str
     observed_md5: str
     verified: bool
-    matched_form: str          # "raw" | "crlf_normalized" | "none" | "unlisted"
+    matched_form: str          # "raw" | "crlf_normalized" | "none" | "unlisted" | "missing"
     diagnosis: str
 
 
@@ -647,7 +657,11 @@ def configure_logging(log_file: Path, verbose: bool = False) -> None:
     logging.basicConfig(
         level=level,
         format="%(asctime)s | %(levelname)s | %(message)s",
-        handlers=[logging.FileHandler(log_file, encoding="utf-8"), logging.StreamHandler(sys.stdout)],
+        # mode="w": one run, one log. Appending made this a 428-line accretion of every run
+        # ever done in the checkout, and since it is a tracked file it carried absolute paths
+        # (and so usernames) from more than one developer's machine into git.
+        handlers=[logging.FileHandler(log_file, mode="w", encoding="utf-8"),
+                  logging.StreamHandler(sys.stdout)],
     )
 
 
@@ -700,6 +714,15 @@ def accession_base(accession: str) -> str:
     return accession.split(".")[0] if accession else ""
 
 
+def indexed_record_count(index: Dict[str, Any]) -> int:
+    """Number of distinct records in an index that files each one under several keys.
+
+    build_annotation_index and parse_fasta both key a record on its versioned accession
+    and on its base, so len(index) reports roughly twice the number of records read.
+    """
+    return len({id(value) for value in index.values()})
+
+
 def iter_jsonl(path: Path) -> Iterator[Dict[str, Any]]:
     with path.open("r", encoding="utf-8") as handle:
         for line_no, line in enumerate(handle, start=1):
@@ -731,8 +754,34 @@ def split_geo(geo: str) -> Tuple[str, str]:
 
 
 def normalize_key_text(value: str) -> str:
-    """Collapse case, whitespace and punctuation so 'PUUV/Foo-01' and 'puuv foo 01' agree."""
-    return NON_ALNUM_RE.sub("", (value or "").lower())
+    """Collapse case and punctuation so 'PUUV/Foo-01' and 'puuv foo 01' agree.
+
+    Separator runs become a single space rather than being deleted. Deleting them merges
+    52 genuine spelling variants in this package but also collapses 68 pairs that differ
+    only at a digit boundary -- '11-4' vs '114', 'B-1' vs 'B1', 'Aa-08-1111' vs
+    'Aa08/1111' -- which are not safe to treat as the same sample.
+    """
+    return WHITESPACE_RE.sub(" ", NON_ALNUM_RE.sub(" ", (value or "").lower())).strip()
+
+
+CROSS_STUDY_LABEL_MIN_CHARS = 4
+
+
+def is_cross_study_label(label: str) -> bool:
+    """Is an isolate label distinctive enough to identify one sample across submissions?
+
+    Submitters number their own samples independently, so labels like '2', '43' or 'B1'
+    collide between unrelated studies. Treating such a collision as evidence that one
+    isolate was assigned to two species manufactures incongruence: 31 of the 70 isolates
+    previously flagged carried a purely numeric label, including five distinct isolates
+    named simply '2' spread across PUUV, SEOV, SNV, CBNV and unclassified records.
+
+    Grouping is not subject to this: a group key also contains the species and any
+    over-merge it causes surfaces as metadata_conflict (4 of 254 numeric-label isolates).
+    A cross-species check has no such backstop, and its output feeds the risk score.
+    """
+    key = normalize_key_text(label).replace(" ", "")
+    return len(key) >= CROSS_STUDY_LABEL_MIN_CHARS and not key.isdigit()
 
 
 def safe_write_parquet(path: Path, rows: Sequence[Dict[str, Any]]) -> None:
@@ -869,6 +918,19 @@ def verify_inputs(paths: InputPaths) -> List[ChecksumResult]:
                 candidate.name, want, observed, False, "none",
                 "content does not match NCBI's published checksum in either raw or LF-normalized "
                 "form; the file is truncated, modified or from a different download."))
+
+    # Walking the directory only ever sees files that exist, so a file listed in md5sum.txt
+    # but deleted from the checkout would produce no result at all and pass the gate in
+    # silence. resolve_inputs already hard-fails on the four required reports, but the
+    # FASTAs are optional there and parse_fasta treats a missing file as an empty index --
+    # the ML tables would quietly shrink instead of aborting.
+    seen = {result.file_name for result in results}
+    for name, want in sorted(expected.items()):
+        if name not in seen:
+            results.append(ChecksumResult(
+                name, want, "", False, "missing",
+                "listed in NCBI's md5sum.txt but not present on disk; the package is "
+                "incomplete. Re-download or re-checkout it."))
     return results
 
 
@@ -877,9 +939,15 @@ def report_checksums(results: Sequence[ChecksumResult], allow_mismatch: bool) ->
     for result in results:
         if result.verified and result.matched_form == "raw":
             logging.debug("checksum ok: %s", result.file_name)
+    listed = [r for r in results if r.matched_form != "unlisted"]
+    unlisted = len(results) - len(listed)
     if not failures:
-        checked = sum(1 for r in results if r.matched_form == "raw")
-        logging.info("Integrity: %s/%s files verified against NCBI md5sum.txt", checked, checked)
+        # Report against the number of files md5sum.txt actually covers. Counting only the
+        # files that passed on both sides of the ratio made this a tautological 'N/N' that
+        # stayed silent about files shipped without a published checksum.
+        logging.info("Integrity: %s/%s files verified against NCBI md5sum.txt%s",
+                     sum(1 for r in listed if r.verified), len(listed),
+                     f"; {unlisted} shipped file(s) not listed and not checked" if unlisted else "")
         return
 
     for result in failures:
@@ -1300,9 +1368,15 @@ def build_group_key(
     """
     label = isolate or strain
     if species_name and biosample and label:
-        return f"t1|{species_name}|{biosample}|{label}", "tier_1_biosample_isolate", 1.00
+        return (f"t1|{species_name}|{biosample}|{normalize_key_text(label)}",
+                "tier_1_biosample_isolate", 1.00)
     if species_name and isolate:
-        return f"t2|{species_name}|{isolate}", "tier_2_species_isolate", 0.95
+        # Normalized, not raw. Tier 2 claims 15,404 of 15,991 records, so it short-circuits
+        # the normalized tier below for every record that has an isolate name -- which is
+        # to say normalize_key_text never reached a grouping decision at all. 52 isolates
+        # were split across spelling variants of one label ('Aa19-152/MInION' vs
+        # 'Aa19-152/MinION', 'PUUV/Kazan/human/RT500/2019' vs 'PUUV/Kazan/human_RT500/2019').
+        return f"t2|{species_name}|{normalize_key_text(isolate)}", "tier_2_species_isolate", 0.95
     if species_name and label:
         return f"t3|{species_name}|{normalize_key_text(label)}", "tier_3_species_isolate_normalized", 0.90
     if species_name and strain and collection_date and location:
@@ -1650,12 +1724,15 @@ def flag_cross_species_labels(isolates: Sequence[IsolateRecord]) -> None:
     It has to be computed across groups rather than within one: the grouping key contains
     the canonical species, so every member of a group necessarily agrees on species and
     a within-group check can never fire.
+
+    Only labels distinctive enough to mean the same sample in two different submissions
+    are compared -- see is_cross_study_label.
     """
     by_label: DefaultDict[str, List[IsolateRecord]] = defaultdict(list)
     for isolate in isolates:
-        label = normalize_key_text(isolate.isolate or isolate.strain)
-        if label:
-            by_label[label].append(isolate)
+        label = isolate.isolate or isolate.strain
+        if is_cross_study_label(label):
+            by_label[normalize_key_text(label)].append(isolate)
 
     for members in by_label.values():
         species = {m.species_name for m in members if m.species_name}
@@ -2641,14 +2718,16 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
     data_records = list(iter_jsonl(paths.data_report))
     logging.info("  data_report: %s records", len(data_records))
     annotation_index = build_annotation_index(iter_jsonl(paths.annotation_report))
-    logging.info("  annotation_report: %s indexed accessions", len(annotation_index))
+    logging.info("  annotation_report: %s records (%s index keys)",
+                 indexed_record_count(annotation_index), len(annotation_index))
     biosample_index = build_biosample_index(iter_jsonl(paths.biosample_report))
     logging.info("  biosample_report: %s samples", len(biosample_index))
 
     logging.info("Parsing FASTA")
     genomic_index = parse_fasta(paths.genomic_fasta)
     protein_index = parse_fasta(paths.protein_fasta)
-    logging.info("  genomic: %s entries, protein: %s entries", len(genomic_index), len(protein_index))
+    logging.info("  genomic: %s sequences, protein: %s sequences",
+                 indexed_record_count(genomic_index), indexed_record_count(protein_index))
 
     # Serial by design: this work is pure-Python and GIL-bound, so the previous
     # ThreadPoolExecutor added 15,991 futures of overhead for no parallelism.

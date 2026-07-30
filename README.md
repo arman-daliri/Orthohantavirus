@@ -149,7 +149,9 @@ Unresolved segments drop from 405 to 210.
 NCBI's structured `completeness` is present on 100% of records and is authoritative
 (PARTIAL 14,652 / COMPLETE 1,339). Length is used only to qualify a COMPLETE call as
 coding-complete, never to override NCBI. ICTV segment sizes: S 1.2–2.1 kb, M 3.4–3.8 kb,
-L 6.5–6.6 kb.
+L 6.5–6.6 kb. The pipeline applies S and M as stated and widens L to 6.3–6.8 kb, because
+submitted L segments sit just outside the ICTV figure at both ends; see the note on
+`SEGMENT_LENGTH_RANGE` in `all_hanta.py`.
 
 Length anomalies are flagged only where they contradict those ranges: partial sequences are
 *expected* to be short. This drops length warnings from 5,856 to 9.

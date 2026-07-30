@@ -1,6 +1,6 @@
 {
   "pipeline_version": "2.0.0",
-  "generated_at_utc": "2026-07-29T21:28:51Z",
+  "generated_at_utc": "2026-07-30T11:09:39Z",
   "dataset_catalog_api_version": "V2",
   "integrity": {
     "model": "verified against NCBI's published md5sum.txt (file level) and nucleotide.sequenceHash / CRC32 (content level)",
@@ -74,9 +74,9 @@
     "canonical_species": 39,
     "distinct_observed_organisms": 553,
     "distinct_observed_taxids": 551,
-    "isolates": 9904,
-    "complete_triplets": 222,
-    "all_segments_present": 1777,
+    "isolates": 9852,
+    "complete_triplets": 223,
+    "all_segments_present": 1795,
     "records_with_host": 14272,
     "records_with_biosample": 87,
     "human_derived_records": 2091,
@@ -106,10 +106,10 @@
     "tier_1_biosample_isolate": 87
   },
   "triplet_status_counts": {
-    "all_segments_present_not_all_complete": 1555,
-    "incomplete_triplet": 7923,
-    "coding_complete_triplet": 222,
-    "partial_triplet_with_complete_segment": 204
+    "all_segments_present_not_all_complete": 1572,
+    "incomplete_triplet": 7856,
+    "coding_complete_triplet": 223,
+    "partial_triplet_with_complete_segment": 201
   },
   "host_order_counts": {
     "Rodentia": 11043,
@@ -146,10 +146,10 @@
     "host_order_mismatch": 33
   },
   "reassortment_status_counts": {
-    "not_assessable": 8215,
-    "requires_phylogenetic_confirmation": 1689
+    "not_assessable": 8146,
+    "requires_phylogenetic_confirmation": 1706
   },
-  "taxonomic_incongruence_count": 70,
+  "taxonomic_incongruence_count": 34,
   "qc_warning_counts": {
     "missing_host": 1719,
     "segment_from_length_only": 129,
@@ -173,7 +173,7 @@
       "status": "NOT CALLED -- classifier withdrawn after failing validation",
       "what_is_emitted": "per-segment nearest neighbours, k-mer distances, and normalized rank separations (sl_rank_separation, m_rank_offset) as continuous diagnostics only",
       "min_species_size": 8,
-      "assessable_isolates": 1689,
+      "assessable_isolates": 1706,
       "why_withdrawn": "A classifier built on these rank separations produced the inverse of the reported literature ranking: ANDV 72% flagged (reported absent or sparse) vs PUUV 7.7% (reported 19.1-32%), and CHOV 100% at n=8. Sweeping the threshold from 0.25 to 0.85 scaled all rates down without changing the ordering. Cosine distance on 3-mer amino-acid composition tracks within-species diversity and sample size, not tree topology.",
       "to_detect_reassortment_properly": "Build per-segment alignments (MAFFT) and trees (IQ-TREE), then test topological incongruence between the S, M and L trees.",
       "trustworthy_signal": "taxonomic_incongruence -- NCBI assigning an isolate's segments to different species. This is metadata, not inference, and it does feed the risk score."
