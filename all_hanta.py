@@ -2231,9 +2231,15 @@ def collect_phylo_candidates(
     triplets -- are UNIONED, not intersected: each is independently a reason this
     isolate matters for the reassortment/pathogenicity goal. But a topology-incongruence
     test needs every isolate placed in all three segment trees, so 'CDS available for S,
-    M and L' is a hard requirement on top of the union, not an optional nicety. Lab-
-    derived and vaccine-strain isolates are excluded for the same reason they are
-    excluded from the ML matrix: they are not naturally occurring samples.
+    M and L' is a hard requirement on top of the union, not an optional nicety.
+
+    Lab-derived and vaccine-strain isolates are excluded here specifically because a
+    passage/attenuation history is a tree-topology risk (branch-length distortion from
+    cell-culture or lab-host adaptation can bias a reassortment call). This is a
+    different reason than build_ml_tables now uses -- that function keeps is_lab_derived
+    isolates (flagged, not filtered) because the ML task doesn't depend on branch
+    lengths, and blanket-excluding them there discarded real pathogenicity signal (see
+    its docstring). Only is_vaccine_strain is excluded from both stages.
     """
     exclusions: Counter = Counter()
     candidates: List[PhyloCandidate] = []
@@ -2884,7 +2890,7 @@ def build_ml_tables(
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Build the ML feature matrix and the scaling artifact.
 
-    Two deliberate changes from the previous implementation:
+    Three deliberate changes from the previous implementation:
 
     - Features are emitted RAW. The previous version z-scored every column across the
       whole dataset before writing, which leaks test-fold statistics into training. The
@@ -2897,9 +2903,28 @@ def build_ml_tables(
     - group_id and year are included so downstream CV can split by species and by time.
       Random splits over this data overstate accuracy badly, because segments from the
       same outbreak are near-identical.
+
+    is_lab_derived is now FLAGGED, not filtered. An earlier version excluded every
+    is_lab_derived isolate from this matrix, on the same "not a naturally occurring
+    sample" reasoning --phylogenetics still uses. But NCBI's isLabHost field marks the
+    immediate recorded host, not sequence provenance: of 164 is_lab_derived isolates, 21
+    have host_taxid 9606 -- these are lab-acquired/occupational human infections in
+    exactly the highest-CFR species (HTNV, ANDV, PUUV, DOBV) -- and most of the rest are
+    samples from colony-maintained reservoir animals (Mus musculus, Rattus norvegicus,
+    Apodemus agrarius), not attenuated or culture-adapted sequences. Blanket-filtering
+    them discarded real positive evidence of human/reservoir infection for a
+    pathogenicity-prediction task, exactly the risk this row's own citation warns about
+    (https://microbiomejournal.biomedcentral.com/articles/10.1186/s40168-025-02059-0 --
+    human-derived sequence similarity to reservoir sequences is itself the spillover-risk
+    signal; excluding it removes the baseline). is_vaccine_strain isolates remain
+    excluded: a vaccine strain is deliberately attenuated, so labelling its sequence with
+    its parent species' wild-type pathogenicity class would inject a real, not
+    hypothetical, false signal. --phylogenetics is unaffected by this: it keeps excluding
+    both is_lab_derived and is_vaccine_strain, because a passage/attenuation history is a
+    tree-topology risk (branch-length distortion) regardless of whether the sequence
+    itself is informative for a similarity/classification feature.
     """
-    usable = [i for i in isolates if i.concatenated_protein_aa and not i.is_lab_derived
-              and not i.is_vaccine_strain]
+    usable = [i for i in isolates if i.concatenated_protein_aa and not i.is_vaccine_strain]
     if not usable:
         return [], {"features": [], "note": "no usable isolates"}
 
@@ -2944,6 +2969,9 @@ def build_ml_tables(
             "m_rank_offset": profile.m_rank_offset if profile else 0.0,
             "taxonomic_incongruence": int(isolate.taxonomic_incongruence),
             "host_jump_status": host_jump_status(isolate.host_order, risk["reservoir_order"]),
+            # Retained, not filtered -- see this function's docstring. Lets a caller
+            # ablate/stratify on lab-vs-wild provenance instead of losing the isolates.
+            "is_lab_derived": int(isolate.is_lab_derived),
             # Labels
             "label_pathogenicity_class": risk["pathogenicity_class"],
             "label_disease_syndrome": risk["disease_syndrome"],

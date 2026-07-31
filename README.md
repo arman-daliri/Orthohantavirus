@@ -200,8 +200,28 @@ Host role is derived from `host.lineage` rank, not substring matching:
 | Chiroptera | 83 | `reservoir_bat` |
 | `isLabHost` true | 338 | `laboratory_host` |
 
-`isLabHost`, `labHost` and `isVaccineStrain` are authoritative NCBI fields and are used directly;
-lab-derived and vaccine records are excluded from the ML matrix.
+`isLabHost`, `labHost` and `isVaccineStrain` are authoritative NCBI fields and are used directly.
+
+**Lab-derived isolates are flagged, not filtered, in the ML matrix.** `isLabHost` marks the
+immediate recorded host, not sequence contamination: of 338 lab-host records (164 isolates), 21
+isolates have `host_taxid` `9606` — lab-acquired/occupational human infections concentrated in the
+highest-CFR species (HTNV, ANDV, PUUV, DOBV) — and most of the rest are samples from
+colony-maintained reservoir animals, not culture-adapted sequences. Blanket-excluding them from a
+pathogenicity-prediction task discarded real positive evidence of human/reservoir infection; a
+study comparing human-derived and reservoir Orthohantavirus sequences for zoonotic-risk assessment
+found the human sequences are themselves the spillover-risk baseline, not noise to remove
+(<https://microbiomejournal.biomedcentral.com/articles/10.1186/s40168-025-02059-0>).
+`ortho_ml_feature_matrix.parquet` carries an `is_lab_derived` column so a model can be trained
+with or without them and compared, rather than losing the isolates outright.
+
+**Vaccine strains remain excluded from the ML matrix.** A vaccine strain is deliberately
+attenuated, so labelling its sequence with its parent species' wild-type pathogenicity class would
+inject a real signal error, not a hypothetical one — unlike `isLabHost`, this is a case where
+exclusion is the correct default.
+
+**`--phylogenetics` is unaffected by this and keeps excluding both lab-derived and vaccine-strain
+isolates** — a passage/attenuation history is a tree-topology risk (branch-length distortion)
+regardless of whether the sequence is informative as an ML feature.
 
 **Host jumps.** Each record's host order is compared against its species' expected reservoir
 order. 33 records are pathogenic viruses recovered outside their reservoir order — SEOV in
