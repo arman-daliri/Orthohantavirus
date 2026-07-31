@@ -54,7 +54,39 @@ python all_hanta.py --input . --output output
 The transform is GIL-bound and runs serially; a full run takes ~16s on the 15,991-record package.
 
 Requires Python 3.11+ (uses `datetime.UTC`) with `pandas`, `pyarrow`, `numpy`. No alignment or
-phylogenetics dependencies.
+phylogenetics dependencies for a default run -- those only load if `--phylogenetics` is passed
+(see below).
+
+### Optional: `--phylogenetics` (MAFFT + IQ-TREE reassortment analysis)
+
+| Argument | Default | Purpose |
+|---|---|---|
+| `--phylogenetics` | off | Run the MAFFT + IQ-TREE stage described below |
+| `--mafft-bin` | PATH lookup | Path to `mafft` |
+| `--iqtree-bin` | PATH lookup | Path to `iqtree` |
+| `--phylo-min-taxa` | `4` | Minimum candidate isolates in a species before building segment trees |
+| `--bootstrap` | `1000` | IQ-TREE ultrafast bootstrap replicates |
+| `--min-bootstrap-support` | `95.0` | Minimum ufboot support to call a topology conflict *supported* |
+| `--phylo-seed` | `42` | Fixed IQ-TREE random seed, for reproducible trees |
+| `--phylo-threads` | cores − 1 | Threads for `mafft` and `iqtree` |
+
+Requires `mafft` and `iqtree` (IQ-TREE 3.x; `iqtree2` builds work too, pass `--iqtree-bin`) plus
+Biopython and `dendropy` -- none of which are needed for a default run. Set up once with:
+
+```bash
+conda create -n hanta_phylo -c bioconda -c conda-forge mafft iqtree biopython dendropy
+```
+
+Then either `conda activate hanta_phylo` before running this script, or leave your normal
+environment active and pass `--mafft-bin`/`--iqtree-bin` pointing at that env's `bin/`. **Don't
+just prepend that env's `bin/` to `PATH`** without activating fully -- it currently resolves a
+Python 3.6 interpreter as `python3`, which will shadow the one actually running this script.
+
+Runtime is dominated by IQ-TREE's ModelFinder + ultrafast bootstrap and scales with both the
+number of candidate isolates per species and CDS length (L segments are the slowest, ~6.4 kb).
+A handful of taxa finishes in seconds; species with hundreds of qualifying isolates (PUUV, TULV,
+HTNV, SEOV in this package) can take much longer. There is no built-in subsampling -- every
+qualifying isolate is analyzed.
 
 ---
 
@@ -205,10 +237,11 @@ level (asikkalaense, fugongense, lankaense, luxiense, sagercreekense, tigrayense
 corrected against the data. The audit runs every invocation so this class of error cannot silently
 return.
 
-## Reassortment — not called, and why
+## Reassortment
 
-**This pipeline does not call reassortment.** A classifier that did was built and then withdrawn
-after it failed validation against the literature.
+**By default, this pipeline does not call reassortment.** A classifier that did was built and
+then withdrawn after it failed validation against the literature. What follows is that
+withdrawal, and the rigorous replacement that now exists as an opt-in stage.
 
 The literature reports reassortment as frequent in PUUV (19.1–32% in Finnish studies), SNV, DOBV
 and TULV, and absent or sparse in ANDV. Measured on this dataset, the classifier produced the
@@ -244,6 +277,59 @@ label whose segments NCBI assigned to more than one species (70 isolates). That 
 inference, and it does feed the risk score. It is computed across groups, not within — the
 grouping key contains the species, so a within-group check can never fire.
 
+### `--phylogenetics`: the rigorous replacement
+
+Passing `--phylogenetics` runs the real thing this section always pointed to: per-segment CDS
+nucleotide alignments (MAFFT) and maximum-likelihood trees with ultrafast bootstrap support
+(IQ-TREE 3.x), compared for topological incongruence between S, M and L. See the flag table
+above for setup and the runtime caveat.
+
+**Candidate selection.** Three groups, unioned (each is independently a reason an isolate matters
+for the reassortment/pathogenicity goal), then intersected with a hard requirement — CDS
+available for all of S, M and L, since a topology comparison needs every isolate placed in all
+three trees:
+
+- **human-affecting-or-likely** — `pathogenicity_class` in `{pathogenic_hcps, pathogenic_hfrs,
+  rare_or_opportunistic, suspected}`, OR a not-yet-curated species observed directly in a human
+  host in this package (`host_role == spillover_host_human`) — the "likely" half a static curated
+  table alone cannot express.
+- **divergence candidates** — isolates the k-mer diagnostic already flagged
+  `requires_phylogenetic_confirmation`.
+- **complete triplets** — `has_complete_triplet`.
+
+Lab-derived, vaccine-strain, and `unclassified`/genus-only isolates are excluded — the latter
+because pooling them under `species_name` would build a tree across genuinely unrelated lineages
+that only share a placeholder label.
+
+**Per species** (≥ `--phylo-min-taxa`, sorted for determinism): CDS nucleotide sequences per
+segment are extracted via `select_primary_cds` (role-matched from `cds.fna`, longest-wins among
+matches — correctly prefers a combined G1+G2 precursor CDS over either half when both are
+annotated), aligned with `mafft --auto`, and a tree is built with `iqtree -m MFP -B <bootstrap>
+--seqtype DNA --seed <fixed>` (model selection + ultrafast bootstrap; DNA type is asserted, not
+auto-detected, because heavily-N'd partial CDS can otherwise confuse the heuristic). Tip labels
+are synthetic (`I0000`, `I0001`, ...) rather than `isolate_key` directly, to avoid any risk of
+Newick-incompatible characters corrupting a tree.
+
+**Per isolate**, from the three real trees: patristic (branch-length) nearest-neighbour and
+rank-separation diagnostics — the *same* statistical shape as `sl_rank_separation`/
+`m_rank_offset` above, now computed from real phylogenetic distance instead of k-mer composition
+distance, which is the actual fix for the failure mode documented earlier in this section. A
+candidate is only called `supported_reassortment_candidate` if the rank pattern matches the
+literature's M-segment-exchange signature (S and L agree; M's neighbour differs) **and** the
+relevant M-tree clade clears `--min-bootstrap-support` (default 95) — anything below that is
+`weak_signal_low_bootstrap_support`, not a finding.
+
+**Per species**, Robinson-Foulds distance (via `dendropy`) between each pair of segment trees on
+the shared taxon set — an overall measure of how much the three trees disagree, independent of
+any single isolate's placement.
+
+**Nothing is silently dropped.** Every candidate isolate appears exactly once in
+`ortho_reassortment_table.parquet`, `phylo_status` one of `analyzed` / `failed` (with the specific
+MAFFT/IQ-TREE error) / `species_below_min_taxa` — a species/segment failure never aborts the run,
+it just marks that species' isolates `failed` and moves on, the same per-unit error isolation
+`transform_one_record` uses for accessions. Alignments and trees are written under
+`<output>/phylogenetics/<species>/<segment>/` for inspection or reuse.
+
 ## Species clustering
 
 Within-species single-linkage clustering on cosine distance over 3-mer profiles of the
@@ -273,6 +359,8 @@ maximum-likelihood inference. These clusters are an alignment-free proxy and are
 | `ortho_qc_report.parquet` | 15,991 × 11 | Per-accession QC including failed transforms with traceback |
 | `ortho_feature_scaling.json` | — | Per-feature mean/std, to be fitted **inside** your CV fold |
 | `ortho_summary.json` | — | Provenance, integrity results, counts, methods and stated limitations |
+| `ortho_reassortment_table.parquet` *(`--phylogenetics` only)* | one row per candidate isolate | Real per-segment tree diagnostics, RF distances, bootstrap-gated `reassortment_call` |
+| `phylogenetics/<species>/<segment>/` *(`--phylogenetics` only)* | — | MAFFT alignment + IQ-TREE outputs per species/segment, for inspection or reuse |
 
 ### Risk score
 
@@ -290,7 +378,10 @@ it can be audited or re-weighted:
 
 This is a triage aid for surveillance, not a validated epidemiological risk model. No term derives
 from the k-mer divergence diagnostics — weighting a withdrawn classifier would have propagated an
-artefact of sample size into a ranking meant to guide surveillance.
+artefact of sample size into a ranking meant to guide surveillance. `reassortment_call` from
+`--phylogenetics` is likewise **not yet wired into this score** — it lives in a separate,
+opt-in output table so the default risk table's schema and values stay unchanged whether or not
+`--phylogenetics` was run. Join on `isolate_key` to combine them for your own weighting.
 
 ### Using the ML tables
 
@@ -305,8 +396,17 @@ data, because segments from the same outbreak are near-identical.
 
 ## Known limitations
 
-- **No reassortment calls.** See above. Requires MAFFT + IQ-TREE.
-- **k-mer distances are not PED.** The ICTV 0.1 cutoff needs aligned sequences and ML inference.
+- **No reassortment calls by default.** See above; run with `--phylogenetics` for the real
+  MAFFT + IQ-TREE analysis. Even then, it only covers the three named candidate groups with full
+  S+M+L CDS available (1,464 of 15,991 accessions' worth of isolates in this package) — not every
+  isolate, and species below `--phylo-min-taxa` are reported but not analyzed.
+- **`--phylogenetics` calls are a single ML tree search per segment, bootstrap-gated, not a formal
+  incongruence test** (e.g. no SH-test/AU-test on constrained topologies). `supported_reassortment_
+  candidate` means the rank pattern and bootstrap support are consistent with reassortment, not a
+  statistically tested certainty.
+- **k-mer distances are not PED.** The ICTV 0.1 cutoff needs aligned sequences and ML inference —
+  `--phylogenetics` builds real per-segment ML trees but does not compute a DEmARC-style
+  concatenated-PED value; it is aimed at the reassortment question, not species re-demarcation.
 - **222 coding-complete triplets** is a ceiling set by the data (1,339 COMPLETE records total),
   not by the pipeline. 1,777 groups have all three segments present at some completeness.
 - **2,386 records are `unclassified Orthohantavirus` or genus-only** and carry no species-level

@@ -32,7 +32,10 @@ import argparse
 import hashlib
 import json
 import logging
+import os
 import re
+import shutil
+import subprocess
 import sys
 import traceback
 from collections import Counter, defaultdict
@@ -58,6 +61,7 @@ ANNOTATION_REPORT = "annotation_report.jsonl"
 BIOSAMPLE_REPORT = "biosample_report.jsonl"
 GENOMIC_FASTA = "genomic.fna"
 PROTEIN_FASTA = "protein.faa"
+CDS_FASTA = "cds.fna"
 MD5SUM_FILE = "md5sum.txt"
 
 YEAR_RE = re.compile(r"(19|20)\d{2}")
@@ -464,6 +468,7 @@ class InputPaths:
     md5sum_file: Optional[Path]
     genomic_fasta: Optional[Path]
     protein_fasta: Optional[Path]
+    cds_fasta: Optional[Path]
     output_dir: Path
     log_file: Path
 
@@ -646,6 +651,22 @@ class SegmentDivergenceProfile:
     reported_species_prior: str
 
 
+@dataclass
+class PhyloCandidate:
+    """One isolate selected for rigorous (MAFFT + IQ-TREE) reassortment analysis.
+
+    ``tags`` records every reason the isolate was selected (it can be more than one of
+    human_affecting_or_likely / divergence_candidate / complete_triplet) so the output
+    table can be filtered by which goal it serves without re-deriving the criteria.
+    ``sequences`` holds the CDS nucleotide sequence actually used per segment -- never
+    the full genomic sequence and never the amino acid translation, see
+    select_primary_cds.
+    """
+    isolate: "IsolateRecord"
+    tags: List[str]
+    sequences: Dict[str, str]
+
+
 # --------------------------------------------------------------------------------------
 # Generic utilities
 # --------------------------------------------------------------------------------------
@@ -797,39 +818,39 @@ def safe_write_json(path: Path, payload: Any) -> None:
         json.dump(payload, handle, ensure_ascii=False, indent=2)
 
 
-def parse_fasta(path: Optional[Path]) -> Dict[str, FastaRecord]:
+def _iter_fasta_records(path: Optional[Path]) -> Iterator[Tuple[str, str]]:
+    """Yield (header-without-'>', concatenated sequence) pairs from a FASTA file."""
     if path is None or not path.exists():
-        return {}
-    index: Dict[str, FastaRecord] = {}
+        return
     header: Optional[str] = None
     parts: List[str] = []
-
-    def commit(raw_header: str, seq_parts: List[str]) -> None:
-        desc = raw_header[1:].strip()
-        if not desc:
-            return
-        acc = desc.split()[0]
-        # Protein/CDS deflines carry a coordinate suffix, e.g. 'UCR75372.1:1-338'.
-        acc = acc.split(":")[0]
-        base = accession_base(acc)
-        seq = "".join(seq_parts)
-        record = FastaRecord(accession=acc, accession_base=base, header=desc, sequence=seq, length=len(seq))
-        index.setdefault(acc, record)
-        if base:
-            index.setdefault(base, record)
-
     with path.open("r", encoding="utf-8", errors="replace") as handle:
         for line in handle:
             line = line.rstrip("\r\n")
             if line.startswith(">"):
                 if header is not None:
-                    commit(header, parts)
-                header = line
+                    yield header, "".join(parts)
+                header = line[1:].strip()
                 parts = []
             else:
                 parts.append(line.strip())
         if header is not None:
-            commit(header, parts)
+            yield header, "".join(parts)
+
+
+def parse_fasta(path: Optional[Path]) -> Dict[str, FastaRecord]:
+    index: Dict[str, FastaRecord] = {}
+    for desc, seq in _iter_fasta_records(path):
+        if not desc:
+            continue
+        acc = desc.split()[0]
+        # Protein/CDS deflines carry a coordinate suffix, e.g. 'UCR75372.1:1-338'.
+        acc = acc.split(":")[0]
+        base = accession_base(acc)
+        record = FastaRecord(accession=acc, accession_base=base, header=desc, sequence=seq, length=len(seq))
+        index.setdefault(acc, record)
+        if base:
+            index.setdefault(base, record)
     return index
 
 
@@ -1861,6 +1882,37 @@ def assign_kmer_clusters(isolates: Sequence[IsolateRecord], threshold: float) ->
 # --------------------------------------------------------------------------------------
 
 
+def _rank_positions(order: Dict[str, Any]) -> Dict[str, Any]:
+    """Rank-lookup tables from per-segment neighbour orderings: position[segment][i, j]
+    is j's rank in i's ordering. Shared by the k-mer (compute_segment_divergence) and
+    tree-distance (tree_divergence_for_species) diagnostics, which differ only in how
+    `order` was derived.
+    """
+    position: Dict[str, Any] = {}
+    for segment in ("S", "M", "L"):
+        ordering = order[segment]
+        table = np.empty_like(ordering)
+        rows = np.arange(ordering.shape[0])[:, None]
+        table[rows, ordering] = np.arange(ordering.shape[1])[None, :]
+        position[segment] = table
+    return position
+
+
+def _sl_m_rank_metrics(
+    position: Dict[str, Any], span: int, index: int, s_nn: int, m_nn: int, l_nn: int
+) -> Tuple[float, float]:
+    """sl_rank_separation and m_rank_offset: continuous measurements of how far apart the
+    per-segment nearest-neighbour orderings sit. NOT evidence of reassortment on their own
+    -- see compute_segment_divergence's docstring for why the k-mer version of this signal
+    was withdrawn as a classifier.
+    """
+    s_pos_l = float(position["L"][index, s_nn]) / span
+    l_pos_s = float(position["S"][index, l_nn]) / span
+    s_pos_m = float(position["S"][index, m_nn]) / span
+    l_pos_m = float(position["L"][index, m_nn]) / span
+    return max(s_pos_l, l_pos_s), min(s_pos_m, l_pos_m)
+
+
 def compute_segment_divergence(
     isolates: Sequence[IsolateRecord],
     min_species_size: int = 8,
@@ -1945,28 +1997,12 @@ def compute_segment_divergence(
             neighbour[segment] = order[:, 0].tolist()
             distance[segment] = [float(distances[i, order[i, 0]]) for i in range(len(members))]
 
-        # Rank lookup tables: position[segment][i, j] is j's rank in i's ordering.
-        position: Dict[str, Any] = {}
-        for segment in ("S", "M", "L"):
-            order = ranking[segment]
-            table = np.empty_like(order)
-            rows = np.arange(order.shape[0])[:, None]
-            table[rows, order] = np.arange(order.shape[1])[None, :]
-            position[segment] = table
-
+        position = _rank_positions(ranking)
         span = max(1, len(members) - 1)
 
         for index, isolate in enumerate(members):
             s_nn, m_nn, l_nn = neighbour["S"][index], neighbour["M"][index], neighbour["L"][index]
-
-            def norm_rank(segment: str, target: int) -> float:
-                return float(position[segment][index, target]) / span
-
-            # Continuous diagnostics only. These are honest measurements of how far apart
-            # the per-segment neighbour orderings sit; they are NOT evidence of
-            # reassortment, for the reasons in this function's docstring.
-            sl_separation = max(norm_rank("L", s_nn), norm_rank("S", l_nn))
-            m_offset = min(norm_rank("S", m_nn), norm_rank("L", m_nn))
+            sl_separation, m_offset = _sl_m_rank_metrics(position, span, index, s_nn, m_nn, l_nn)
 
             profiles.append(SegmentDivergenceProfile(
                 isolate_key=isolate.isolate_key,
@@ -2084,6 +2120,487 @@ def surveillance_priority(
         "priority_nss_term": nss_term,
         "surveillance_priority_score": round(total, 3),
     }
+
+
+# --------------------------------------------------------------------------------------
+# Rigorous phylogenetic reassortment analysis -- opt-in via --phylogenetics
+# --------------------------------------------------------------------------------------
+#
+# Everything above (assign_kmer_clusters, compute_segment_divergence) is alignment-free
+# and deliberately NOT a reassortment call -- see compute_segment_divergence's docstring
+# for the validation failure that got that classifier withdrawn. This section is the
+# real thing it pointed to: per-segment CDS-nucleotide alignments (MAFFT) and
+# maximum-likelihood trees with ultrafast bootstrap support (IQ-TREE), compared for
+# topological incongruence between S, M and L.
+#
+# It only runs when --phylogenetics is passed, requires mafft and iqtree on PATH (or
+# --mafft-bin/--iqtree-bin), and Biopython + dendropy (imported lazily below so a
+# default run never needs them). It only ever touches the three named candidate groups
+# -- human-affecting-or-likely, divergence candidates, complete triplets -- and every
+# candidate isolate is reported exactly once in the output table, tagged with why it was
+# selected and, if analysis didn't happen, why not. Nothing is silently dropped.
+#
+# Setup:
+#   conda create -n hanta_phylo -c bioconda -c conda-forge mafft iqtree biopython dendropy
+#   conda activate hanta_phylo   # or pass --mafft-bin / --iqtree-bin with full paths
+
+HUMAN_AFFECTING_CLASSES = {"pathogenic_hcps", "pathogenic_hfrs", "rare_or_opportunistic", "suspected"}
+
+# CDS sequences shorter than this cannot be meaningfully aligned or placed in a tree --
+# a floor against corrupt/truncated annotations, not a completeness filter.
+MIN_CDS_LENGTH = 100
+
+# Rank-separation thresholds for classify_reassortment_call. sl_rank_separation asks
+# "do the S and L trees still agree on this isolate's neighbourhood" (should be LOW --
+# S and L cosegregate per PMC6153690); m_rank_offset asks "is the M tree's answer
+# different from S/L's" (should be HIGH for a genuine M-segment reassortant). Neither
+# threshold is fitted to this data -- they mark the qualitative pattern the literature
+# describes, and every candidate above them still has to clear the bootstrap gate below.
+M_OFFSET_HIGH = 0.5
+SL_SEPARATION_LOW = 0.35
+
+
+def is_human_affecting_or_likely(pathogenicity_class: str, host_role: str) -> bool:
+    """Curated pathogenic/suspected species, OR a species not yet curated but observed
+    directly in a human host in this package -- the 'likely to affect humans' half of
+    the brief that a static curated table alone cannot express.
+    """
+    if pathogenicity_class in HUMAN_AFFECTING_CLASSES:
+        return True
+    return pathogenicity_class == "unknown" and host_role == "spillover_host_human"
+
+
+def parse_cds_fasta(path: Optional[Path]) -> Dict[str, List[Tuple[str, str]]]:
+    """Index cds.fna by NUCLEOTIDE accession -- not protein accession.
+
+    Unlike protein.faa (keyed by protein accessionVersion), cds.fna's defline carries the
+    parent nucleotide accession plus a coordinate suffix (e.g. 'PX492530.1:1-430'),
+    because a CDS is a coordinate range on its parent nucleotide record. A single
+    nucleotide accession can carry more than one CDS -- 134 in this package, mostly
+    ambisense S segments encoding both N and NSs on overlapping reading frames, plus a
+    few M segments annotated with separate G1/G2 CDS alongside a combined precursor
+    entry. parse_fasta's setdefault-first-wins index would silently keep whichever CDS
+    happened to be read first and drop the other, so this keeps every distinct
+    (product, sequence) pair per accession and leaves selection to select_primary_cds.
+    """
+    index: DefaultDict[str, List[Tuple[str, str]]] = defaultdict(list)
+    seen: set = set()
+    for desc, seq in _iter_fasta_records(path):
+        if not desc:
+            continue
+        tokens = desc.split(None, 1)
+        acc = tokens[0].split(":")[0]
+        base = accession_base(acc)
+        product = tokens[1].split("[")[0].strip() if len(tokens) > 1 else ""
+        seq = seq.upper()
+        if not seq or not base:
+            continue
+        dedupe_key = (base, product, seq)
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        index[base].append((product, seq))
+    return dict(index)
+
+
+def select_primary_cds(records: Optional[Sequence[Tuple[str, str]]], segment: str) -> str:
+    """Pick the CDS nucleotide sequence matching the segment's primary product.
+
+    Mirrors select_primary_protein's role-matching (classify_protein_role), longest-wins
+    among matches -- for M segments annotated with separate G1/G2 CDS *and* a combined
+    G1+G2 precursor entry, this correctly prefers the full precursor over either half.
+    """
+    if not records:
+        return ""
+    wanted = SEGMENT_PRIMARY_PRODUCT.get(segment)
+    if not wanted:
+        return ""
+    candidates = [seq for product, seq in records if classify_protein_role(product) == wanted]
+    return max(candidates, key=len) if candidates else ""
+
+
+def collect_phylo_candidates(
+    isolates: Sequence[IsolateRecord],
+    divergence_by_key: Dict[str, SegmentDivergenceProfile],
+    cds_index: Dict[str, List[Tuple[str, str]]],
+) -> Tuple[List[PhyloCandidate], Counter]:
+    """Extract the three named candidate groups and require full S+M+L CDS for each.
+
+    The three groups -- human-affecting-or-likely, divergence candidates (already
+    flagged 'requires_phylogenetic_confirmation' by the k-mer diagnostic), complete
+    triplets -- are UNIONED, not intersected: each is independently a reason this
+    isolate matters for the reassortment/pathogenicity goal. But a topology-incongruence
+    test needs every isolate placed in all three segment trees, so 'CDS available for S,
+    M and L' is a hard requirement on top of the union, not an optional nicety. Lab-
+    derived and vaccine-strain isolates are excluded for the same reason they are
+    excluded from the ML matrix: they are not naturally occurring samples.
+    """
+    exclusions: Counter = Counter()
+    candidates: List[PhyloCandidate] = []
+    for isolate in isolates:
+        if isolate.is_lab_derived or isolate.is_vaccine_strain:
+            exclusions["lab_or_vaccine_excluded"] += 1
+            continue
+        if isolate.species_status != "classified":
+            # 'unclassified Orthohantavirus' and genus-only records are a catch-all
+            # bucket, not one coherent taxon -- pooling them under species_name would
+            # build a tree across genuinely different, unrelated lineages that just
+            # happen to share a placeholder label.
+            exclusions["species_not_classified"] += 1
+            continue
+
+        risk = species_risk_profile(isolate.species_name)
+        tags: List[str] = []
+        if is_human_affecting_or_likely(risk["pathogenicity_class"], isolate.host_role):
+            tags.append("human_affecting_or_likely")
+        profile = divergence_by_key.get(isolate.isolate_key)
+        if profile is not None and profile.reassortment_status == "requires_phylogenetic_confirmation":
+            tags.append("divergence_candidate")
+        if isolate.has_complete_triplet:
+            tags.append("complete_triplet")
+        if not tags:
+            continue
+
+        sequences: Dict[str, str] = {}
+        for segment, accession in (("S", isolate.s_accession), ("M", isolate.m_accession),
+                                   ("L", isolate.l_accession)):
+            records = cds_index.get(accession_base(accession)) if accession else None
+            seq = select_primary_cds(records, segment)
+            if len(seq) >= MIN_CDS_LENGTH:
+                sequences[segment] = seq
+
+        if len(sequences) < 3:
+            exclusions["missing_cds_for_one_or_more_segments"] += 1
+            continue
+
+        candidates.append(PhyloCandidate(isolate=isolate, tags=tags, sequences=sequences))
+
+    return candidates, exclusions
+
+
+def group_candidates_by_species(
+    candidates: Sequence[PhyloCandidate], min_taxa: int,
+) -> Tuple[Dict[str, List[PhyloCandidate]], Counter]:
+    """Only species with enough candidates for a meaningful tree get analyzed.
+
+    An unrooted tree needs at least 4 taxa to have any internal structure at all; below
+    --phylo-min-taxa there is nothing for MAFFT/IQ-TREE to resolve. Sorted by
+    isolate_key so re-runs assign identical tip labels and produce byte-identical
+    alignments/trees given the same inputs.
+    """
+    by_species: DefaultDict[str, List[PhyloCandidate]] = defaultdict(list)
+    for candidate in candidates:
+        by_species[candidate.isolate.species_name].append(candidate)
+
+    exclusions: Counter = Counter()
+    accepted: Dict[str, List[PhyloCandidate]] = {}
+    for species, members in by_species.items():
+        if len(members) < min_taxa:
+            exclusions[f"{species}: only {len(members)} candidate(s), need {min_taxa}"] += 1
+            continue
+        accepted[species] = sorted(members, key=lambda c: c.isolate.isolate_key)
+    return accepted, exclusions
+
+
+def resolve_binary(explicit: Optional[str], name: str) -> str:
+    """Resolve a required external binary to an absolute path, or fail with setup help."""
+    candidate = explicit or shutil.which(name)
+    resolved = shutil.which(candidate) if candidate else None
+    if not resolved:
+        raise SystemExit(
+            f"--phylogenetics requires '{name}' on PATH (or pass --{name}-bin=/path/to/{name}).\n"
+            "Install both mafft and iqtree with:\n"
+            "  conda create -n hanta_phylo -c bioconda -c conda-forge mafft iqtree biopython dendropy\n"
+            f"then either 'conda activate hanta_phylo' before running this script, or pass "
+            f"--{name}-bin pointing at that environment's bin/{name}."
+        )
+    return resolved
+
+
+def write_segment_fasta(path: Path, sequences: Dict[str, str]) -> None:
+    """Write label -> nucleotide sequence. Labels are already synthetic (I0000, I0001,
+    ...), never isolate_key directly -- isolate_key contains '|' and other punctuation
+    that is legal in FASTA headers but risks corruption in Newick tip names downstream,
+    so a synthetic label sidesteps the question entirely rather than trying to escape it.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        for label, seq in sequences.items():
+            handle.write(f">{label}\n")
+            for i in range(0, len(seq), 70):
+                handle.write(seq[i:i + 70] + "\n")
+
+
+def run_mafft(mafft_bin: str, input_fasta: Path, output_fasta: Path, threads: int) -> None:
+    output_fasta.parent.mkdir(parents=True, exist_ok=True)
+    with output_fasta.open("w", encoding="utf-8") as out:
+        result = subprocess.run(
+            [mafft_bin, "--auto", "--thread", str(threads), str(input_fasta)],
+            stdout=out, stderr=subprocess.PIPE, text=True, check=False,
+        )
+    if result.returncode != 0 or not output_fasta.exists() or output_fasta.stat().st_size == 0:
+        raise RuntimeError(f"mafft failed on {input_fasta}: {(result.stderr or '')[-2000:]}")
+
+
+def run_iqtree(
+    iqtree_bin: str, alignment_fasta: Path, prefix: Path, threads: int, bootstrap: int, seed: int,
+) -> Path:
+    prefix.parent.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        # --seqtype DNA is explicit, not left to IQ-TREE's auto-detection: these are CDS
+        # nucleotide sequences by construction (select_primary_cds), and heavily-N'd
+        # partial CDS can otherwise make the ACGT-vs-amino-acid heuristic misfire.
+        [iqtree_bin, "-s", str(alignment_fasta), "--seqtype", "DNA", "-m", "MFP", "-B", str(bootstrap),
+         "-T", str(threads), "--seed", str(seed), "--prefix", str(prefix), "--quiet", "--redo"],
+        capture_output=True, text=True, check=False,
+    )
+    treefile = Path(f"{prefix}.treefile")
+    if result.returncode != 0 or not treefile.exists():
+        raise RuntimeError(
+            f"iqtree failed on {alignment_fasta}: {(result.stderr or result.stdout or '')[-2000:]}")
+    return treefile
+
+
+def _patristic_distance_matrix(tree: Any, labels: Sequence[str]) -> Any:
+    """All-pairs patristic (branch-length, i.e. real evolutionary) distance."""
+    clades = {clade.name: clade for clade in tree.get_terminals()}
+    n = len(labels)
+    dist = np.zeros((n, n), dtype=np.float64)
+    for i in range(n):
+        for j in range(i + 1, n):
+            d = tree.distance(clades[labels[i]], clades[labels[j]])
+            dist[i, j] = dist[j, i] = d
+    return dist
+
+
+def tree_divergence_for_species(labels: Sequence[str], trees: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Per-isolate nearest-neighbour and rank-separation diagnostics from REAL segment
+    trees, replacing compute_segment_divergence's k-mer/cosine version with the same
+    statistical shape (same span/rank normalization) but on maximum-likelihood
+    phylogenetic distance instead of alignment-free composition distance -- the actual
+    fix for the failure mode documented there.
+    """
+    n = len(labels)
+    span = max(1, n - 1)
+    distance: Dict[str, Any] = {}
+    order: Dict[str, Any] = {}
+    for segment, tree in trees.items():
+        dist = _patristic_distance_matrix(tree, labels)
+        np.fill_diagonal(dist, np.inf)
+        order[segment] = np.argsort(dist, axis=1)
+        distance[segment] = dist
+
+    position = _rank_positions(order)
+
+    rows_out: List[Dict[str, Any]] = []
+    for i, label in enumerate(labels):
+        s_nn, m_nn, l_nn = order["S"][i, 0], order["M"][i, 0], order["L"][i, 0]
+        sl_separation, m_offset = _sl_m_rank_metrics(position, span, i, s_nn, m_nn, l_nn)
+        rows_out.append({
+            "label": label,
+            "tree_s_nearest": labels[s_nn], "tree_m_nearest": labels[m_nn], "tree_l_nearest": labels[l_nn],
+            "tree_s_distance": float(distance["S"][i, s_nn]),
+            "tree_m_distance": float(distance["M"][i, m_nn]),
+            "tree_l_distance": float(distance["L"][i, l_nn]),
+            "tree_sl_rank_separation": round(sl_separation, 4),
+            "tree_m_rank_offset": round(m_offset, 4),
+        })
+    return rows_out
+
+
+def bootstrap_support_for_pair(tree: Any, label_a: str, label_b: str) -> float:
+    """Ultrafast-bootstrap support at the smallest clade containing both tips -- how well
+    the M tree itself supports grouping this isolate with the neighbour it disagrees
+    with S/L about. IQ-TREE writes support as the internal-node name, which Biopython's
+    Newick parser reads into Clade.confidence for non-terminal clades.
+    """
+    clade_a = next(tree.find_clades(name=label_a))
+    clade_b = next(tree.find_clades(name=label_b))
+    common = tree.common_ancestor([clade_a, clade_b])
+    return float(common.confidence) if common.confidence is not None else 0.0
+
+
+def classify_reassortment_call(row: Dict[str, Any], m_tree: Any, min_bootstrap_support: float) -> Tuple[str, float]:
+    """Only a rank pattern consistent with the literature's M-segment-exchange signature
+    (S and L agree; M's neighbour is different) AND a well-supported M-tree clade counts
+    as a candidate. Everything else stays 'no_conflict' or 'weak_signal' -- the whole
+    point of doing this with real trees is to not repeat the withdrawn classifier's
+    mistake of reporting an unsupported pattern as a finding.
+    """
+    if row["tree_m_rank_offset"] < M_OFFSET_HIGH or row["tree_sl_rank_separation"] > SL_SEPARATION_LOW:
+        return "no_conflict", 0.0
+    support = bootstrap_support_for_pair(m_tree, row["label"], row["tree_m_nearest"])
+    if support >= min_bootstrap_support:
+        return "supported_reassortment_candidate", support
+    return "weak_signal_low_bootstrap_support", support
+
+
+def _phylo_row(candidate: PhyloCandidate, species: str, n_taxa_in_tree: int,
+              status: str, error: str) -> Dict[str, Any]:
+    """Default (not-yet-analyzed / failed) row shape. Every field a successful analysis
+    fills in is declared here too, so ortho_reassortment_table.parquet has one stable
+    schema regardless of status -- required for a clean, joinable parquet.
+    """
+    return {
+        "isolate_key": candidate.isolate.isolate_key,
+        "species_name": species,
+        "candidate_tags": ";".join(candidate.tags),
+        "n_taxa_in_species_tree": n_taxa_in_tree,
+        "phylo_status": status,
+        "phylo_error": error,
+        "tree_s_nearest_isolate": "", "tree_m_nearest_isolate": "", "tree_l_nearest_isolate": "",
+        "tree_s_distance": 0.0, "tree_m_distance": 0.0, "tree_l_distance": 0.0,
+        "tree_sl_rank_separation": 0.0, "tree_m_rank_offset": 0.0,
+        "m_clade_bootstrap_support": 0.0,
+        "reassortment_call": "not_analyzed",
+        "rf_s_vs_m": None, "rf_m_vs_l": None, "rf_s_vs_l": None,
+        "rf_s_vs_m_normalized": None, "rf_m_vs_l_normalized": None, "rf_s_vs_l_normalized": None,
+        "s_alignment_path": "", "m_alignment_path": "", "l_alignment_path": "",
+        "s_tree_path": "", "m_tree_path": "", "l_tree_path": "",
+    }
+
+
+def _analyze_species(
+    species: str, members: Sequence[PhyloCandidate], species_dir_root: Path, output_dir: Path,
+    args: argparse.Namespace, mafft_bin: str, iqtree_bin: str,
+) -> List[Dict[str, Any]]:
+    """Align + build trees for one species' three segments, then score every member.
+
+    Every step -- MAFFT/IQ-TREE, tree parsing, patristic-distance/Robinson-Foulds
+    computation, and per-isolate classification -- runs inside one try/except: a failure
+    anywhere fails only this species (isolates reported with status='failed' and the
+    reason) and never the run, the same per-unit error isolation transform_one_record
+    uses for accessions. An earlier version of this function wrapped only the MAFFT/
+    IQ-TREE calls, so a failure in the tree-parsing or distance code that followed them
+    (e.g. IQ-TREE dropping a duplicate tip, a malformed treefile) escaped uncaught.
+    """
+    # Re-imported here rather than threaded through as parameters: run_phylogenetics_stage
+    # already proved these are importable (its own ImportError check, with the install
+    # hint, runs before any work starts), and Python caches modules in sys.modules, so
+    # this costs nothing per species.
+    from Bio import Phylo
+    import dendropy
+    from dendropy.calculate import treecompare
+
+    species_dir = species_dir_root / normalize_attr_name(species)
+    labels = [f"I{i:04d}" for i in range(len(members))]
+    label_map: Dict[str, PhyloCandidate] = dict(zip(labels, members))
+
+    try:
+        trees: Dict[str, Any] = {}
+        tree_paths: Dict[str, Path] = {}
+        for segment in ("S", "M", "L"):
+            seg_dir = species_dir / segment
+            fasta_path = seg_dir / "sequences.fasta"
+            aligned_path = seg_dir / "aligned.fasta"
+            prefix = seg_dir / "tree"
+            sequences = {label: candidate.sequences[segment] for label, candidate in label_map.items()}
+            write_segment_fasta(fasta_path, sequences)
+            run_mafft(mafft_bin, fasta_path, aligned_path, args.phylo_threads)
+            treefile = run_iqtree(iqtree_bin, aligned_path, prefix, args.phylo_threads,
+                                  args.bootstrap, args.phylo_seed)
+            trees[segment] = Phylo.read(str(treefile), "newick")
+            tree_paths[segment] = treefile
+
+        divergence_by_label = {row["label"]: row for row in tree_divergence_for_species(labels, trees)}
+
+        # Robinson-Foulds between each pair of segment trees on the shared taxon set
+        # (identical by construction) -- a per-species overall measure of how much the three
+        # trees disagree, independent of any single isolate's placement.
+        taxon_namespace = dendropy.TaxonNamespace()
+        dendro_trees = {
+            segment: dendropy.Tree.get(path=str(tree_paths[segment]), schema="newick",
+                                       taxon_namespace=taxon_namespace)
+            for segment in ("S", "M", "L")
+        }
+        for dtree in dendro_trees.values():
+            dtree.encode_bipartitions()
+        max_rf = 2 * (len(labels) - 3) if len(labels) > 3 else 1
+        rf: Dict[str, Any] = {}
+        for a, b in (("s", "m"), ("m", "l"), ("s", "l")):
+            raw = treecompare.symmetric_difference(dendro_trees[a.upper()], dendro_trees[b.upper()])
+            rf[f"rf_{a}_vs_{b}"] = raw
+            rf[f"rf_{a}_vs_{b}_normalized"] = raw / max_rf if max_rf else 0.0
+
+        rows: List[Dict[str, Any]] = []
+        for label, candidate in label_map.items():
+            row = divergence_by_label[label]
+            call, support = classify_reassortment_call(row, trees["M"], args.min_bootstrap_support)
+            out_row = _phylo_row(candidate, species, len(members), "analyzed", "")
+            out_row.update({
+                "tree_s_nearest_isolate": label_map[row["tree_s_nearest"]].isolate.isolate_key,
+                "tree_m_nearest_isolate": label_map[row["tree_m_nearest"]].isolate.isolate_key,
+                "tree_l_nearest_isolate": label_map[row["tree_l_nearest"]].isolate.isolate_key,
+                "tree_s_distance": row["tree_s_distance"],
+                "tree_m_distance": row["tree_m_distance"],
+                "tree_l_distance": row["tree_l_distance"],
+                "tree_sl_rank_separation": row["tree_sl_rank_separation"],
+                "tree_m_rank_offset": row["tree_m_rank_offset"],
+                "m_clade_bootstrap_support": support,
+                "reassortment_call": call,
+                **rf,
+                "s_alignment_path": str((species_dir / "S" / "aligned.fasta").relative_to(output_dir)),
+                "m_alignment_path": str((species_dir / "M" / "aligned.fasta").relative_to(output_dir)),
+                "l_alignment_path": str((species_dir / "L" / "aligned.fasta").relative_to(output_dir)),
+                "s_tree_path": str(tree_paths["S"].relative_to(output_dir)),
+                "m_tree_path": str(tree_paths["M"].relative_to(output_dir)),
+                "l_tree_path": str(tree_paths["L"].relative_to(output_dir)),
+            })
+            rows.append(out_row)
+        return rows
+    except Exception as exc:  # noqa: BLE001 - one species' failure must not kill the run
+        logging.exception("Phylogenetics failed for %s", species)
+        error = f"{type(exc).__name__}:{exc}"
+        return [_phylo_row(c, species, len(members), "failed", error) for c in members]
+
+
+def run_phylogenetics_stage(
+    isolates: Sequence[IsolateRecord],
+    divergence_by_key: Dict[str, SegmentDivergenceProfile],
+    cds_index: Dict[str, List[Tuple[str, str]]],
+    output_dir: Path,
+    args: argparse.Namespace,
+) -> List[Dict[str, Any]]:
+    """Entry point for --phylogenetics. See the module docstring above this section."""
+    try:
+        import Bio.Phylo  # noqa: F401 - fail fast with the install hint below, before any work starts
+        import dendropy  # noqa: F401
+        import dendropy.calculate.treecompare  # noqa: F401
+    except ImportError as exc:
+        raise SystemExit(
+            "--phylogenetics requires biopython and dendropy. Install with:\n"
+            "  conda create -n hanta_phylo -c bioconda -c conda-forge mafft iqtree biopython dendropy\n"
+            f"(missing: {exc.name})"
+        ) from exc
+
+    mafft_bin = resolve_binary(args.mafft_bin, "mafft")
+    iqtree_bin = resolve_binary(args.iqtree_bin, "iqtree")
+
+    candidates, drop_reasons = collect_phylo_candidates(isolates, divergence_by_key, cds_index)
+    logging.info("Phylogenetics: %s candidate isolates (%s excluded before grouping: %s)",
+                 len(candidates), sum(drop_reasons.values()), dict(drop_reasons))
+
+    by_species, species_drop_reasons = group_candidates_by_species(candidates, args.phylo_min_taxa)
+    for reason in species_drop_reasons:
+        logging.info("Phylogenetics: excluded species below --phylo-min-taxa: %s", reason)
+    logging.info("Phylogenetics: analyzing %s species: %s", len(by_species), sorted(by_species))
+
+    grouped_keys = {c.isolate.isolate_key for members in by_species.values() for c in members}
+    candidates_per_species: DefaultDict[str, int] = defaultdict(int)
+    for c in candidates:
+        candidates_per_species[c.isolate.species_name] += 1
+    rows: List[Dict[str, Any]] = [
+        _phylo_row(c, c.isolate.species_name, candidates_per_species[c.isolate.species_name],
+                  "species_below_min_taxa", "")
+        for c in candidates if c.isolate.isolate_key not in grouped_keys
+    ]
+
+    species_dir_root = output_dir / "phylogenetics"
+    for species, members in sorted(by_species.items()):
+        logging.info("Phylogenetics: %s (%s taxa) -- aligning + building trees", species, len(members))
+        rows.extend(_analyze_species(
+            species, members, species_dir_root, output_dir, args, mafft_bin, iqtree_bin))
+    return rows
 
 
 # --------------------------------------------------------------------------------------
@@ -2571,6 +3088,7 @@ def resolve_inputs(root: Path, output: Optional[Path] = None) -> InputPaths:
         md5sum_file=md5sum_file if md5sum_file.exists() else None,
         genomic_fasta=optional(GENOMIC_FASTA),
         protein_fasta=optional(PROTEIN_FASTA),
+        cds_fasta=optional(CDS_FASTA),
         output_dir=output_dir,
         log_file=output_dir / "ortho_pipeline.log",
     )
@@ -2773,8 +3291,9 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
     logging.info("Building ML tables")
     ml_rows, scaling = build_ml_tables(isolates, divergence_by_key, args.max_features)
 
-    logging.info("Writing outputs")
     out = paths.output_dir
+
+    logging.info("Writing outputs")
     safe_write_parquet(out / "ortho_accession_table.parquet", build_accession_rows(accessions))
     safe_write_parquet(out / "ortho_species_table.parquet", build_species_rows(accessions, isolates))
     safe_write_parquet(out / "ortho_isolate_table.parquet", build_isolate_rows(isolates, divergence_by_key))
@@ -2798,6 +3317,26 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
                  summary["counts"]["isolates"],
                  summary["counts"]["complete_triplets"])
 
+    # Runs after every core output above is already on disk, and is exception-isolated from
+    # them: a missing mafft/iqtree/biopython/dendropy dependency, or any bug in the
+    # phylogenetics stage, must never cost the run its core tables (all_hanta.py had this
+    # block *before* "Writing outputs" until a code review caught it -- moved here and
+    # wrapped so the opt-in stage can only ever add ortho_reassortment_table.parquet, never
+    # take anything else away).
+    if args.phylogenetics:
+        logging.info("Phylogenetics stage requested (--phylogenetics)")
+        try:
+            cds_index = parse_cds_fasta(paths.cds_fasta)
+            logging.info("  cds: %s accessions with at least one CDS", len(cds_index))
+            phylo_rows = run_phylogenetics_stage(isolates, divergence_by_key, cds_index, out, args)
+            safe_write_parquet(out / "ortho_reassortment_table.parquet", phylo_rows)
+        except (Exception, SystemExit) as exc:  # noqa: BLE001 - core outputs above are already safe
+            logging.error("Phylogenetics stage failed; core outputs above are unaffected: %s", exc)
+    else:
+        logging.info(
+            "Skipping phylogenetics stage (pass --phylogenetics to run MAFFT + IQ-TREE "
+            "reassortment analysis; requires both on PATH, see README)")
+
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -2820,6 +3359,24 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     # withdrawn reassortment classifier; no threshold made its ranking agree with the
     # literature, so exposing one invited false confidence.
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
+
+    phylo = parser.add_argument_group(
+        "phylogenetics (opt-in; requires mafft + iqtree -- see README)")
+    phylo.add_argument("--phylogenetics", action="store_true",
+                       help="Run MAFFT + IQ-TREE reassortment analysis over human-affecting, "
+                            "divergence-candidate and complete-triplet isolates")
+    phylo.add_argument("--mafft-bin", default=None, help="Path to mafft (default: PATH lookup)")
+    phylo.add_argument("--iqtree-bin", default=None, help="Path to iqtree (default: PATH lookup)")
+    phylo.add_argument("--phylo-min-taxa", type=int, default=4,
+                       help="Minimum candidate isolates in a species before building segment trees")
+    phylo.add_argument("--bootstrap", type=int, default=1000,
+                       help="IQ-TREE ultrafast bootstrap replicates (>=1000)")
+    phylo.add_argument("--min-bootstrap-support", type=float, default=95.0,
+                       help="Minimum ultrafast bootstrap support to call a topology conflict supported")
+    phylo.add_argument("--phylo-seed", type=int, default=42,
+                       help="Fixed IQ-TREE random seed, for reproducible trees")
+    phylo.add_argument("--phylo-threads", type=int, default=max(1, (os.cpu_count() or 4) - 1),
+                       help="Threads for mafft and iqtree")
     return parser.parse_args(argv)
 
 
