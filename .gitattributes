@@ -19,9 +19,9 @@ all_hanta/** -text
 *.fna    -text
 *.faa    -text
 *.fasta  -text
-*.parquet binary
 *.zip    binary
 
 # Keep the project's own text files normalised.
 *.py     text eol=lf
 *.md     text eol=lf
+*.csv    text eol=lf

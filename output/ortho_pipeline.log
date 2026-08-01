@@ -1,34 +1,34 @@
-2026-07-31 12:59:36,799 | INFO | Orthohantavirus pipeline v2.0.0
-2026-07-31 12:59:36,800 | INFO | Package: /home/victorfrankestein/Documents/Orthohantavirus/all_hanta/ncbi_dataset/data
-2026-07-31 12:59:36,800 | INFO | Output : /home/victorfrankestein/Documents/Orthohantavirus/output
-2026-07-31 12:59:36,800 | INFO | Verifying package integrity against NCBI md5sum.txt
-2026-07-31 12:59:36,967 | INFO | Integrity: 7/7 files verified against NCBI md5sum.txt
-2026-07-31 12:59:36,967 | INFO | Loading reports
-2026-07-31 12:59:37,689 | INFO |   data_report: 15991 records
-2026-07-31 12:59:37,851 | INFO |   annotation_report: 15991 records (31982 index keys)
-2026-07-31 12:59:37,853 | INFO |   biosample_report: 40 samples
-2026-07-31 12:59:37,853 | INFO | Parsing FASTA
-2026-07-31 12:59:38,132 | INFO |   genomic: 15991 sequences, protein: 15482 sequences
-2026-07-31 12:59:38,132 | INFO | Transforming accession records
-2026-07-31 12:59:39,123 | INFO |   15991 transformed, 0 failed
-2026-07-31 12:59:39,131 | INFO | Reservoir curation audit: all curated reservoirs agree with observed hosts
-2026-07-31 12:59:39,131 | INFO | Reconstructing isolates
-2026-07-31 12:59:39,403 | INFO |   9852 isolates, 223 complete triplets
-2026-07-31 12:59:39,403 | INFO | Clustering by k-mer distance (threshold 0.020)
-2026-07-31 12:59:42,475 | INFO | Computing per-segment divergence diagnostics
-2026-07-31 12:59:44,999 | INFO |   1706 assessable, 34 with taxonomic incongruence
-2026-07-31 12:59:44,999 | WARNING | Reassortment is NOT called by this pipeline. The k-mer classifier that used to do so failed validation against the literature (it ranked ANDV above PUUV, the exact inverse of reported frequencies) because the metric tracks within-species diversity and sample size, not tree topology. Assessable isolates are marked 'requires_phylogenetic_confirmation'; confirm candidates with MAFFT + IQ-TREE.
-2026-07-31 12:59:44,999 | INFO | Building ML tables
-2026-07-31 12:59:48,034 | INFO | Writing outputs
-2026-07-31 12:59:49,691 | INFO | Wrote 15991 rows x 55 cols to ortho_accession_table.parquet
-2026-07-31 12:59:49,771 | INFO | Wrote 39 rows x 32 cols to ortho_species_table.parquet
-2026-07-31 12:59:50,007 | INFO | Wrote 9852 rows x 52 cols to ortho_isolate_table.parquet
-2026-07-31 12:59:50,035 | INFO | Wrote 253 rows x 13 cols to ortho_host_table.parquet
-2026-07-31 12:59:50,075 | INFO | Wrote 9852 rows x 17 cols to ortho_segment_divergence.parquet
-2026-07-31 12:59:50,166 | INFO | Wrote 9852 rows x 31 cols to ortho_risk_table.parquet
-2026-07-31 12:59:50,515 | INFO | Wrote 7651 rows x 229 cols to ortho_ml_feature_matrix.parquet
-2026-07-31 12:59:50,608 | INFO | Wrote 15781 rows x 19 cols to ortho_ml_segments.parquet
-2026-07-31 12:59:50,638 | INFO | Wrote 1032 rows x 16 cols to ortho_suppressed.parquet
-2026-07-31 12:59:50,678 | INFO | Wrote 15991 rows x 11 cols to ortho_qc_report.parquet
-2026-07-31 12:59:50,753 | INFO | Done. 15991 accessions -> 39 species -> 9852 isolates (223 complete triplets)
-2026-07-31 12:59:50,753 | INFO | Skipping phylogenetics stage (pass --phylogenetics to run MAFFT + IQ-TREE reassortment analysis; requires both on PATH, see README)
+2026-08-01 15:55:29,605 | INFO | Orthohantavirus pipeline v2.0.0
+2026-08-01 15:55:29,606 | INFO | Package: /home/victorfrankestein/Documents/Orthohantavirus/all_hanta/ncbi_dataset/data
+2026-08-01 15:55:29,606 | INFO | Output : /home/victorfrankestein/Documents/Orthohantavirus/output
+2026-08-01 15:55:29,606 | INFO | Verifying package integrity against NCBI md5sum.txt
+2026-08-01 15:55:31,531 | INFO | Integrity: 7/7 files verified against NCBI md5sum.txt
+2026-08-01 15:55:31,532 | INFO | Loading reports
+2026-08-01 15:55:32,225 | INFO |   data_report: 15991 records
+2026-08-01 15:55:32,379 | INFO |   annotation_report: 15991 records (31982 index keys)
+2026-08-01 15:55:32,381 | INFO |   biosample_report: 40 samples
+2026-08-01 15:55:32,381 | INFO | Parsing FASTA
+2026-08-01 15:55:32,645 | INFO |   genomic: 15991 sequences, protein: 15482 sequences
+2026-08-01 15:55:32,645 | INFO | Transforming accession records
+2026-08-01 15:55:33,572 | INFO |   15991 transformed, 0 failed
+2026-08-01 15:55:33,581 | INFO | Reservoir curation audit: all curated reservoirs agree with observed hosts
+2026-08-01 15:55:33,582 | INFO | Reconstructing isolates
+2026-08-01 15:55:33,821 | INFO |   9852 isolates, 223 complete triplets
+2026-08-01 15:55:33,821 | INFO | Clustering by k-mer distance (threshold 0.020)
+2026-08-01 15:55:36,632 | INFO | Computing per-segment divergence diagnostics
+2026-08-01 15:55:39,022 | INFO |   1706 assessable, 34 with taxonomic incongruence
+2026-08-01 15:55:39,023 | WARNING | Reassortment is NOT called by this pipeline. The k-mer classifier that used to do so failed validation against the literature (it ranked ANDV above PUUV, the exact inverse of reported frequencies) because the metric tracks within-species diversity and sample size, not tree topology. Assessable isolates are marked 'requires_phylogenetic_confirmation'; confirm candidates with MAFFT + IQ-TREE.
+2026-08-01 15:55:39,023 | INFO | Building ML tables
+2026-08-01 15:55:41,710 | INFO | Writing outputs
+2026-08-01 15:55:42,664 | INFO | Wrote 15991 rows x 55 cols to ortho_accession_table.csv
+2026-08-01 15:55:42,908 | INFO | Wrote 39 rows x 32 cols to ortho_species_table.csv
+2026-08-01 15:55:43,316 | INFO | Wrote 9852 rows x 52 cols to ortho_isolate_table.csv
+2026-08-01 15:55:43,410 | INFO | Wrote 253 rows x 13 cols to ortho_host_table.csv
+2026-08-01 15:55:43,616 | INFO | Wrote 9852 rows x 17 cols to ortho_segment_divergence.csv
+2026-08-01 15:55:43,910 | INFO | Wrote 9852 rows x 31 cols to ortho_risk_table.csv
+2026-08-01 15:55:45,681 | INFO | Wrote 7651 rows x 229 cols to ortho_ml_feature_matrix.csv
+2026-08-01 15:55:45,919 | INFO | Wrote 15781 rows x 19 cols to ortho_ml_segments.csv
+2026-08-01 15:55:46,012 | INFO | Wrote 1032 rows x 16 cols to ortho_suppressed.csv
+2026-08-01 15:55:46,328 | INFO | Wrote 15991 rows x 11 cols to ortho_qc_report.csv
+2026-08-01 15:55:46,599 | INFO | Done. 15991 accessions -> 39 species -> 9852 isolates (223 complete triplets)
+2026-08-01 15:55:46,599 | INFO | Skipping phylogenetics stage (pass --phylogenetics to run MAFFT + IQ-TREE reassortment analysis; requires both on PATH, see README)

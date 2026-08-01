@@ -128,7 +128,7 @@ demarcation requires MSA + ML inference under WAG with a 0.ine/3-mer distance is
 
 What's done
 
-The full pipeline runs end-to-end, single-threaded by design (all_hanta.py:2732-2733, GIL-bound, no benefit from threads), producing 10 parquet
+The full pipeline runs end-to-end, single-threaded by design (all_hanta.py:2732-2733, GIL-bound, no benefit from threads), producing 10 CSV
 tables + 2 JSON artifacts. Current run (output/ortho_summar11:09:39Z):
 
 | Metric                                | Value                                              |
@@ -144,7 +144,7 @@ tables + 2 JSON artifacts. Current run (output/ortho_summar11:09:39Z):
 
 Note: these numbers differ slightly from the ones written ions, 222 triplets) — that's just NCBI's live dataset havinggrown between when the README was last regenerated and this run's download, not a pipeline discrepancy.
 
-Also confirmed in code: raw features (no leakage — scaling stats saved separately for in-fold fitting, build_ml_tables, all_hanta.py:2372-2381), unsupervised top-variance k-mer feature selection, group_ide CV, and a ortho_suppressed.parquet table that records whyevery non-representative accession was dropped (build_suppressed_rows, all_hanta.py:2487-2525) rather than silently discarding it.    
+Also confirmed in code: raw features (no leakage — scaling stats saved separately for in-fold fitting, build_ml_tables, all_hanta.py:2372-2381), unsupervised top-variance k-mer feature selection, group_ide CV, and a ortho_suppressed.csv table that records whyevery non-representative accession was dropped (build_suppressed_rows, all_hanta.py:2487-2525) rather than silently discarding it.    
 What should be studied more                                                                                                           
 - 210 unresolved segments, ~2,386 unclassified/genus-only records carrying no species-level risk label.                               - 1,719 records missing host, 3,703 missing collection dateidemiology.
 - Grouping tiers 4–5 almost never fire — strain is populated almost exclusively via BioSample (0.54% of records), so free-text strain from other fields could recover more triplets.
@@ -257,21 +257,21 @@ What does each file have?
 Here's what each output file is, with a real row from your data:
 
 One row per accession/segment (raw level)
-- ortho_accession_table.parquet — every individual GenBank accession, one row each. Ex: MW498184.1 → PUUV, segment M, partial completeness, host Myodes glareolus, Russia, 2019.
-- ortho_ml_segments.parquet — a slimmer version of the accession table, trimmed to just the columns useful for ML on individual segments (species, host, year, completeness) — same accession, fewer columns.
-- ortho_qc_report.parquet — QC pass/fail per accession. Ex: MW498184.1 → transform_ok: True, warnings: '' (empty = clean).
-- ortho_suppressed.parquet — accessions that got dropped from the main tables and why. Ex: an S-segment record excluded with suppression_reason: missing_host.
+- ortho_accession_table.csv — every individual GenBank accession, one row each. Ex: MW498184.1 → PUUV, segment M, partial completeness, host Myodes glareolus, Russia, 2019.
+- ortho_ml_segments.csv — a slimmer version of the accession table, trimmed to just the columns useful for ML on individual segments (species, host, year, completeness) — same accession, fewer columns.
+- ortho_qc_report.csv — QC pass/fail per accession. Ex: MW498184.1 → transform_ok: True, warnings: '' (empty = clean).
+- ortho_suppressed.csv — accessions that got dropped from the main tables and why. Ex: an S-segment record excluded with suppression_reason: missing_host.
 
 One row per isolate (S+M+L segments grouped into an animal/sample)
-- ortho_isolate_table.parquet — the core "biological unit" table: one row per isolate, with its S/M/L accessions joined together. Ex: isolate puuv kyzyl yulskoe... → S=MW504239.1, M=MW498184.1, L=MW498224.1, triplet_status: all_segments_present_not_all_complete.
-- ortho_ml_feature_matrix.parquet — the actual ML-ready tabmetadata columns plus 200+ kmer_XXX columns (amino-acid3-mer frequencies from the concatenated protein) as features, and label_pathogenicity_class etc. as targets.
-- ortho_segment_divergence.parquet — per-isolate k-mer dist possible reassortment candidates (not confirmed — just"worth checking"). Ex: s_kmer_distance, reassortment_status: not_assessable.
-- ortho_risk_table.parquet — per-isolate epidemiological ricase-fatality band, and a computedsurveillance_priority_score. Ex: an Andes virus isolate scores cfr_band_label: high_gt_30pct, priority 7.5.
-- ortho_reassortment_table.parquet — the opt-in phylogeneti ran --phylogenetics): actual tree-basedconfirmation/rejection of reassortment per isolate, with bootstrap support. Ex: reassortment_call: no_conflict.
+- ortho_isolate_table.csv — the core "biological unit" table: one row per isolate, with its S/M/L accessions joined together. Ex: isolate puuv kyzyl yulskoe... → S=MW504239.1, M=MW498184.1, L=MW498224.1, triplet_status: all_segments_present_not_all_complete.
+- ortho_ml_feature_matrix.csv — the actual ML-ready tabmetadata columns plus 200+ kmer_XXX columns (amino-acid3-mer frequencies from the concatenated protein) as features, and label_pathogenicity_class etc. as targets.
+- ortho_segment_divergence.csv — per-isolate k-mer dist possible reassortment candidates (not confirmed — just"worth checking"). Ex: s_kmer_distance, reassortment_status: not_assessable.
+- ortho_risk_table.csv — per-isolate epidemiological ricase-fatality band, and a computedsurveillance_priority_score. Ex: an Andes virus isolate scores cfr_band_label: high_gt_30pct, priority 7.5.
+- ortho_reassortment_table.csv — the opt-in phylogeneti ran --phylogenetics): actual tree-basedconfirmation/rejection of reassortment per isolate, with bootstrap support. Ex: reassortment_call: no_conflict.
 
 Rollups
-- ortho_species_table.parquet — one row per virus species, 2567 isolates, top host Myodes glareolus, cfr_band_label:low_lt_1pct.
-- ortho_host_table.parquet — one row per host organism, agg → 2652 accessions across 1655 isolates, mostly PUUV.
+- ortho_species_table.csv — one row per virus species, 2567 isolates, top host Myodes glareolus, cfr_band_label:low_lt_1pct.
+- ortho_host_table.csv — one row per host organism, agg → 2652 accessions across 1655 isolates, mostly PUUV.
 
 Rule of thumb: accession-level tables = "what NCBI gave us,evel tables = "what animal/sample this actually came from,segments merged"; species/host tables = "summary stats"; risk/divergence/reassortment = "derived scientific judgments on top of the isolate table."
 

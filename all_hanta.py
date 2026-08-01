@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import io
 import json
 import logging
 import os
@@ -829,12 +828,10 @@ def _atomic_write_bytes(path: Path, data: bytes) -> None:
         raise
 
 
-def safe_write_parquet(path: Path, rows: Sequence[Dict[str, Any]]) -> str:
-    """Write a parquet table atomically; returns its sha256 for the output checksum manifest."""
+def safe_write_csv(path: Path, rows: Sequence[Dict[str, Any]]) -> str:
+    """Write a CSV table atomically; returns its sha256 for the output checksum manifest."""
     frame = pd.DataFrame(list(rows)) if rows else pd.DataFrame()
-    buffer = io.BytesIO()
-    frame.to_parquet(buffer, engine="pyarrow", index=False)
-    data = buffer.getvalue()
+    data = frame.to_csv(index=False).encode("utf-8")
     _atomic_write_bytes(path, data)
     logging.info("Wrote %s rows x %s cols to %s", len(frame), len(frame.columns), path.name)
     return hashlib.sha256(data).hexdigest()
@@ -2482,8 +2479,8 @@ def classify_reassortment_call(row: Dict[str, Any], m_tree: Any, min_bootstrap_s
 def _phylo_row(candidate: PhyloCandidate, species: str, n_taxa_in_tree: int,
               status: str, error: str) -> Dict[str, Any]:
     """Default (not-yet-analyzed / failed) row shape. Every field a successful analysis
-    fills in is declared here too, so ortho_reassortment_table.parquet has one stable
-    schema regardless of status -- required for a clean, joinable parquet.
+    fills in is declared here too, so ortho_reassortment_table.csv has one stable
+    schema regardless of status -- required for a clean, joinable table.
     """
     return {
         "isolate_key": candidate.isolate.isolate_key,
@@ -3362,22 +3359,22 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
     logging.info("Writing outputs")
     output_digests: Dict[str, str] = {}
 
-    def write_parquet(name: str, rows: Sequence[Dict[str, Any]]) -> None:
-        output_digests[name] = safe_write_parquet(out / name, rows)
+    def write_csv(name: str, rows: Sequence[Dict[str, Any]]) -> None:
+        output_digests[name] = safe_write_csv(out / name, rows)
 
     def write_json(name: str, payload: Any) -> None:
         output_digests[name] = safe_write_json(out / name, payload)
 
-    write_parquet("ortho_accession_table.parquet", build_accession_rows(accessions))
-    write_parquet("ortho_species_table.parquet", build_species_rows(accessions, isolates))
-    write_parquet("ortho_isolate_table.parquet", build_isolate_rows(isolates, divergence_by_key))
-    write_parquet("ortho_host_table.parquet", build_host_rows(accessions, isolates))
-    write_parquet("ortho_segment_divergence.parquet", build_segment_divergence_rows(divergence))
-    write_parquet("ortho_risk_table.parquet", build_risk_rows(isolates, divergence_by_key))
-    write_parquet("ortho_ml_feature_matrix.parquet", ml_rows)
-    write_parquet("ortho_ml_segments.parquet", build_ml_segment_rows(accessions))
-    write_parquet("ortho_suppressed.parquet", build_suppressed_rows(accessions, isolates))
-    write_parquet("ortho_qc_report.parquet", qc_rows)
+    write_csv("ortho_accession_table.csv", build_accession_rows(accessions))
+    write_csv("ortho_species_table.csv", build_species_rows(accessions, isolates))
+    write_csv("ortho_isolate_table.csv", build_isolate_rows(isolates, divergence_by_key))
+    write_csv("ortho_host_table.csv", build_host_rows(accessions, isolates))
+    write_csv("ortho_segment_divergence.csv", build_segment_divergence_rows(divergence))
+    write_csv("ortho_risk_table.csv", build_risk_rows(isolates, divergence_by_key))
+    write_csv("ortho_ml_feature_matrix.csv", ml_rows)
+    write_csv("ortho_ml_segments.csv", build_ml_segment_rows(accessions))
+    write_csv("ortho_suppressed.csv", build_suppressed_rows(accessions, isolates))
+    write_csv("ortho_qc_report.csv", qc_rows)
     write_json("ortho_feature_scaling.json", scaling)
 
     summary = summarize(accessions, isolates, divergence, qc_rows, checksums,
@@ -3402,7 +3399,7 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
     # them: a missing mafft/iqtree/biopython/dendropy dependency, or any bug in the
     # phylogenetics stage, must never cost the run its core tables (all_hanta.py had this
     # block *before* "Writing outputs" until a code review caught it -- moved here and
-    # wrapped so the opt-in stage can only ever add ortho_reassortment_table.parquet, never
+    # wrapped so the opt-in stage can only ever add ortho_reassortment_table.csv, never
     # take anything else away).
     if args.phylogenetics:
         logging.info("Phylogenetics stage requested (--phylogenetics)")
@@ -3410,7 +3407,7 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
             cds_index = parse_cds_fasta(paths.cds_fasta)
             logging.info("  cds: %s accessions with at least one CDS", len(cds_index))
             phylo_rows = run_phylogenetics_stage(isolates, divergence_by_key, cds_index, out, args)
-            write_parquet("ortho_reassortment_table.parquet", phylo_rows)
+            write_csv("ortho_reassortment_table.csv", phylo_rows)
             write_output_checksums(out / "ortho_output_checksums.txt", output_digests)
         except (Exception, SystemExit) as exc:  # noqa: BLE001 - core outputs above are already safe
             logging.error("Phylogenetics stage failed; core outputs above are unaffected: %s", exc)

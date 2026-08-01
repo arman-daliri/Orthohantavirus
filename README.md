@@ -211,7 +211,7 @@ pathogenicity-prediction task discarded real positive evidence of human/reservoi
 study comparing human-derived and reservoir Orthohantavirus sequences for zoonotic-risk assessment
 found the human sequences are themselves the spillover-risk baseline, not noise to remove
 (<https://microbiomejournal.biomedcentral.com/articles/10.1186/s40168-025-02059-0>).
-`ortho_ml_feature_matrix.parquet` carries an `is_lab_derived` column so a model can be trained
+`ortho_ml_feature_matrix.csv` carries an `is_lab_derived` column so a model can be trained
 with or without them and compared, rather than losing the isolates outright.
 
 **Vaccine strains remain excluded from the ML matrix.** A vaccine strain is deliberately
@@ -282,7 +282,7 @@ represented by many near-identical outbreak sequences get stable neighbour order
 flags; species represented by a handful of divergent, scattered sequences get noisy orderings and
 many flags. CHOV at 100% with n=8 is the clearest symptom.
 
-What is emitted instead, in `ortho_segment_divergence.parquet`, is the honest underlying
+What is emitted instead, in `ortho_segment_divergence.csv`, is the honest underlying
 measurement — per-segment nearest neighbours, k-mer distances, and normalized rank separations
 (`sl_rank_separation`, `m_rank_offset`) — with every assessable isolate marked
 `requires_phylogenetic_confirmation`.
@@ -344,7 +344,7 @@ the shared taxon set — an overall measure of how much the three trees disagree
 any single isolate's placement.
 
 **Nothing is silently dropped.** Every candidate isolate appears exactly once in
-`ortho_reassortment_table.parquet`, `phylo_status` one of `analyzed` / `failed` (with the specific
+`ortho_reassortment_table.csv`, `phylo_status` one of `analyzed` / `failed` (with the specific
 MAFFT/IQ-TREE error) / `species_below_min_taxa` — a species/segment failure never aborts the run,
 it just marks that species' isolates `failed` and moves on, the same per-unit error isolation
 `transform_one_record` uses for accessions. Alignments and trees are written under
@@ -367,20 +367,26 @@ maximum-likelihood inference. These clusters are an alignment-free proxy and are
 
 | File | Rows × Cols | Contents |
 |---|---|---|
-| `ortho_accession_table.parquet` | 15,991 × 55 | One row per accession: taxonomy ranks, segment, completeness, host, pathogenicity, host-jump status, QC flags |
-| `ortho_species_table.parquet` | 39 × 32 | One row per canonical ICTV species: merged taxids, legacy synonyms, risk profile, segment and host counts |
-| `ortho_isolate_table.parquet` | 9,904 × 52 | Reconstructed isolates with S/M/L representatives, triplet status, concatenated protein, divergence diagnostics |
-| `ortho_host_table.parquet` | 253 × 13 | One row per host taxon with risk prior and virus species carried |
-| `ortho_risk_table.parquet` | 9,904 × 31 | Pathogenicity class, CFR band, citation, and an auditable additive `surveillance_priority_score` |
-| `ortho_segment_divergence.parquet` | 9,904 × 17 | Per-segment nearest neighbours and rank separations — **diagnostics, not reassortment calls** |
-| `ortho_ml_feature_matrix.parquet` | 7,529 × 228 | Raw features + labels, with `group_id` and `year` for leakage-free CV |
-| `ortho_ml_segments.parquet` | 15,781 × 19 | Segment-level table for per-segment models |
-| `ortho_suppressed.parquet` | 1,021 × 16 | Non-representative accessions with the reason |
-| `ortho_qc_report.parquet` | 15,991 × 11 | Per-accession QC including failed transforms with traceback |
+| `ortho_accession_table.csv` | 15,991 × 55 | One row per accession: taxonomy ranks, segment, completeness, host, pathogenicity, host-jump status, QC flags |
+| `ortho_species_table.csv` | 39 × 32 | One row per canonical ICTV species: merged taxids, legacy synonyms, risk profile, segment and host counts |
+| `ortho_isolate_table.csv` | 9,852 × 52 | Reconstructed isolates with S/M/L representatives, triplet status, concatenated protein, divergence diagnostics |
+| `ortho_host_table.csv` | 253 × 13 | One row per host taxon with risk prior and virus species carried |
+| `ortho_risk_table.csv` | 9,852 × 31 | Pathogenicity class, CFR band, citation, and an auditable additive `surveillance_priority_score` |
+| `ortho_segment_divergence.csv` | 9,852 × 17 | Per-segment nearest neighbours and rank separations — **diagnostics, not reassortment calls** |
+| `ortho_ml_feature_matrix.csv` | 7,651 × 229 | Raw features + labels, with `group_id` and `year` for leakage-free CV |
+| `ortho_ml_segments.csv` | 15,781 × 19 | Segment-level table for per-segment models |
+| `ortho_suppressed.csv` | 1,032 × 16 | Non-representative accessions with the reason |
+| `ortho_qc_report.csv` | 15,991 × 11 | Per-accession QC including failed transforms with traceback |
 | `ortho_feature_scaling.json` | — | Per-feature mean/std, to be fitted **inside** your CV fold |
 | `ortho_summary.json` | — | Provenance, integrity results, counts, methods and stated limitations |
-| `ortho_reassortment_table.parquet` *(`--phylogenetics` only)* | one row per candidate isolate | Real per-segment tree diagnostics, RF distances, bootstrap-gated `reassortment_call` |
+| `ortho_reassortment_table.csv` *(`--phylogenetics` only)* | one row per candidate isolate | Real per-segment tree diagnostics, RF distances, bootstrap-gated `reassortment_call` |
 | `phylogenetics/<species>/<segment>/` *(`--phylogenetics` only)* | — | MAFFT alignment + IQ-TREE outputs per species/segment, for inspection or reuse |
+
+All tables are plain CSV (UTF-8, LF line endings). `species_taxid`, `observed_taxid`, `host_taxid`
+and `year` are all-digit strings by design (they are identifiers, not quantities, and some rows
+leave them blank) — a bare `pd.read_csv(...)` will infer them as numeric and either error on the
+blank rows or silently turn them into floats. Read these columns with `dtype=str` if you need them
+back as they were written.
 
 ### Risk score
 

@@ -1,6 +1,6 @@
 {
   "pipeline_version": "2.0.0",
-  "generated_at_utc": "2026-07-31T08:59:50Z",
+  "generated_at_utc": "2026-08-01T11:55:46Z",
   "dataset_catalog_api_version": "V2",
   "integrity": {
     "model": "verified against NCBI's published md5sum.txt (file level) and nucleotide.sequenceHash / CRC32 (content level)",
