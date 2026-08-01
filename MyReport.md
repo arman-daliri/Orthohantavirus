@@ -248,3 +248,31 @@ Complete Triplet (1.0 point): Added if the isolate contains all three segments (
 NSs ORF (0.5 points): A small bonus if the virus encodes the non-structural protein (NSs), which is a known virulence factor in certain species.
 
 </details>
+
+### FAQ #8:
+What does each file have?
+
+<details>
+<summary><strong>Claude:</strong></summary>
+Here's what each output file is, with a real row from your data:
+
+One row per accession/segment (raw level)
+- ortho_accession_table.parquet — every individual GenBank accession, one row each. Ex: MW498184.1 → PUUV, segment M, partial completeness, host Myodes glareolus, Russia, 2019.
+- ortho_ml_segments.parquet — a slimmer version of the accession table, trimmed to just the columns useful for ML on individual segments (species, host, year, completeness) — same accession, fewer columns.
+- ortho_qc_report.parquet — QC pass/fail per accession. Ex: MW498184.1 → transform_ok: True, warnings: '' (empty = clean).
+- ortho_suppressed.parquet — accessions that got dropped from the main tables and why. Ex: an S-segment record excluded with suppression_reason: missing_host.
+
+One row per isolate (S+M+L segments grouped into an animal/sample)
+- ortho_isolate_table.parquet — the core "biological unit" table: one row per isolate, with its S/M/L accessions joined together. Ex: isolate puuv kyzyl yulskoe... → S=MW504239.1, M=MW498184.1, L=MW498224.1, triplet_status: all_segments_present_not_all_complete.
+- ortho_ml_feature_matrix.parquet — the actual ML-ready tabmetadata columns plus 200+ kmer_XXX columns (amino-acid3-mer frequencies from the concatenated protein) as features, and label_pathogenicity_class etc. as targets.
+- ortho_segment_divergence.parquet — per-isolate k-mer dist possible reassortment candidates (not confirmed — just"worth checking"). Ex: s_kmer_distance, reassortment_status: not_assessable.
+- ortho_risk_table.parquet — per-isolate epidemiological ricase-fatality band, and a computedsurveillance_priority_score. Ex: an Andes virus isolate scores cfr_band_label: high_gt_30pct, priority 7.5.
+- ortho_reassortment_table.parquet — the opt-in phylogeneti ran --phylogenetics): actual tree-basedconfirmation/rejection of reassortment per isolate, with bootstrap support. Ex: reassortment_call: no_conflict.
+
+Rollups
+- ortho_species_table.parquet — one row per virus species, 2567 isolates, top host Myodes glareolus, cfr_band_label:low_lt_1pct.
+- ortho_host_table.parquet — one row per host organism, agg → 2652 accessions across 1655 isolates, mostly PUUV.
+
+Rule of thumb: accession-level tables = "what NCBI gave us,evel tables = "what animal/sample this actually came from,segments merged"; species/host tables = "summary stats"; risk/divergence/reassortment = "derived scientific judgments on top of the isolate table."
+
+</details>
