@@ -386,6 +386,76 @@ def audit_reservoir_curation(accessions: Sequence["AccessionRecord"]) -> List[Di
                 "modal_observed_host": f"{mode(hosts[species])} ({modal})"})
     return findings
 
+
+# Reservoir-host phylogroup, one level finer than RESERVOIR_GENUS_ORDER's taxonomic
+# order. Used to group candidate isolates for tree-building at scope="phylogroup" (see
+# group_candidates): a species-only tree cannot show reassortment acquired from a
+# DIFFERENT species, because the donor segment has no possible match in a single-species
+# tree (Laenen et al. 2019, 10.3390/v11090788, on interspecies exchange in hantavirid
+# evolution). Grouping by phylogroup instead of raw host order keeps groups small enough
+# to be biologically meaningful -- "all Rodentia" would still merge Old World murine and
+# New World sigmodontine reservoirs that share no recent common ancestor among the
+# reservoir hosts, even though their viruses are all nominally "rodent-borne".
+#
+# Subfamily split is standard rodent taxonomy (Wilson & Reeder, Mammal Species of the
+# World, 3rd ed., 2005), not something specific to this dataset or citable to a single
+# hantavirus paper -- textbook classification, applied here rather than re-derived.
+GENUS_PHYLOGROUP = {
+    # Murinae (Old World rats and mice)
+    "Apodemus": "murinae_borne", "Rattus": "murinae_borne", "Bandicota": "murinae_borne",
+    "Hylomyscus": "murinae_borne", "Niviventer": "murinae_borne", "Mus": "murinae_borne",
+    "Stenocephalemys": "murinae_borne",
+    # Arvicolinae (voles, lemmings and relatives)
+    "Myodes": "arvicolinae_borne", "Microtus": "arvicolinae_borne",
+    "Alexandromys": "arvicolinae_borne", "Eothenomys": "arvicolinae_borne",
+    # Sigmodontinae (New World rats and mice -- the HCPS reservoirs)
+    "Oligoryzomys": "sigmodontinae_borne", "Peromyscus": "sigmodontinae_borne",
+    "Calomys": "sigmodontinae_borne", "Oryzomys": "sigmodontinae_borne",
+    "Sigmodon": "sigmodontinae_borne", "Reithrodontomys": "sigmodontinae_borne",
+    # Eulipotyphla (shrews and moles). One phylogroup for the whole order, unlike
+    # Rodentia's three-way subfamily split: every Eulipotyphla genus in this dataset is
+    # shrew- or mole-borne with no pathogenic representative, so a finer split would add
+    # groups without adding a distinction the risk/reassortment analysis uses.
+    "Crocidura": "soricomorpha_borne", "Anourosorex": "soricomorpha_borne",
+    "Talpa": "soricomorpha_borne", "Urotrichus": "soricomorpha_borne",
+    "Scalopus": "soricomorpha_borne", "Sorex": "soricomorpha_borne",
+    "Episoriculus": "soricomorpha_borne", "Suncus": "soricomorpha_borne",
+    "Soriculus": "soricomorpha_borne", "Chodsigoa": "soricomorpha_borne",
+}
+
+# species_name -> phylogroup, derived from SPECIES_RISK's curated reservoir genus rather
+# than hand-duplicated, so the two tables cannot drift the way SPECIES_RISK and
+# RESERVOIR_GENUS_ORDER already once did (see audit_reservoir_curation). A species whose
+# reservoir genus isn't in GENUS_PHYLOGROUP falls to 'unassigned' rather than guessing --
+# none currently do (every SPECIES_RISK reservoir genus is covered above), but a future
+# SPECIES_RISK entry with an uncovered genus should surface as 'unassigned', not silently
+# join the wrong group. No species maps to 'chiroptera_borne' via this route: no curated
+# reservoir in SPECIES_RISK is bat-borne. It stays a valid phylogroup for Task 3's
+# host-order-based fallback, where unclassified isolates observed in bat hosts need
+# somewhere to go.
+PHYLOGROUP: Dict[str, str] = {
+    species: GENUS_PHYLOGROUP.get(entry["reservoir"].split()[0], "unassigned")
+    for species, entry in SPECIES_RISK.items()
+}
+
+# Host-order fallback for isolates PHYLOGROUP can't place -- species not yet formally
+# named or classified (species_status != 'classified'), which have no curated reservoir
+# to look up. Only usable where a WHOLE taxonomic order maps to one phylogroup: every
+# Eulipotyphla genus in GENUS_PHYLOGROUP is soricomorpha_borne, so an unclassified
+# isolate observed in any shrew or mole is unambiguous even without a species-level
+# identification. Chiroptera is included for the same reason, even though no curated
+# SPECIES_RISK reservoir is bat-borne -- this fallback is the only route into
+# chiroptera_borne. Rodentia is deliberately absent: it spans Murinae, Arvicolinae and
+# Sigmodontinae (three different phylogroups) all at once, so the order alone can't
+# pick one -- see _phylogroup_for_isolate.
+HOST_ORDER_PHYLOGROUP_FALLBACK = {
+    "Eulipotyphla": "soricomorpha_borne",
+    "Soricomorpha": "soricomorpha_borne",
+    "Insectivora": "soricomorpha_borne",
+    "Chiroptera": "chiroptera_borne",
+}
+
+
 # Single source of truth for the mammalian orders this dataset contains: the host role
 # each implies, and the baseline human-risk prior. Shrew (Eulipotyphla), mole and bat
 # borne hantaviruses are regarded as non-pathogenic to humans (PMC10459939).
@@ -437,6 +507,13 @@ SURVEILLANCE_WEIGHTS = {
     "host_jump": 1.0,
     "complete_triplet": 1.0,
     "nss_orf": 0.5,
+    # Provisional -- not fitted to anything, chosen to sit below taxonomic_incongruence
+    # (1.5, a metadata FACT) and above complete_triplet (1.0), since bootstrap-supported
+    # tree-topology evidence is a real inference but a noisier one than a fact NCBI itself
+    # recorded. Only contributes for reassortment_call == 'supported_reassortment_candidate'
+    # -- see surveillance_priority. Re-tune once enough --phylogenetics runs exist to know
+    # how often this term actually fires.
+    "supported_reassortment": 1.5,
 }
 
 # Reassortment frequency reported in the literature, used only as a prior for reporting
@@ -1948,6 +2025,47 @@ def _sl_m_rank_metrics(
     return max(s_pos_l, l_pos_s), min(s_pos_m, l_pos_m)
 
 
+def _segment_rank_metrics(
+    position: Dict[str, Any], span: int, index: int, nn: Dict[str, int],
+) -> Dict[str, float]:
+    """Three-segment generalization of _sl_m_rank_metrics, used only by the tree-distance
+    path (tree_divergence_for_species). _sl_m_rank_metrics itself is untouched and still
+    backs compute_segment_divergence's k-mer diagnostics.
+
+    offset[X] -- how poorly X's own nearest-neighbour pick (nn[X]) ranks in the OTHER two
+    segments' orderings, taking the more favourable (min) of the two. High offset[X] means
+    X disagrees with both other segments about who is close to this isolate: "X is the odd
+    one out". This is _sl_m_rank_metrics's m_rank_offset, generalized from X=M to any
+    segment -- for X="M" it is the same value by construction (min over the other two,
+    which are S and L either way).
+
+    separation[Y,Z] -- how far apart Y and Z's own nearest-neighbour picks land in each
+    other's ordering (the worse of the two directions). High separation[Y,Z] means Y and Z
+    don't even agree with each other about who is close to this isolate. This is
+    _sl_m_rank_metrics's sl_rank_separation, generalized from the fixed (S, L) pair to any
+    pair -- for (Y, Z)=(S, L) it is the same value by construction.
+    """
+    segments = ("S", "M", "L")
+    # rank[(other, seg)]: seg's own nearest-neighbour pick, looked up in other's ordering.
+    rank = {(other, seg): float(position[other][index, nn[seg]]) / span
+            for other in segments for seg in segments if other != seg}
+    offset = {seg: min(rank[(other, seg)] for other in segments if other != seg)
+              for seg in segments}
+    separation = {
+        "sm": max(rank[("M", "S")], rank[("S", "M")]),
+        "sl": max(rank[("L", "S")], rank[("S", "L")]),
+        "ml": max(rank[("L", "M")], rank[("M", "L")]),
+    }
+    return {
+        "tree_s_rank_offset": offset["S"],
+        "tree_m_rank_offset": offset["M"],
+        "tree_l_rank_offset": offset["L"],
+        "tree_sm_rank_separation": separation["sm"],
+        "tree_sl_rank_separation": separation["sl"],
+        "tree_ml_rank_separation": separation["ml"],
+    }
+
+
 def compute_segment_divergence(
     isolates: Sequence[IsolateRecord],
     min_species_size: int = 8,
@@ -2123,6 +2241,7 @@ def surveillance_priority(
     isolate: IsolateRecord,
     risk: Dict[str, Any],
     profile: Optional[SegmentDivergenceProfile],
+    phylo_call: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Transparent additive priority score.
 
@@ -2130,11 +2249,25 @@ def surveillance_priority(
     or re-weighted downstream. This is a triage aid for surveillance, not a validated
     epidemiological risk model.
 
-    Note: no term is derived from the k-mer segment-divergence diagnostics. An earlier
-    version weighted them as reassortment evidence; that classifier failed validation
-    against the literature (see compute_segment_divergence) and feeding it into a risk
-    score would have propagated an artefact of sample size into a ranking meant to guide
-    surveillance. Only taxonomic_incongruence -- a metadata fact -- contributes.
+    Two different kinds of reassortment evidence exist in this pipeline, and only one of
+    them contributes here:
+
+    - The k-mer segment-divergence diagnostics (compute_segment_divergence, `profile`
+      here) do NOT contribute a term, and never will under this function. An earlier
+      version weighted them as reassortment evidence; that classifier failed validation
+      against the literature and feeding it into a risk score would have propagated an
+      artefact of sample size into a ranking meant to guide surveillance.
+    - `phylo_call`, the bootstrap-gated tree-topology call from --phylogenetics
+      (classify_reassortment_call), is a different kind of evidence -- real per-segment
+      alignments and maximum-likelihood trees, gated on ultrafast-bootstrap support
+      specifically so an unsupported pattern is never reported as a finding. That
+      reasoning doesn't disqualify it the way it disqualified the k-mer diagnostics; it's
+      the reason to trust it. Only 'supported_reassortment_candidate' contributes --
+      never 'weak_signal_low_bootstrap_support' or 'no_conflict', and never at all when
+      --phylogenetics wasn't run (phylo_call is None, the default).
+
+    taxonomic_incongruence -- a metadata fact, not an inference -- has always contributed
+    and still does, independent of either kind of reassortment evidence above.
     """
     weights = SURVEILLANCE_WEIGHTS
     cfr_term = weights["cfr_by_band"].get(int(risk["cfr_band"]), 0.5)
@@ -2144,8 +2277,9 @@ def surveillance_priority(
         isolate.host_order, risk["reservoir_order"]) == "host_order_mismatch" else 0.0
     completeness_term = weights["complete_triplet"] if isolate.has_complete_triplet else 0.0
     nss_term = weights["nss_orf"] if isolate.has_nss_orf else 0.0
+    reassortment_term = weights["supported_reassortment"] if phylo_call == "supported_reassortment_candidate" else 0.0
     total = (cfr_term + spillover_term + incongruence_term + jump_term
-             + completeness_term + nss_term)
+             + completeness_term + nss_term + reassortment_term)
     return {
         "priority_cfr_term": cfr_term,
         "priority_human_spillover_term": spillover_term,
@@ -2153,6 +2287,7 @@ def surveillance_priority(
         "priority_host_jump_term": jump_term,
         "priority_triplet_term": completeness_term,
         "priority_nss_term": nss_term,
+        "priority_reassortment_term": reassortment_term,
         "surveillance_priority_score": round(total, 3),
     }
 
@@ -2172,8 +2307,16 @@ def surveillance_priority(
 # --mafft-bin/--iqtree-bin), and Biopython + dendropy (imported lazily below so a
 # default run never needs them). It only ever touches the three named candidate groups
 # -- human-affecting-or-likely, divergence candidates, complete triplets -- and every
-# candidate isolate is reported exactly once in the output table, tagged with why it was
-# selected and, if analysis didn't happen, why not. Nothing is silently dropped.
+# candidate isolate is reported exactly once PER REQUESTED SCOPE (--phylo-scope) in the
+# output table, tagged with why it was selected and, if analysis didn't happen, why not.
+# Nothing is silently dropped. Species-only trees (scope='species') can only ever show
+# reassortment WITHIN a species, because a segment acquired from a different species has
+# no possible donor in a single-species tree; phylogroup trees (scope='phylogroup') group
+# candidates by reservoir-host phylogroup (PHYLOGROUP) instead, spanning every species
+# that shares one, so interspecies exchange has somewhere to show up (Laenen et al. 2019,
+# 10.3390/v11090788). --phylo-scope=both (the default) runs both, so a candidate can
+# appear up to twice, once per scope, distinguished by the analysis_scope column -- the
+# old "reported exactly once, full stop" invariant now applies per scope.
 #
 # Setup:
 #   conda create -n hanta_phylo -c bioconda -c conda-forge mafft iqtree biopython dendropy
@@ -2185,14 +2328,26 @@ HUMAN_AFFECTING_CLASSES = {"pathogenic_hcps", "pathogenic_hfrs", "rare_or_opport
 # a floor against corrupt/truncated annotations, not a completeness filter.
 MIN_CDS_LENGTH = 100
 
-# Rank-separation thresholds for classify_reassortment_call. sl_rank_separation asks
-# "do the S and L trees still agree on this isolate's neighbourhood" (should be LOW --
-# S and L cosegregate per PMC6153690); m_rank_offset asks "is the M tree's answer
-# different from S/L's" (should be HIGH for a genuine M-segment reassortant). Neither
-# threshold is fitted to this data -- they mark the qualitative pattern the literature
-# describes, and every candidate above them still has to clear the bootstrap gate below.
-M_OFFSET_HIGH = 0.5
-SL_SEPARATION_LOW = 0.35
+# Rank-separation thresholds for classify_reassortment_call. Not M-specific: any segment
+# can be the odd one out (Park et al. 2025, PLOS NTD 10.1371/journal.pntd.0012859, report
+# the same pattern in HTNV's L segment). PAIR_SEPARATION_LOW asks "do the two segments
+# NOT under suspicion still agree with each other's neighbourhood" (should be LOW);
+# SEGMENT_OFFSET_HIGH asks "is the suspect segment's answer different from the other
+# two's" (should be HIGH for a genuine reassortant). Neither threshold is fitted to this
+# data -- they mark the qualitative pattern the literature describes (M-segment exchange
+# with S/L cosegregation, per PMC6153690, is the most-reported instance of it, not the
+# only possible one), and every candidate above them still has to clear the bootstrap
+# gate below.
+SEGMENT_OFFSET_HIGH = 0.5
+PAIR_SEPARATION_LOW = 0.35
+
+# Which pairwise separation column gates a given segment's candidacy as the odd one out:
+# if M is the suspect, S and L are the segments that must still agree with each other.
+OTHER_PAIR_SEPARATION_COLUMN = {
+    "S": "tree_ml_rank_separation",
+    "M": "tree_sl_rank_separation",
+    "L": "tree_sm_rank_separation",
+}
 
 
 def is_human_affecting_or_likely(pathogenicity_class: str, host_role: str) -> bool:
@@ -2258,6 +2413,7 @@ def collect_phylo_candidates(
     isolates: Sequence[IsolateRecord],
     divergence_by_key: Dict[str, SegmentDivergenceProfile],
     cds_index: Dict[str, List[Tuple[str, str]]],
+    scope: str,
 ) -> Tuple[List[PhyloCandidate], Counter]:
     """Extract the three named candidate groups and require full S+M+L CDS for each.
 
@@ -2275,6 +2431,24 @@ def collect_phylo_candidates(
     isolates (flagged, not filtered) because the ML task doesn't depend on branch
     lengths, and blanket-excluding them there discarded real pathogenicity signal (see
     its docstring). Only is_vaccine_strain is excluded from both stages.
+
+    ``scope`` governs how unclassified isolates (species_status != 'classified') are
+    treated -- this function is called once per requested --phylo-scope, not once total,
+    specifically so the two scopes can disagree here:
+
+    scope='species': excluded outright, same as before scope existed. 'unclassified
+    Orthohantavirus' and genus-only records are a catch-all bucket, not one coherent
+    taxon -- pooling them under species_name would build a tree across genuinely
+    different, unrelated lineages that just happen to share a placeholder label.
+
+    scope='phylogroup': admitted if _phylogroup_for_isolate can place them by observed
+    host order (see HOST_ORDER_PHYLOGROUP_FALLBACK). These are exactly the novel and
+    divergent lineages -- unnamed species, genus-only records -- most relevant to
+    emergence, and species-scope's blanket exclusion meant they never entered a tree at
+    all, on EITHER scope, even though pooling by phylogroup rather than by species name
+    doesn't have the "unrelated lineages sharing a label" problem. An isolate that still
+    can't be placed (host order not in HOST_ORDER_PHYLOGROUP_FALLBACK, or absent) is
+    excluded with its own reason, same as every other exclusion here.
     """
     exclusions: Counter = Counter()
     candidates: List[PhyloCandidate] = []
@@ -2283,12 +2457,15 @@ def collect_phylo_candidates(
             exclusions["lab_or_vaccine_excluded"] += 1
             continue
         if isolate.species_status != "classified":
-            # 'unclassified Orthohantavirus' and genus-only records are a catch-all
-            # bucket, not one coherent taxon -- pooling them under species_name would
-            # build a tree across genuinely different, unrelated lineages that just
-            # happen to share a placeholder label.
-            exclusions["species_not_classified"] += 1
-            continue
+            if scope == "species":
+                exclusions["species_not_classified"] += 1
+                continue
+            _, basis = _phylogroup_for_isolate(isolate)
+            if basis == "unassigned":
+                exclusions["species_not_classified_and_no_resolvable_phylogroup"] += 1
+                continue
+            # else: basis == 'observed_host_order' -- admitted, falls through below
+            # exactly like a classified isolate.
 
         risk = species_risk_profile(isolate.species_name)
         tags: List[str] = []
@@ -2319,28 +2496,103 @@ def collect_phylo_candidates(
     return candidates, exclusions
 
 
-def group_candidates_by_species(
-    candidates: Sequence[PhyloCandidate], min_taxa: int,
+def _phylogroup_for_isolate(isolate: IsolateRecord) -> Tuple[str, str]:
+    """Phylogroup and assignment basis for one isolate at scope='phylogroup'.
+
+    Classified species use the curated PHYLOGROUP lookup (basis='curated_reservoir') --
+    every SPECIES_RISK entry resolves here, so this branch never falls through to
+    'unassigned' for a classified isolate.
+
+    Unclassified isolates (species_status != 'classified') have no curated reservoir to
+    look up, so they fall back to their own OBSERVED host order
+    (basis='observed_host_order'). That fallback only resolves an order that maps
+    entirely to one phylogroup in this dataset -- true for Eulipotyphla (shrews/moles,
+    all soricomorpha_borne) and Chiroptera (bats, all chiroptera_borne), see
+    HOST_ORDER_PHYLOGROUP_FALLBACK -- but NOT for Rodentia, which spans Murinae,
+    Arvicolinae and Sigmodontinae all at once. A Rodentia-hosted (or host-unknown)
+    unclassified isolate therefore has no fallback and stays 'unassigned': host order
+    alone cannot tell which rodent subfamily it belongs to, and guessing one would
+    misrepresent where the isolate actually sits, which is worse than excluding it.
+    """
+    curated = PHYLOGROUP.get(isolate.species_name)
+    if curated is not None:
+        return curated, "curated_reservoir"
+    fallback = HOST_ORDER_PHYLOGROUP_FALLBACK.get(isolate.host_order)
+    if fallback is not None:
+        return fallback, "observed_host_order"
+    return "unassigned", "unassigned"
+
+
+def _phylogroup_for_candidate(candidate: PhyloCandidate) -> Tuple[str, str]:
+    return _phylogroup_for_isolate(candidate.isolate)
+
+
+def _assignment_basis(candidate: PhyloCandidate, scope: str) -> str:
+    """phylogroup_assignment_basis for one candidate's output row -- empty at
+    scope='species', where the concept doesn't apply.
+    """
+    return _phylogroup_for_candidate(candidate)[1] if scope == "phylogroup" else ""
+
+
+def _candidate_group_key(candidate: PhyloCandidate, scope: str) -> str:
+    if scope == "species":
+        return candidate.isolate.species_name
+    if scope == "phylogroup":
+        # Every candidate reaching this point already has a resolvable phylogroup --
+        # collect_phylo_candidates excluded anything that would resolve to 'unassigned'
+        # before it became a candidate at all -- so the [0] here never actually returns
+        # 'unassigned' in practice.
+        return _phylogroup_for_candidate(candidate)[0]
+    raise ValueError(f"unknown phylogenetics scope: {scope!r}")
+
+
+def group_candidates(
+    candidates: Sequence[PhyloCandidate], min_taxa: int, scope: str,
 ) -> Tuple[Dict[str, List[PhyloCandidate]], Counter]:
-    """Only species with enough candidates for a meaningful tree get analyzed.
+    """Partition candidates into tree groups at the given scope. Only groups with enough
+    candidates for a meaningful tree get analyzed.
+
+    scope='species': one group per canonical species. Can only ever show reassortment
+    WITHIN a species -- a segment acquired from a different species has no possible donor
+    in a single-species tree.
+
+    scope='phylogroup': one group per reservoir-host phylogroup (PHYLOGROUP), spanning
+    every species that shares one. Makes interspecies reassortment visible, which
+    species-scope structurally cannot (Laenen et al. 2019, 10.3390/v11090788). These
+    groups are larger and taxonomically heterogeneous, so unlike species trees they need
+    an explicit outgroup to be interpretable -- see --phylo-outgroup in
+    run_phylogenetics_stage.
 
     An unrooted tree needs at least 4 taxa to have any internal structure at all; below
-    --phylo-min-taxa there is nothing for MAFFT/IQ-TREE to resolve. Sorted by
-    isolate_key so re-runs assign identical tip labels and produce byte-identical
-    alignments/trees given the same inputs.
+    min_taxa there is nothing for MAFFT/IQ-TREE to resolve. Sorted by isolate_key so
+    re-runs assign identical tip labels and produce byte-identical alignments/trees given
+    the same inputs.
     """
-    by_species: DefaultDict[str, List[PhyloCandidate]] = defaultdict(list)
+    grouped: DefaultDict[str, List[PhyloCandidate]] = defaultdict(list)
     for candidate in candidates:
-        by_species[candidate.isolate.species_name].append(candidate)
+        grouped[_candidate_group_key(candidate, scope)].append(candidate)
 
     exclusions: Counter = Counter()
     accepted: Dict[str, List[PhyloCandidate]] = {}
-    for species, members in by_species.items():
+    for key, members in grouped.items():
         if len(members) < min_taxa:
-            exclusions[f"{species}: only {len(members)} candidate(s), need {min_taxa}"] += 1
+            # Species-scope message text is unchanged from the pre-scope version (no
+            # "species:" prefix) so a species-only run's log output, and therefore
+            # ortho_pipeline.log, stays byte-identical to before this function existed.
+            label = key if scope == "species" else f"phylogroup {key}"
+            exclusions[f"{label}: only {len(members)} candidate(s), need {min_taxa}"] += 1
             continue
-        accepted[species] = sorted(members, key=lambda c: c.isolate.isolate_key)
+        accepted[key] = sorted(members, key=lambda c: c.isolate.isolate_key)
     return accepted, exclusions
+
+
+def group_candidates_by_species(
+    candidates: Sequence[PhyloCandidate], min_taxa: int,
+) -> Tuple[Dict[str, List[PhyloCandidate]], Counter]:
+    """Thin species-scope wrapper, kept so call sites that only ever want species-level
+    grouping don't need to know the scope parameter exists.
+    """
+    return group_candidates(candidates, min_taxa, scope="species")
 
 
 def resolve_binary(explicit: Optional[str], name: str) -> str:
@@ -2385,16 +2637,19 @@ def run_mafft(mafft_bin: str, input_fasta: Path, output_fasta: Path, threads: in
 
 def run_iqtree(
     iqtree_bin: str, alignment_fasta: Path, prefix: Path, threads: int, bootstrap: int, seed: int,
+    outgroup: Optional[str] = None,
 ) -> Path:
-    prefix.parent.mkdir(parents=True, exist_ok=True)
-    result = subprocess.run(
+    cmd = [
         # --seqtype DNA is explicit, not left to IQ-TREE's auto-detection: these are CDS
         # nucleotide sequences by construction (select_primary_cds), and heavily-N'd
         # partial CDS can otherwise make the ACGT-vs-amino-acid heuristic misfire.
-        [iqtree_bin, "-s", str(alignment_fasta), "--seqtype", "DNA", "-m", "MFP", "-B", str(bootstrap),
-         "-T", str(threads), "--seed", str(seed), "--prefix", str(prefix), "--quiet", "--redo"],
-        capture_output=True, text=True, check=False,
-    )
+        iqtree_bin, "-s", str(alignment_fasta), "--seqtype", "DNA", "-m", "MFP", "-B", str(bootstrap),
+        "-T", str(threads), "--seed", str(seed), "--prefix", str(prefix), "--quiet", "--redo",
+    ]
+    if outgroup:
+        cmd += ["-o", outgroup]
+    prefix.parent.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     treefile = Path(f"{prefix}.treefile")
     if result.returncode != 0 or not treefile.exists():
         raise RuntimeError(
@@ -2436,102 +2691,232 @@ def tree_divergence_for_species(labels: Sequence[str], trees: Dict[str, Any]) ->
     rows_out: List[Dict[str, Any]] = []
     for i, label in enumerate(labels):
         s_nn, m_nn, l_nn = order["S"][i, 0], order["M"][i, 0], order["L"][i, 0]
-        sl_separation, m_offset = _sl_m_rank_metrics(position, span, i, s_nn, m_nn, l_nn)
+        metrics = _segment_rank_metrics(position, span, i, {"S": s_nn, "M": m_nn, "L": l_nn})
         rows_out.append({
             "label": label,
             "tree_s_nearest": labels[s_nn], "tree_m_nearest": labels[m_nn], "tree_l_nearest": labels[l_nn],
             "tree_s_distance": float(distance["S"][i, s_nn]),
             "tree_m_distance": float(distance["M"][i, m_nn]),
             "tree_l_distance": float(distance["L"][i, l_nn]),
-            "tree_sl_rank_separation": round(sl_separation, 4),
-            "tree_m_rank_offset": round(m_offset, 4),
+            **{key: round(value, 4) for key, value in metrics.items()},
         })
     return rows_out
 
 
-def bootstrap_support_for_pair(tree: Any, label_a: str, label_b: str) -> float:
+def _nearest_supported_descendant(node: Any, target_name: str) -> Optional[float]:
+    """Walk from `node` down toward the tip named `target_name`, returning the first
+    confidence value found (None if the walk reaches a tip without ever finding one).
+    Helper for bootstrap_support_for_pair's root fallback -- see there for why this walk
+    is needed at all.
+    """
+    while True:
+        children = [c for c in node.clades if any(t.name == target_name for t in c.get_terminals())]
+        if not children:
+            return None
+        node = children[0]
+        if node.confidence is not None:
+            return float(node.confidence)
+        if node.is_terminal():
+            return None
+
+
+def bootstrap_support_for_pair(tree: Any, label_a: str, label_b: str) -> Tuple[float, str]:
     """Ultrafast-bootstrap support at the smallest clade containing both tips -- how well
-    the M tree itself supports grouping this isolate with the neighbour it disagrees
-    with S/L about. IQ-TREE writes support as the internal-node name, which Biopython's
-    Newick parser reads into Clade.confidence for non-terminal clades.
+    the discordant segment's own tree supports grouping this isolate with the neighbour
+    it disagrees with the other two segments about. IQ-TREE writes support as the
+    internal-node name, which Biopython's Newick parser reads into Clade.confidence for
+    non-terminal clades.
+
+    Returns (support, source). source is 'mrca' in the overwhelming majority of calls:
+    every internal node in an IQ-TREE treefile carries a UFBoot value EXCEPT the root --
+    an unrooted tree's root is not a real bipartition, so IQ-TREE writes nothing there,
+    and Biopython reads that absence as confidence=None. The previous version of this
+    function returned 0.0 whenever the pair's MRCA happened to BE that root, which reads
+    as "definitively no support" and is indistinguishable from a genuine 0% UFBoot value
+    -- a real reassortant whose discordant-segment neighbour sits at the tree's deepest
+    split got silently zeroed out and demoted to weak_signal for a reason that has
+    nothing to do with how well-supported the grouping actually is.
+
+    When the MRCA is unsupported, this walks from it toward each tip in turn (there is no
+    smaller clade containing BOTH tips once the MRCA is unsupported -- by definition
+    that only happens at the root -- so "toward the tips" necessarily means down into the
+    two separate subtrees that lead to label_a and to label_b) and takes the MORE
+    CONSERVATIVE (lower) of whichever supported ancestors it finds on each side --
+    source='nearest_supported_ancestor'. Consistent with the bootstrap gate's whole
+    purpose: don't let a lucky pick of the better-supported side overstate the evidence.
+    If neither walk ever finds a support value (only possible in a tree too small to have
+    any internal structure between the root and its tips), returns
+    (0.0, 'unsupported_root') -- now an honest "not measured", not a disguised "measured
+    and it was zero".
     """
     clade_a = next(tree.find_clades(name=label_a))
     clade_b = next(tree.find_clades(name=label_b))
-    common = tree.common_ancestor([clade_a, clade_b])
-    return float(common.confidence) if common.confidence is not None else 0.0
+    mrca = tree.common_ancestor([clade_a, clade_b])
+    if mrca.confidence is not None:
+        return float(mrca.confidence), "mrca"
+
+    candidates = [s for s in (_nearest_supported_descendant(mrca, label_a),
+                              _nearest_supported_descendant(mrca, label_b)) if s is not None]
+    if candidates:
+        return min(candidates), "nearest_supported_ancestor"
+    return 0.0, "unsupported_root"
 
 
-def classify_reassortment_call(row: Dict[str, Any], m_tree: Any, min_bootstrap_support: float) -> Tuple[str, float]:
-    """Only a rank pattern consistent with the literature's M-segment-exchange signature
-    (S and L agree; M's neighbour is different) AND a well-supported M-tree clade counts
-    as a candidate. Everything else stays 'no_conflict' or 'weak_signal' -- the whole
-    point of doing this with real trees is to not repeat the withdrawn classifier's
-    mistake of reporting an unsupported pattern as a finding.
+def classify_reassortment_call(
+    row: Dict[str, Any],
+    trees: Dict[str, Any],
+    min_bootstrap_support: float,
+) -> Tuple[str, float, str, str]:
+    """Identify the discordant segment (if any), then require the OTHER two to still
+    cosegregate, then gate on bootstrap support in the discordant segment's own tree.
+
+    Generalizes the old M-only check: that version could only ever find the PMC6153690
+    M-exchange/S-L-cosegregation pattern, so an isolate whose S and M trees agree but
+    whose L tree disagrees -- the pattern Park et al. 2025 (PLOS NTD,
+    10.1371/journal.pntd.0012859) report for three candidate HTNV reassortants --
+    returned 'no_conflict' unconditionally. The M-permissive prior from PMC6153690 is
+    preserved downstream as matches_canonical_m_exchange, not as a filter here.
+
+    The discordant segment is whichever has the highest rank offset (ties broken toward
+    S, then M, then L, by dict iteration order -- deterministic, and ties are already rare
+    since offsets are continuous). Everything else stays 'no_conflict' or 'weak_signal' --
+    the whole point of doing this with real trees is to not repeat the withdrawn
+    classifier's mistake of reporting an unsupported pattern as a finding.
+
+    Returns (call, support, discordant_segment, bootstrap_support_source).
+    discordant_segment is "" for no_conflict, and set (even if the call is weak_signal)
+    whenever a rank pattern was found -- the pattern existed structurally regardless of
+    whether bootstrap confirmed it. bootstrap_support_source is "" for no_conflict (the
+    bootstrap gate is never reached), otherwise see bootstrap_support_for_pair.
     """
-    if row["tree_m_rank_offset"] < M_OFFSET_HIGH or row["tree_sl_rank_separation"] > SL_SEPARATION_LOW:
-        return "no_conflict", 0.0
-    support = bootstrap_support_for_pair(m_tree, row["label"], row["tree_m_nearest"])
+    offsets = {"S": row["tree_s_rank_offset"], "M": row["tree_m_rank_offset"], "L": row["tree_l_rank_offset"]}
+    discordant = max(offsets, key=offsets.get)
+    other_pair_separation = row[OTHER_PAIR_SEPARATION_COLUMN[discordant]]
+    if offsets[discordant] < SEGMENT_OFFSET_HIGH or other_pair_separation > PAIR_SEPARATION_LOW:
+        return "no_conflict", 0.0, "", ""
+    tree = trees[discordant]
+    nearest = row[f"tree_{discordant.lower()}_nearest"]
+    support, support_source = bootstrap_support_for_pair(tree, row["label"], nearest)
     if support >= min_bootstrap_support:
-        return "supported_reassortment_candidate", support
-    return "weak_signal_low_bootstrap_support", support
+        return "supported_reassortment_candidate", support, discordant, support_source
+    return "weak_signal_low_bootstrap_support", support, discordant, support_source
 
 
 def _phylo_row(candidate: PhyloCandidate, species: str, n_taxa_in_tree: int,
-              status: str, error: str) -> Dict[str, Any]:
+              status: str, error: str, scope: str, phylogroup_assignment_basis: str = "") -> Dict[str, Any]:
     """Default (not-yet-analyzed / failed) row shape. Every field a successful analysis
     fills in is declared here too, so ortho_reassortment_table.csv has one stable
     schema regardless of status -- required for a clean, joinable table.
+
+    ``species`` is always the isolate's own true canonical species -- never the group
+    label a phylogroup-scope tree was built from, since a phylogroup tree spans several
+    species. Which phylogroup that species belongs to is recoverable from PHYLOGROUP.
+
+    ``phylogroup_assignment_basis`` is only meaningful at scope='phylogroup' (empty
+    string at scope='species', where the concept doesn't apply): 'curated_reservoir' for
+    a classified species looked up in PHYLOGROUP, 'observed_host_order' for an
+    unclassified isolate placed via HOST_ORDER_PHYLOGROUP_FALLBACK instead -- see
+    _phylogroup_for_isolate.
     """
     return {
         "isolate_key": candidate.isolate.isolate_key,
         "species_name": species,
         "candidate_tags": ";".join(candidate.tags),
+        "analysis_scope": scope,
+        "phylogroup_assignment_basis": phylogroup_assignment_basis,
+        # Name predates scope='phylogroup' and is now imprecise for those rows (the tree
+        # spans several species, not one) -- kept as-is rather than renamed, so a
+        # species-only run's column set stays identical to before this task. Read as
+        # "n_taxa_in_this_row's_tree" regardless of scope.
         "n_taxa_in_species_tree": n_taxa_in_tree,
         "phylo_status": status,
         "phylo_error": error,
         "tree_s_nearest_isolate": "", "tree_m_nearest_isolate": "", "tree_l_nearest_isolate": "",
         "tree_s_distance": 0.0, "tree_m_distance": 0.0, "tree_l_distance": 0.0,
-        "tree_sl_rank_separation": 0.0, "tree_m_rank_offset": 0.0,
-        "m_clade_bootstrap_support": 0.0,
+        "tree_s_rank_offset": 0.0, "tree_m_rank_offset": 0.0, "tree_l_rank_offset": 0.0,
+        "tree_sm_rank_separation": 0.0, "tree_sl_rank_separation": 0.0, "tree_ml_rank_separation": 0.0,
+        "discordant_segment": "",
+        "matches_canonical_m_exchange": 0,
+        # None, not 0.0: a genuine 0% bootstrap support is a real (weak) measurement, and
+        # must stay distinguishable from "no discordant clade exists to measure at all"
+        # (not_analyzed/failed rows, or an analyzed row that called no_conflict). Same
+        # reasoning m_clade_bootstrap_support inherits for "M wasn't the discordant segment".
+        "m_clade_bootstrap_support": None,
+        "discordant_clade_bootstrap_support": None,
+        # "" for not-yet-analyzed rows and for no_conflict (bootstrap gate never reached);
+        # 'mrca' / 'nearest_supported_ancestor' / 'unsupported_root' otherwise -- see
+        # bootstrap_support_for_pair.
+        "bootstrap_support_source": "",
         "reassortment_call": "not_analyzed",
-        "rf_s_vs_m": None, "rf_m_vs_l": None, "rf_s_vs_l": None,
-        "rf_s_vs_m_normalized": None, "rf_m_vs_l_normalized": None, "rf_s_vs_l_normalized": None,
+        # species_* here means "constant across every isolate row sharing this group's
+        # tree" -- under scope='phylogroup' that's a phylogroup, not literally one
+        # species, same imprecision n_taxa_in_species_tree already carries and for the
+        # same reason (not renamed further to avoid a second unrequested rename).
+        "species_rf_s_vs_m": None, "species_rf_m_vs_l": None, "species_rf_s_vs_l": None,
+        "species_rf_s_vs_m_normalized": None, "species_rf_m_vs_l_normalized": None,
+        "species_rf_s_vs_l_normalized": None,
         "s_alignment_path": "", "m_alignment_path": "", "l_alignment_path": "",
         "s_tree_path": "", "m_tree_path": "", "l_tree_path": "",
     }
 
 
-def _analyze_species(
-    species: str, members: Sequence[PhyloCandidate], species_dir_root: Path, output_dir: Path,
+def _resolve_outgroup_label(label_map: Dict[str, "PhyloCandidate"], outgroup: str) -> Optional[str]:
+    """Map --phylo-outgroup (an accession or isolate_key) to the synthetic tip label
+    (I0000, ...) used in THIS group's alignment/tree, or None if that isolate isn't one
+    of this group's members -- one global outgroup will not be present in every tree.
+    """
+    base = accession_base(outgroup)
+    for label, candidate in label_map.items():
+        isolate = candidate.isolate
+        if outgroup == isolate.isolate_key:
+            return label
+        if base and base in {accession_base(a) for a in
+                             (isolate.s_accession, isolate.m_accession, isolate.l_accession) if a}:
+            return label
+    return None
+
+
+def _analyze_group(
+    group_key: str, scope: str, members: Sequence[PhyloCandidate], group_dir_root: Path, output_dir: Path,
     args: argparse.Namespace, mafft_bin: str, iqtree_bin: str,
 ) -> List[Dict[str, Any]]:
-    """Align + build trees for one species' three segments, then score every member.
+    """Align + build trees for one group's (species or phylogroup) three segments, then
+    score every member.
 
     Every step -- MAFFT/IQ-TREE, tree parsing, patristic-distance/Robinson-Foulds
     computation, and per-isolate classification -- runs inside one try/except: a failure
-    anywhere fails only this species (isolates reported with status='failed' and the
+    anywhere fails only this group (isolates reported with status='failed' and the
     reason) and never the run, the same per-unit error isolation transform_one_record
     uses for accessions. An earlier version of this function wrapped only the MAFFT/
     IQ-TREE calls, so a failure in the tree-parsing or distance code that followed them
     (e.g. IQ-TREE dropping a duplicate tip, a malformed treefile) escaped uncaught.
+
+    ``group_key`` is the species name at scope='species' or the phylogroup name at
+    scope='phylogroup' -- it names the tree, not any one member's own species (members of
+    a phylogroup tree can each have a different species_name; see _phylo_row).
     """
     # Re-imported here rather than threaded through as parameters: run_phylogenetics_stage
     # already proved these are importable (its own ImportError check, with the install
     # hint, runs before any work starts), and Python caches modules in sys.modules, so
-    # this costs nothing per species.
+    # this costs nothing per group.
     from Bio import Phylo
     import dendropy
     from dendropy.calculate import treecompare
 
-    species_dir = species_dir_root / normalize_attr_name(species)
+    group_dir = group_dir_root / normalize_attr_name(group_key)
     labels = [f"I{i:04d}" for i in range(len(members))]
     label_map: Dict[str, PhyloCandidate] = dict(zip(labels, members))
+
+    outgroup_label = _resolve_outgroup_label(label_map, args.phylo_outgroup) if args.phylo_outgroup else None
+    if args.phylo_outgroup and outgroup_label is None:
+        logging.info("Phylogenetics (%s): --phylo-outgroup %s is not a member of group %s, "
+                    "its tree(s) are left unrooted", scope, args.phylo_outgroup, group_key)
 
     try:
         trees: Dict[str, Any] = {}
         tree_paths: Dict[str, Path] = {}
         for segment in ("S", "M", "L"):
-            seg_dir = species_dir / segment
+            seg_dir = group_dir / segment
             fasta_path = seg_dir / "sequences.fasta"
             aligned_path = seg_dir / "aligned.fasta"
             prefix = seg_dir / "tree"
@@ -2539,14 +2924,14 @@ def _analyze_species(
             write_segment_fasta(fasta_path, sequences)
             run_mafft(mafft_bin, fasta_path, aligned_path, args.phylo_threads)
             treefile = run_iqtree(iqtree_bin, aligned_path, prefix, args.phylo_threads,
-                                  args.bootstrap, args.phylo_seed)
+                                  args.bootstrap, args.phylo_seed, outgroup=outgroup_label)
             trees[segment] = Phylo.read(str(treefile), "newick")
             tree_paths[segment] = treefile
 
         divergence_by_label = {row["label"]: row for row in tree_divergence_for_species(labels, trees)}
 
         # Robinson-Foulds between each pair of segment trees on the shared taxon set
-        # (identical by construction) -- a per-species overall measure of how much the three
+        # (identical by construction) -- a per-group overall measure of how much the three
         # trees disagree, independent of any single isolate's placement.
         taxon_namespace = dendropy.TaxonNamespace()
         dendro_trees = {
@@ -2560,14 +2945,16 @@ def _analyze_species(
         rf: Dict[str, Any] = {}
         for a, b in (("s", "m"), ("m", "l"), ("s", "l")):
             raw = treecompare.symmetric_difference(dendro_trees[a.upper()], dendro_trees[b.upper()])
-            rf[f"rf_{a}_vs_{b}"] = raw
-            rf[f"rf_{a}_vs_{b}_normalized"] = raw / max_rf if max_rf else 0.0
+            rf[f"species_rf_{a}_vs_{b}"] = raw
+            rf[f"species_rf_{a}_vs_{b}_normalized"] = raw / max_rf if max_rf else 0.0
 
         rows: List[Dict[str, Any]] = []
         for label, candidate in label_map.items():
             row = divergence_by_label[label]
-            call, support = classify_reassortment_call(row, trees["M"], args.min_bootstrap_support)
-            out_row = _phylo_row(candidate, species, len(members), "analyzed", "")
+            call, support, discordant, support_source = classify_reassortment_call(
+                row, trees, args.min_bootstrap_support)
+            out_row = _phylo_row(candidate, candidate.isolate.species_name, len(members), "analyzed", "", scope,
+                                _assignment_basis(candidate, scope))
             out_row.update({
                 "tree_s_nearest_isolate": label_map[row["tree_s_nearest"]].isolate.isolate_key,
                 "tree_m_nearest_isolate": label_map[row["tree_m_nearest"]].isolate.isolate_key,
@@ -2575,24 +2962,75 @@ def _analyze_species(
                 "tree_s_distance": row["tree_s_distance"],
                 "tree_m_distance": row["tree_m_distance"],
                 "tree_l_distance": row["tree_l_distance"],
-                "tree_sl_rank_separation": row["tree_sl_rank_separation"],
+                "tree_s_rank_offset": row["tree_s_rank_offset"],
                 "tree_m_rank_offset": row["tree_m_rank_offset"],
-                "m_clade_bootstrap_support": support,
+                "tree_l_rank_offset": row["tree_l_rank_offset"],
+                "tree_sm_rank_separation": row["tree_sm_rank_separation"],
+                "tree_sl_rank_separation": row["tree_sl_rank_separation"],
+                "tree_ml_rank_separation": row["tree_ml_rank_separation"],
+                "discordant_segment": discordant,
+                "matches_canonical_m_exchange": int(discordant == "M"),
+                # None (not 0.0) when there's no discordant clade to measure at all
+                # (no_conflict, discordant == ""), so a genuine 0% bootstrap support stays
+                # distinguishable from "not applicable". m_clade_bootstrap_support is kept
+                # for existing consumers, populated only when M is actually the discordant
+                # segment -- see discordant_clade_bootstrap_support for the generalized
+                # value regardless of which segment it is.
+                "m_clade_bootstrap_support": support if discordant == "M" else None,
+                "discordant_clade_bootstrap_support": support if discordant else None,
+                "bootstrap_support_source": support_source,
                 "reassortment_call": call,
                 **rf,
-                "s_alignment_path": str((species_dir / "S" / "aligned.fasta").relative_to(output_dir)),
-                "m_alignment_path": str((species_dir / "M" / "aligned.fasta").relative_to(output_dir)),
-                "l_alignment_path": str((species_dir / "L" / "aligned.fasta").relative_to(output_dir)),
+                "s_alignment_path": str((group_dir / "S" / "aligned.fasta").relative_to(output_dir)),
+                "m_alignment_path": str((group_dir / "M" / "aligned.fasta").relative_to(output_dir)),
+                "l_alignment_path": str((group_dir / "L" / "aligned.fasta").relative_to(output_dir)),
                 "s_tree_path": str(tree_paths["S"].relative_to(output_dir)),
                 "m_tree_path": str(tree_paths["M"].relative_to(output_dir)),
                 "l_tree_path": str(tree_paths["L"].relative_to(output_dir)),
             })
             rows.append(out_row)
         return rows
-    except Exception as exc:  # noqa: BLE001 - one species' failure must not kill the run
-        logging.exception("Phylogenetics failed for %s", species)
+    except Exception as exc:  # noqa: BLE001 - one group's failure must not kill the run
+        logging.exception("Phylogenetics failed for %s (%s scope)", group_key, scope)
         error = f"{type(exc).__name__}:{exc}"
-        return [_phylo_row(c, species, len(members), "failed", error) for c in members]
+        return [_phylo_row(c, c.isolate.species_name, len(members), "failed", error, scope,
+                          _assignment_basis(c, scope)) for c in members]
+
+
+def _run_phylogenetics_scope(
+    scope: str, candidates: Sequence[PhyloCandidate], output_dir: Path, args: argparse.Namespace,
+    mafft_bin: str, iqtree_bin: str,
+) -> List[Dict[str, Any]]:
+    """One scope's worth of grouping + tree-building + classification. Factored out of
+    run_phylogenetics_stage so --phylo-scope=both is just this called twice; the
+    scope='species' call alone is exactly what run_phylogenetics_stage did before this
+    function existed.
+    """
+    by_group, group_drop_reasons = group_candidates(candidates, args.phylo_min_taxa, scope)
+    for reason in group_drop_reasons:
+        logging.info("Phylogenetics: excluded group below --phylo-min-taxa: %s", reason)
+    logging.info("Phylogenetics (%s): analyzing %s group(s): %s", scope, len(by_group), sorted(by_group))
+
+    grouped_keys = {c.isolate.isolate_key for members in by_group.values() for c in members}
+    candidates_per_group: DefaultDict[str, int] = defaultdict(int)
+    for c in candidates:
+        candidates_per_group[_candidate_group_key(c, scope)] += 1
+    rows: List[Dict[str, Any]] = [
+        _phylo_row(c, c.isolate.species_name, candidates_per_group[_candidate_group_key(c, scope)],
+                  "species_below_min_taxa", "", scope, _assignment_basis(c, scope))
+        for c in candidates if c.isolate.isolate_key not in grouped_keys
+    ]
+
+    # Phylogroup output lives under a sibling directory, never inside phylogenetics/, so a
+    # species-scope-only run's directory tree (and therefore the alignment/tree path
+    # columns it writes) stays exactly what it was before scope existed.
+    group_dir_root = output_dir / "phylogenetics" if scope == "species" else output_dir / "phylogenetics_phylogroup"
+    for group_key, members in sorted(by_group.items()):
+        logging.info("Phylogenetics (%s): %s (%s taxa) -- aligning + building trees",
+                     scope, group_key, len(members))
+        rows.extend(_analyze_group(
+            group_key, scope, members, group_dir_root, output_dir, args, mafft_bin, iqtree_bin))
+    return rows
 
 
 def run_phylogenetics_stage(
@@ -2602,7 +3040,13 @@ def run_phylogenetics_stage(
     output_dir: Path,
     args: argparse.Namespace,
 ) -> List[Dict[str, Any]]:
-    """Entry point for --phylogenetics. See the module docstring above this section."""
+    """Entry point for --phylogenetics. See the module docstring above this section.
+
+    Runs once per scope named by --phylo-scope ('both', the default, runs species then
+    phylogroup). Each candidate is reported once per scope it was analyzed under, so at
+    --phylo-scope=both a candidate can appear up to twice in the returned rows, tagged by
+    analysis_scope.
+    """
     try:
         import Bio.Phylo  # noqa: F401 - fail fast with the install hint below, before any work starts
         import dendropy  # noqa: F401
@@ -2617,31 +3061,59 @@ def run_phylogenetics_stage(
     mafft_bin = resolve_binary(args.mafft_bin, "mafft")
     iqtree_bin = resolve_binary(args.iqtree_bin, "iqtree")
 
-    candidates, drop_reasons = collect_phylo_candidates(isolates, divergence_by_key, cds_index)
-    logging.info("Phylogenetics: %s candidate isolates (%s excluded before grouping: %s)",
-                 len(candidates), sum(drop_reasons.values()), dict(drop_reasons))
+    scopes = ("species", "phylogroup") if args.phylo_scope == "both" else (args.phylo_scope,)
+    if "phylogroup" in scopes and not args.phylo_outgroup:
+        logging.warning(
+            "Phylogroup trees are unrooted (no --phylo-outgroup given): they can show "
+            "THAT segments from different species cluster together, but not which "
+            "species was donor and which was recipient.")
 
-    by_species, species_drop_reasons = group_candidates_by_species(candidates, args.phylo_min_taxa)
-    for reason in species_drop_reasons:
-        logging.info("Phylogenetics: excluded species below --phylo-min-taxa: %s", reason)
-    logging.info("Phylogenetics: analyzing %s species: %s", len(by_species), sorted(by_species))
-
-    grouped_keys = {c.isolate.isolate_key for members in by_species.values() for c in members}
-    candidates_per_species: DefaultDict[str, int] = defaultdict(int)
-    for c in candidates:
-        candidates_per_species[c.isolate.species_name] += 1
-    rows: List[Dict[str, Any]] = [
-        _phylo_row(c, c.isolate.species_name, candidates_per_species[c.isolate.species_name],
-                  "species_below_min_taxa", "")
-        for c in candidates if c.isolate.isolate_key not in grouped_keys
-    ]
-
-    species_dir_root = output_dir / "phylogenetics"
-    for species, members in sorted(by_species.items()):
-        logging.info("Phylogenetics: %s (%s taxa) -- aligning + building trees", species, len(members))
-        rows.extend(_analyze_species(
-            species, members, species_dir_root, output_dir, args, mafft_bin, iqtree_bin))
+    rows: List[Dict[str, Any]] = []
+    for scope in scopes:
+        # Candidate collection is scope-dependent (Task 3): unclassified isolates are
+        # excluded outright at scope='species' but admitted at scope='phylogroup' if
+        # observed host order places them -- see collect_phylo_candidates. So this runs
+        # once per scope, not once total.
+        candidates, drop_reasons = collect_phylo_candidates(isolates, divergence_by_key, cds_index, scope)
+        logging.info("Phylogenetics (%s): %s candidate isolates (%s excluded before grouping: %s)",
+                     scope, len(candidates), sum(drop_reasons.values()), dict(drop_reasons))
+        rows.extend(_run_phylogenetics_scope(scope, candidates, output_dir, args, mafft_bin, iqtree_bin))
     return rows
+
+
+# Ranks reassortment_call outcomes so _phylo_call_by_isolate can pick the most informative
+# one when an isolate has more than one row (up to one per --phylo-scope).
+_REASSORTMENT_CALL_RANK = {
+    "supported_reassortment_candidate": 2,
+    "weak_signal_low_bootstrap_support": 1,
+    "no_conflict": 0,
+}
+
+
+def _phylo_call_by_isolate(phylo_rows: Sequence[Dict[str, Any]]) -> Dict[str, str]:
+    """Reduce ortho_reassortment_table.csv's rows to one reassortment_call per isolate,
+    for surveillance_priority's phylo_call term.
+
+    At --phylo-scope=both an isolate can have up to two rows, one per scope, and they can
+    disagree WITHOUT contradicting each other: species-only and phylogroup-only trees
+    answer different questions (within-species vs across-species topology), so one
+    scope's 'no_conflict' never invalidates the other's 'supported_reassortment_candidate'
+    -- it just means that scope didn't find (or couldn't look for) the same signal. So
+    this takes the single most informative call across an isolate's rows, not the last
+    one written or an arbitrary pick. Rows with phylo_status != 'analyzed' (not_analyzed,
+    species_below_min_taxa, failed) carry reassortment_call='not_analyzed', which isn't in
+    _REASSORTMENT_CALL_RANK and is simply never picked over anything analyzed.
+    """
+    best: Dict[str, str] = {}
+    best_rank: Dict[str, int] = {}
+    for row in phylo_rows:
+        key = row["isolate_key"]
+        call = row.get("reassortment_call", "")
+        rank = _REASSORTMENT_CALL_RANK.get(call, -1)
+        if rank > best_rank.get(key, -1):
+            best[key] = call
+            best_rank[key] = rank
+    return best
 
 
 # --------------------------------------------------------------------------------------
@@ -2850,13 +3322,23 @@ def build_segment_divergence_rows(profiles: Sequence[SegmentDivergenceProfile]) 
     } for profile in profiles]
 
 
-def build_risk_rows(isolates: Sequence[IsolateRecord],
-                    divergence: Dict[str, SegmentDivergenceProfile]) -> List[Dict[str, Any]]:
+def build_risk_rows(
+    isolates: Sequence[IsolateRecord],
+    divergence: Dict[str, SegmentDivergenceProfile],
+    phylo_call_by_key: Optional[Dict[str, str]] = None,
+) -> List[Dict[str, Any]]:
+    """phylo_call_by_key is None (or empty) whenever --phylogenetics wasn't run, or ran
+    but failed for this isolate's tree -- surveillance_priority already treats a missing
+    call as "no reassortment term", so this table is byte-identical to a phylogenetics-
+    free run except for the always-present, always-zero priority_reassortment_term column.
+    """
+    phylo_call_by_key = phylo_call_by_key or {}
     rows = []
     for isolate in isolates:
         risk = species_risk_profile(isolate.species_name)
         profile = divergence.get(isolate.isolate_key)
-        terms = surveillance_priority(isolate, risk, profile)
+        phylo_call = phylo_call_by_key.get(isolate.isolate_key)
+        terms = surveillance_priority(isolate, risk, profile, phylo_call)
         rows.append({
             "isolate_key": isolate.isolate_key,
             "species_name": isolate.species_name,
@@ -2882,6 +3364,11 @@ def build_risk_rows(isolates: Sequence[IsolateRecord],
             "reassortment_status": profile.reassortment_status if profile else "not_assessable",
             "taxonomic_incongruence": int(isolate.taxonomic_incongruence),
             "cross_species_partners": ";".join(isolate.cross_species_partners),
+            # "" (not None) when --phylogenetics wasn't run or didn't reach this isolate --
+            # matches the string-typed convention every other column in this table uses;
+            # surveillance_priority is the one place None vs "not analyzed" is worth
+            # distinguishing (see ortho_reassortment_table.csv), not this summary table.
+            "phylo_reassortment_call": phylo_call or "",
             **terms,
         })
     rows.sort(key=lambda r: r["surveillance_priority_score"], reverse=True)
@@ -2918,14 +3405,63 @@ def build_host_rows(accessions: Sequence[AccessionRecord],
     return rows
 
 
+def _species_effort_stats(
+    accessions: Sequence[AccessionRecord], isolates: Sequence[IsolateRecord],
+) -> Dict[str, Dict[str, Any]]:
+    """Per-species surveillance-effort covariates for build_ml_tables -- see that
+    function's docstring for why these matter as confound controls, not biology.
+
+    Counts are over ALL accessions/isolates of a species, not just the ML-usable subset
+    build_ml_tables filters down to: the point is to measure how much this species has
+    been sampled overall, which is a property of the species' surveillance history, not
+    of which isolates happened to have a usable concatenated protein.
+
+    effort_years_since_first is the SPAN between the earliest and latest recorded year
+    for that species (year_max - year_min), not years-since-first-to-today -- today's
+    date isn't a meaningful reference point for a virus nobody has sequenced since 2004,
+    and would conflate "how long ago sampling started" with "how long has it continued."
+    """
+    acc_by_species: DefaultDict[str, List[AccessionRecord]] = defaultdict(list)
+    for record in accessions:
+        acc_by_species[record.species_name].append(record)
+    iso_by_species: DefaultDict[str, List[IsolateRecord]] = defaultdict(list)
+    for isolate in isolates:
+        iso_by_species[isolate.species_name].append(isolate)
+
+    stats: Dict[str, Dict[str, Any]] = {}
+    for species in set(acc_by_species) | set(iso_by_species):
+        acc_members = acc_by_species.get(species, [])
+        iso_members = iso_by_species.get(species, [])
+        years = sorted(int(r.year) for r in acc_members if r.year.isdigit())
+        countries = {r.country for r in acc_members if r.country}
+        stats[species] = {
+            "effort_n_accessions": len(acc_members),
+            "effort_n_isolates": len(iso_members),
+            "effort_n_countries": len(countries),
+            "effort_n_years": len(set(years)),
+            "effort_first_year": years[0] if years else "",
+            "effort_years_since_first": (years[-1] - years[0]) if years else 0,
+            "effort_n_complete_triplets": sum(1 for i in iso_members if i.has_complete_triplet),
+        }
+    return stats
+
+
+_EFFORT_STATS_DEFAULT: Dict[str, Any] = {
+    "effort_n_accessions": 0, "effort_n_isolates": 0, "effort_n_countries": 0,
+    "effort_n_years": 0, "effort_first_year": "", "effort_years_since_first": 0,
+    "effort_n_complete_triplets": 0,
+}
+
+
 def build_ml_tables(
+    accessions: Sequence[AccessionRecord],
     isolates: Sequence[IsolateRecord],
     divergence: Dict[str, SegmentDivergenceProfile],
     max_features: int,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Build the ML feature matrix and the scaling artifact.
 
-    Three deliberate changes from the previous implementation:
+    Four deliberate changes from the previous implementation:
 
     - Features are emitted RAW. The previous version z-scored every column across the
       whole dataset before writing, which leaks test-fold statistics into training. The
@@ -2938,6 +3474,18 @@ def build_ml_tables(
     - group_id and year are included so downstream CV can split by species and by time.
       Random splits over this data overstate accuracy badly, because segments from the
       same outbreak are near-identical.
+    - effort_* columns (n_accessions, n_isolates, n_countries, n_years, first_year,
+      years_since_first, n_complete_triplets -- see _species_effort_stats) are added per
+      species. label_pathogenicity_class, label_cfr_band and label_disease_syndrome are
+      pure functions of species_name, so "no known human disease" and "nobody has
+      sequenced this reservoir" are literally the same label value. That confound
+      correlates with country, year and research funding: a species judged harmless
+      because it has 6 accessions from one 2004 paper is not evidence of anything. These
+      are CONFOUND CONTROLS, not biology -- they exist so a model can be trained or
+      ablated with sampling intensity explicitly accounted for, not so it can learn to
+      predict pathogenicity from effort_n_accessions. A model whose held-out performance
+      collapses when the effort_* block is dropped was substantially reading sampling
+      intensity, not virology, and that result would otherwise have gone unnoticed.
 
     is_lab_derived is now FLAGGED, not filtered. An earlier version excluded every
     is_lab_derived isolate from this matrix, on the same "not a naturally occurring
@@ -2962,6 +3510,10 @@ def build_ml_tables(
     usable = [i for i in isolates if i.concatenated_protein_aa and not i.is_vaccine_strain]
     if not usable:
         return [], {"features": [], "note": "no usable isolates"}
+
+    # Computed over ALL accessions/isolates (not just `usable`) -- see
+    # _species_effort_stats's docstring for why.
+    effort_by_species = _species_effort_stats(accessions, isolates)
 
     profiles = [kmer_profile(i.concatenated_protein_aa) for i in usable]
     matrix, vocabulary = profiles_to_matrix(profiles)
@@ -3007,17 +3559,23 @@ def build_ml_tables(
             # Retained, not filtered -- see this function's docstring. Lets a caller
             # ablate/stratify on lab-vs-wild provenance instead of losing the isolates.
             "is_lab_derived": int(isolate.is_lab_derived),
+        }
+        # Confound controls, not biology -- see this function's docstring. Prefixed so a
+        # caller can select/drop the whole block (df.filter(like="effort_")) in one shot.
+        row.update(effort_by_species.get(isolate.species_name, _EFFORT_STATS_DEFAULT))
+        row.update({
             # Labels
             "label_pathogenicity_class": risk["pathogenicity_class"],
             "label_disease_syndrome": risk["disease_syndrome"],
             "label_cfr_band": risk["cfr_band"],
             "label_is_human_derived": int(isolate.host_taxid == "9606"),
-        }
+        })
         for column, kmer in enumerate(selected):
             row[f"kmer_{kmer}"] = float(reduced[position, column])
         rows.append(row)
 
     feature_columns = [f"kmer_{kmer}" for kmer in selected]
+    n_label_bearing_groups = len({row["group_id"] for row in rows if row["label_cfr_band"] != -1})
     scaling = {
         "note": "Fit scaling inside your CV fold. These statistics are provided for "
                 "reference and reproducibility only; they were computed on the full table "
@@ -3030,6 +3588,20 @@ def build_ml_tables(
         "mean": {name: float(reduced[:, i].mean()) for i, name in enumerate(feature_columns)},
         "std": {name: float(reduced[:, i].std()) for i, name in enumerate(feature_columns)},
         "recommended_cv": "GroupKFold on group_id (species), or a temporal split on year",
+        # Distinct species (group_id) with a real cfr_band, i.e. not the -1 'unknown'
+        # placeholder -- how many groups actually carry a label at all, separate from how
+        # many groups exist in total.
+        "n_label_bearing_groups": n_label_bearing_groups,
+        "caveat": (
+            "Labels (label_pathogenicity_class, label_disease_syndrome, label_cfr_band) "
+            "are constant within group_id: every isolate of one species carries the same "
+            "label. Under GroupKFold on group_id, the effective sample size is therefore "
+            f"the number of label-bearing SPECIES ({n_label_bearing_groups}), not the "
+            "number of isolates in this table. Any split that is NOT grouped by group_id "
+            "leaks completely, because 3-mer amino-acid composition separates species "
+            "trivially -- a model can identify the species (and therefore its label) from "
+            "the kmer_* columns alone, with no biology learned at all."
+        ),
     }
     return rows, scaling
 
@@ -3157,6 +3729,26 @@ def resolve_inputs(root: Path, output: Optional[Path] = None) -> InputPaths:
     )
 
 
+def resolve_datasets_cli_version() -> str:
+    """Version of NCBI's `datasets` CLI on PATH, if present. Purely informational -- this
+    pipeline never shells out to `datasets` for anything else, and never requires it; the
+    point is recording what tool a user could re-fetch an equivalent package with, for
+    someone trying to reproduce this exact run later. Best-effort: any failure (not
+    installed, no --version support, unexpected output) is recorded as the reason rather
+    than raised, since provenance metadata must never be able to fail the run.
+    """
+    binary = shutil.which("datasets")
+    if not binary:
+        return "not found on PATH"
+    try:
+        result = subprocess.run([binary, "--version"], capture_output=True, text=True,
+                                check=False, timeout=10)
+        output = (result.stdout or result.stderr or "").strip()
+        return output or "unknown (empty --version output)"
+    except Exception as exc:  # noqa: BLE001 - provenance is best-effort, never fatal
+        return f"unknown ({type(exc).__name__})"
+
+
 def summarize(
     accessions: Sequence[AccessionRecord],
     isolates: Sequence[IsolateRecord],
@@ -3167,6 +3759,7 @@ def summarize(
     paths: InputPaths,
     cluster_threshold: float,
     min_species_size: int,
+    data_records: Sequence[Dict[str, Any]] = (),
 ) -> Dict[str, Any]:
     catalog: Dict[str, Any] = {}
     if paths.dataset_catalog.exists():
@@ -3175,10 +3768,31 @@ def summarize(
     species_names = {a.species_name for a in accessions if a.species_name}
     status_counts = Counter(d.reassortment_status for d in divergence)
 
+    # GenBank's own per-record releaseDate, carried straight through from the raw
+    # data_report.jsonl records (not stored on AccessionRecord -- nothing downstream of
+    # ingestion needs a per-record value, only this package-level min/max). This is what
+    # identifies WHICH NCBI snapshot the package is, which the md5 integrity check below
+    # does not: md5 proves these files are byte-identical to what NCBI published, not
+    # which query/date produced them -- two packages can each pass their OWN md5sum.txt
+    # while covering different accession sets, if NCBI was queried on different dates.
+    release_dates = sorted(r["releaseDate"] for r in data_records if r.get("releaseDate"))
+
     return {
         "pipeline_version": VERSION,
         "generated_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "dataset_catalog_api_version": catalog.get("apiVersion", "unknown"),
+
+        "provenance": {
+            "taxon_id": ORTHOHANTAVIRUS_TAXID,
+            "datasets_cli_version": resolve_datasets_cli_version(),
+            "package_release_date_min": release_dates[0] if release_dates else None,
+            "package_release_date_max": release_dates[-1] if release_dates else None,
+            "note": "release_date_min/max identify WHICH NCBI snapshot this package is; "
+                    "the md5 check under integrity below proves the files are intact, not "
+                    "which query/date produced them. datasets_cli_version records what a "
+                    "user could re-fetch an equivalent package with; it is never used by "
+                    "this pipeline itself.",
+        },
 
         "integrity": {
             "model": "verified against NCBI's published md5sum.txt (file level) and "
@@ -3352,7 +3966,7 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
         "'requires_phylogenetic_confirmation'; confirm candidates with MAFFT + IQ-TREE.")
 
     logging.info("Building ML tables")
-    ml_rows, scaling = build_ml_tables(isolates, divergence_by_key, args.max_features)
+    ml_rows, scaling = build_ml_tables(accessions, isolates, divergence_by_key, args.max_features)
 
     out = paths.output_dir
 
@@ -3370,7 +3984,6 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
     write_csv("ortho_isolate_table.csv", build_isolate_rows(isolates, divergence_by_key))
     write_csv("ortho_host_table.csv", build_host_rows(accessions, isolates))
     write_csv("ortho_segment_divergence.csv", build_segment_divergence_rows(divergence))
-    write_csv("ortho_risk_table.csv", build_risk_rows(isolates, divergence_by_key))
     write_csv("ortho_ml_feature_matrix.csv", ml_rows)
     write_csv("ortho_ml_segments.csv", build_ml_segment_rows(accessions))
     write_csv("ortho_suppressed.csv", build_suppressed_rows(accessions, isolates))
@@ -3379,28 +3992,23 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
 
     summary = summarize(accessions, isolates, divergence, qc_rows, checksums,
                         curation_issues, paths, args.cluster_threshold,
-                        args.min_species_size)
+                        args.min_species_size, data_records)
     write_json("ortho_summary.json", summary)
 
-    # Written once core outputs are all safely on disk, and rewritten below if the
-    # optional phylogenetics table is added, so ortho_output_checksums.txt always covers
-    # exactly what's present in `out` -- run `sha256sum -c ortho_output_checksums.txt`
-    # from the output directory to confirm nothing was truncated or altered afterward
-    # (by an interrupted write, a bad copy, git-lfs mishandling, etc).
-    write_output_checksums(out / "ortho_output_checksums.txt", output_digests)
-
-    logging.info("Done. %s accessions -> %s species -> %s isolates (%s complete triplets)",
-                 summary["counts"]["accession_records"],
-                 summary["counts"]["canonical_species"],
-                 summary["counts"]["isolates"],
-                 summary["counts"]["complete_triplets"])
-
-    # Runs after every core output above is already on disk, and is exception-isolated from
-    # them: a missing mafft/iqtree/biopython/dendropy dependency, or any bug in the
-    # phylogenetics stage, must never cost the run its core tables (all_hanta.py had this
-    # block *before* "Writing outputs" until a code review caught it -- moved here and
-    # wrapped so the opt-in stage can only ever add ortho_reassortment_table.csv, never
-    # take anything else away).
+    # ortho_risk_table.csv is deliberately the one core table NOT written above, and is
+    # built after the phylogenetics block below rather than before it (Task 5): a
+    # bootstrap-supported reassortment call from --phylogenetics now feeds
+    # surveillance_priority's score, which means the risk table needs phylo_rows to exist
+    # first. Every OTHER core output is already safely on disk by this point, so nothing
+    # about the optional phylogenetics stage -- including this reordering -- can cost the
+    # run any of them (all_hanta.py had the whole phylogenetics block *before* "Writing
+    # outputs" until a code review caught it; it was moved after core outputs, and stays
+    # exception-isolated from them here for the same reason).
+    #
+    # If --phylogenetics isn't passed, or the stage fails, phylo_call_by_key stays empty
+    # and ortho_risk_table.csv is written exactly as it always was -- a phylogenetics
+    # failure costs the run reassortment evidence in the risk score, never the table itself.
+    phylo_call_by_key: Dict[str, str] = {}
     if args.phylogenetics:
         logging.info("Phylogenetics stage requested (--phylogenetics)")
         try:
@@ -3408,13 +4016,30 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
             logging.info("  cds: %s accessions with at least one CDS", len(cds_index))
             phylo_rows = run_phylogenetics_stage(isolates, divergence_by_key, cds_index, out, args)
             write_csv("ortho_reassortment_table.csv", phylo_rows)
-            write_output_checksums(out / "ortho_output_checksums.txt", output_digests)
-        except (Exception, SystemExit) as exc:  # noqa: BLE001 - core outputs above are already safe
-            logging.error("Phylogenetics stage failed; core outputs above are unaffected: %s", exc)
+            phylo_call_by_key = _phylo_call_by_isolate(phylo_rows)
+        except (Exception, SystemExit) as exc:  # noqa: BLE001 - risk table below is unaffected
+            logging.error(
+                "Phylogenetics stage failed; ortho_risk_table.csv will be written without "
+                "reassortment evidence, same as a run without --phylogenetics: %s", exc)
     else:
         logging.info(
             "Skipping phylogenetics stage (pass --phylogenetics to run MAFFT + IQ-TREE "
             "reassortment analysis; requires both on PATH, see README)")
+
+    write_csv("ortho_risk_table.csv", build_risk_rows(isolates, divergence_by_key, phylo_call_by_key))
+
+    # Written once, here, after every output that might exist -- including the optional
+    # reassortment table and the risk table above -- is already on disk, so it always
+    # covers exactly what's present in `out`. Run `sha256sum -c ortho_output_checksums.txt`
+    # from the output directory to confirm nothing was truncated or altered afterward (by
+    # an interrupted write, a bad copy, git-lfs mishandling, etc).
+    write_output_checksums(out / "ortho_output_checksums.txt", output_digests)
+
+    logging.info("Done. %s accessions -> %s species -> %s isolates (%s complete triplets)",
+                 summary["counts"]["accession_records"],
+                 summary["counts"]["canonical_species"],
+                 summary["counts"]["isolates"],
+                 summary["counts"]["complete_triplets"])
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -3456,6 +4081,20 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
                        help="Fixed IQ-TREE random seed, for reproducible trees")
     phylo.add_argument("--phylo-threads", type=int, default=max(1, (os.cpu_count() or 4) - 1),
                        help="Threads for mafft and iqtree")
+    phylo.add_argument("--phylo-scope", choices=("species", "phylogroup", "both"), default="both",
+                       help="species: within-species trees only -- can only ever show "
+                            "reassortment WITHIN a species. phylogroup: trees spanning every "
+                            "species in a reservoir-host phylogroup (see PHYLOGROUP), for "
+                            "interspecies signal a species-only tree structurally cannot show. "
+                            "both: run each independently; a candidate isolate can then appear "
+                            "in ortho_reassortment_table.csv up to twice, once per scope "
+                            "(see the analysis_scope column)")
+    phylo.add_argument("--phylo-outgroup", default=None,
+                       help="Accession or isolate_key to root trees on, via IQ-TREE's -o. Only "
+                            "applied to a given tree if that isolate is one of its taxa. Without "
+                            "this, phylogroup trees are unrooted: they can show that segments "
+                            "from different species cluster together, but not which species was "
+                            "donor and which was recipient. No default is assumed.")
     return parser.parse_args(argv)
 
 
