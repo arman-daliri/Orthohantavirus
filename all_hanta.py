@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import logging
 import os
@@ -37,6 +38,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import traceback
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass, field
@@ -805,17 +807,53 @@ def is_cross_study_label(label: str) -> bool:
     return len(key) >= CROSS_STUDY_LABEL_MIN_CHARS and not key.isdigit()
 
 
-def safe_write_parquet(path: Path, rows: Sequence[Dict[str, Any]]) -> None:
+def _atomic_write_bytes(path: Path, data: bytes) -> None:
+    """Write `data` to `path` without ever leaving a truncated file at that name.
+
+    Writes to a sibling temp file first (same directory, so the final `os.replace` is a
+    single filesystem-level rename -- atomic on POSIX), fsyncing before the rename so the
+    bytes are actually on disk rather than just buffered. A crash, kill, or power loss
+    mid-write can only ever destroy the temp file; `path` itself is either the previous
+    good version or absent, never a partial one.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_name, path)
+    except BaseException:
+        Path(tmp_name).unlink(missing_ok=True)
+        raise
+
+
+def safe_write_parquet(path: Path, rows: Sequence[Dict[str, Any]]) -> str:
+    """Write a parquet table atomically; returns its sha256 for the output checksum manifest."""
     frame = pd.DataFrame(list(rows)) if rows else pd.DataFrame()
-    frame.to_parquet(path, engine="pyarrow", index=False)
+    buffer = io.BytesIO()
+    frame.to_parquet(buffer, engine="pyarrow", index=False)
+    data = buffer.getvalue()
+    _atomic_write_bytes(path, data)
     logging.info("Wrote %s rows x %s cols to %s", len(frame), len(frame.columns), path.name)
+    return hashlib.sha256(data).hexdigest()
 
 
-def safe_write_json(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        json.dump(payload, handle, ensure_ascii=False, indent=2)
+def safe_write_json(path: Path, payload: Any) -> str:
+    """Write JSON atomically; returns its sha256 for the output checksum manifest."""
+    data = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+    _atomic_write_bytes(path, data)
+    return hashlib.sha256(data).hexdigest()
+
+
+def write_output_checksums(path: Path, digests: Dict[str, str]) -> None:
+    """Write a sha256sum(1)-compatible manifest so output integrity can be checked later.
+
+    Verify with: sha256sum -c ortho_output_checksums.txt (run from the output directory).
+    """
+    lines = [f"{digest}  {name}\n" for name, digest in sorted(digests.items())]
+    _atomic_write_bytes(path, "".join(lines).encode("utf-8"))
 
 
 def _iter_fasta_records(path: Optional[Path]) -> Iterator[Tuple[str, str]]:
@@ -3322,22 +3360,37 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
     out = paths.output_dir
 
     logging.info("Writing outputs")
-    safe_write_parquet(out / "ortho_accession_table.parquet", build_accession_rows(accessions))
-    safe_write_parquet(out / "ortho_species_table.parquet", build_species_rows(accessions, isolates))
-    safe_write_parquet(out / "ortho_isolate_table.parquet", build_isolate_rows(isolates, divergence_by_key))
-    safe_write_parquet(out / "ortho_host_table.parquet", build_host_rows(accessions, isolates))
-    safe_write_parquet(out / "ortho_segment_divergence.parquet", build_segment_divergence_rows(divergence))
-    safe_write_parquet(out / "ortho_risk_table.parquet", build_risk_rows(isolates, divergence_by_key))
-    safe_write_parquet(out / "ortho_ml_feature_matrix.parquet", ml_rows)
-    safe_write_parquet(out / "ortho_ml_segments.parquet", build_ml_segment_rows(accessions))
-    safe_write_parquet(out / "ortho_suppressed.parquet", build_suppressed_rows(accessions, isolates))
-    safe_write_parquet(out / "ortho_qc_report.parquet", qc_rows)
-    safe_write_json(out / "ortho_feature_scaling.json", scaling)
+    output_digests: Dict[str, str] = {}
+
+    def write_parquet(name: str, rows: Sequence[Dict[str, Any]]) -> None:
+        output_digests[name] = safe_write_parquet(out / name, rows)
+
+    def write_json(name: str, payload: Any) -> None:
+        output_digests[name] = safe_write_json(out / name, payload)
+
+    write_parquet("ortho_accession_table.parquet", build_accession_rows(accessions))
+    write_parquet("ortho_species_table.parquet", build_species_rows(accessions, isolates))
+    write_parquet("ortho_isolate_table.parquet", build_isolate_rows(isolates, divergence_by_key))
+    write_parquet("ortho_host_table.parquet", build_host_rows(accessions, isolates))
+    write_parquet("ortho_segment_divergence.parquet", build_segment_divergence_rows(divergence))
+    write_parquet("ortho_risk_table.parquet", build_risk_rows(isolates, divergence_by_key))
+    write_parquet("ortho_ml_feature_matrix.parquet", ml_rows)
+    write_parquet("ortho_ml_segments.parquet", build_ml_segment_rows(accessions))
+    write_parquet("ortho_suppressed.parquet", build_suppressed_rows(accessions, isolates))
+    write_parquet("ortho_qc_report.parquet", qc_rows)
+    write_json("ortho_feature_scaling.json", scaling)
 
     summary = summarize(accessions, isolates, divergence, qc_rows, checksums,
                         curation_issues, paths, args.cluster_threshold,
                         args.min_species_size)
-    safe_write_json(out / "ortho_summary.json", summary)
+    write_json("ortho_summary.json", summary)
+
+    # Written once core outputs are all safely on disk, and rewritten below if the
+    # optional phylogenetics table is added, so ortho_output_checksums.txt always covers
+    # exactly what's present in `out` -- run `sha256sum -c ortho_output_checksums.txt`
+    # from the output directory to confirm nothing was truncated or altered afterward
+    # (by an interrupted write, a bad copy, git-lfs mishandling, etc).
+    write_output_checksums(out / "ortho_output_checksums.txt", output_digests)
 
     logging.info("Done. %s accessions -> %s species -> %s isolates (%s complete triplets)",
                  summary["counts"]["accession_records"],
@@ -3357,7 +3410,8 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
             cds_index = parse_cds_fasta(paths.cds_fasta)
             logging.info("  cds: %s accessions with at least one CDS", len(cds_index))
             phylo_rows = run_phylogenetics_stage(isolates, divergence_by_key, cds_index, out, args)
-            safe_write_parquet(out / "ortho_reassortment_table.parquet", phylo_rows)
+            write_parquet("ortho_reassortment_table.parquet", phylo_rows)
+            write_output_checksums(out / "ortho_output_checksums.txt", output_digests)
         except (Exception, SystemExit) as exc:  # noqa: BLE001 - core outputs above are already safe
             logging.error("Phylogenetics stage failed; core outputs above are unaffected: %s", exc)
     else:
