@@ -86,8 +86,12 @@ The pipeline runs end-to-end and is currently producing output: integrity-verifi
 - surveillance_priority_score validation — it's stated explicitly as a transparent triage heuristic, not a validated epidemiological model; would need outcome data to validate.
 </details>
 
+### FAQ #4:
+```bash
+Should we run IQ-TREE phylogenetics and MAFFT ?
+```
 <details>
-<summary><strong>Is MAFFT + IQ-TREE necessary?</strong></summary>
+<summary><strong>Yes, to understand the mechanism of reassortment better:</strong></summary>
 
 Not necessary for the pipeline as scoped — and deliberately excluded (README: "No alignment or phylogenetics dependencies"). Everything currently produced (taxonomy, grouping, completeness, host roles, pathogenicity labels, risk score) comes from NCBI's own structured metadata, not from sequence alignment, so adding those dependencies wouldn't improve any of it and would turn a 16-second serial run into a much heavier alignment/tree-building job.
 
@@ -99,15 +103,16 @@ Necessary only if you want to go beyond what's currently claimed, specifically:
 So: leave the pipeline as-is for data preparation and ML feature generation; bring in MAFFT + IQ-TREE only as a separate, targeted follow-up step on the subset of isolates flagged requires_phylogenetic_confirmation, if/when you need a real reassortment or species-boundary answer.
 </details>
 
+### FAQ #5:
+```bash
+The aims of the pipeline in main branch according to the full pipeline (all_hanta.py, all 2,839 lines), README.md, .gitattributes/.gitignore, the current ortho_pipeline.log, and ortho_summary.json:
+```
 <details>
-<summary><strong>The aims of the pipeline:</strong></summary> 
-I read the full pipeline (all_hanta.py, all 2,839 lines), README.md, .gitattributes/.gitignore, the current ortho_pipeline.log, and ortho_summary.json. Here's the accurate picture, with line references.
+<summary><strong>Gemini NoteBook Lm:</strong></summary> 
 
 Aims
 
-Stated in the module docstring (all_hanta.py:1-27) and README: ingest an NCBI Datasets Orthohantavirus (taxon 1980442) package and produce accession-, isolate-, species- and host-level tables, pathogenicity/surveillance-risk labels, per-segment divergence diagnostics, and ML-ready feature matrices for host-association and risk-classification work — all traceable to NCBI's own fields, with hard limitations stated rather than papered over (no invented reassortment calls, no fake PED v
-                                                                                                                                                     What's known / established (verified in code, not just READ
-                                                                                                                                                     - Integrity model (all_hanta.py:841-967): file-level MD5 agwith a CRLF-normalize diagnostic path for Windows autocrlfcorruption; content-level dedup via NCBI's nucleotide.sequenceHash (CRC32, zero-padded to 8 hex chars, normalize_sequence_hash at                    all_hanta.py:970-983).
+- Integrity model (all_hanta.py:841-967): file-level MD5 agwith a CRLF-normalize diagnostic path for Windows autocrlfcorruption; content-level dedup via NCBI's nucleotide.sequenceHash (CRC32, zero-padded to 8 hex chars, normalize_sequence_hash at                    all_hanta.py:970-983).
 - Species resolution (resolve_species, all_hanta.py:991-1037): walks virus.lineage to the node directly below genus Orthohantavirus, not virus.taxId — confirmed this collapses 553 raw organism values to a mucently 39 in this run's ortho_summary.json).
 - Isolate grouping (build_group_key, all_hanta.py:1352-1386): 5-tier fallback cascade — species+biosample+isolate → species+isolate.name →
 species+normalized label → species+strain+date+location → sssion-only. Confirmed BioSample is present on only 87/15,991 records in the documented snapshot.
@@ -154,10 +159,10 @@ What should be studied more
 Everything else the pipeline delivers today — taxonomy, isolate grouping, segment/completeness resolution, host classification, pathogenicity labeling, the risk score, and ML feature tables — comes froata and needs no alignment step. **Add MAFFT + IQ-TREE only as a targeted follow-up over the 1,706 isolates flagged requires_phylogenetic_confirmation, if/when a real reassortment or species-boundary claim is needed.**
 </details>
 
-### FAQ #4:
-Should we run MAFFT and IQ-Tree Phylogenetic or not?
+### FAQ #6:
+Should we keep lab strains or not?
 <details>
-<summary><strong>WHat I understood is good for machine learning if it is carefully cleaned and validated</strong></summary>
+<summary><strong>What I understood is; if lab strains are carefully cleaned and validated it helps to understand the virus's feature effectively</strong></summary>
 https://pmc.ncbi.nlm.nih.gov/articles/PMC10344421/
 
 1. Laboratory Data is Essential for Ground Truth The provided text emphasizes that clinical laboratories are "data rich" and that up to 70% of data in electronic health records (EHR) comes from the lab 
@@ -218,4 +223,56 @@ Summary:
 For Zoonotic Risk Assessment: Keep them. They are the benchmark for "human infectivity."
 For Pure Wild Phylogeny: You might exclude them to see the "natural" tree, but you lose the ability to predict which wild branches are dangerous to humans.
 The study's success in identifying HTNV and SEOV as high-risk relied entirely on the inclusion of the human-derived data for comparison.
+</details>
+
+### FAQ #7:
+```bash
+to predict if any future reassortments can create new dangerous orthohantavirus for human in orthohantavirus, should we exclude lab version segments or keep them for more valid results?
+
+surveillance priority score, which is a transparent, additive point system ranging from 0.0 to 10.0
+```
+<details>
+<summary><strong>How it is calculated:</strong></summary>
+Pathogenicity and Risk Criteria
+The score is calculated by summing the weights of the following six terms:
+Case-Fatality Rate (CFR) Band: The largest component of the score, based on known literature for a species.
+4.0 points: High risk (CFR >30%, e.g., SNV, ANDV).
+2.5 points: Moderate risk (CFR 1–15%, e.g., HTNV, DOBV).
+1.0 point: Low risk (CFR <1%, e.g., SEOV, PUUV).
+0.5 points: Unknown risk (Species with reported human cases but no established CFR).
+0.0 points: No known human disease (e.g., shrew-borne species).
+Human Spillover (2.0 points): Added if the specific virus record was recovered directly from a human host (Homo sapiens).
+Taxonomic Incongruence (1.5 points): Triggered when the genetic segments of a single isolate are assigned by NCBI to two different species, which serves as a reliable metadata signal for potential genetic exchange.
+Host Jump (1.0 point): Added if the virus was recovered from an animal order that does not match its species' expected natural reservoir (e.g., a rodent-borne virus found in a bat).
+Complete Triplet (1.0 point): Added if the isolate contains all three segments (S, M, and L) and they are all coding-complete, providing a higher quality of data for surveillance.
+NSs ORF (0.5 points): A small bonus if the virus encodes the non-structural protein (NSs), which is a known virulence factor in certain species.
+
+</details>
+
+### FAQ #8:
+What does each file have?
+
+<details>
+<summary><strong>Claude:</strong></summary>
+Here's what each output file is, with a real row from your data:
+
+One row per accession/segment (raw level)
+- ortho_accession_table.parquet — every individual GenBank accession, one row each. Ex: MW498184.1 → PUUV, segment M, partial completeness, host Myodes glareolus, Russia, 2019.
+- ortho_ml_segments.parquet — a slimmer version of the accession table, trimmed to just the columns useful for ML on individual segments (species, host, year, completeness) — same accession, fewer columns.
+- ortho_qc_report.parquet — QC pass/fail per accession. Ex: MW498184.1 → transform_ok: True, warnings: '' (empty = clean).
+- ortho_suppressed.parquet — accessions that got dropped from the main tables and why. Ex: an S-segment record excluded with suppression_reason: missing_host.
+
+One row per isolate (S+M+L segments grouped into an animal/sample)
+- ortho_isolate_table.parquet — the core "biological unit" table: one row per isolate, with its S/M/L accessions joined together. Ex: isolate puuv kyzyl yulskoe... → S=MW504239.1, M=MW498184.1, L=MW498224.1, triplet_status: all_segments_present_not_all_complete.
+- ortho_ml_feature_matrix.parquet — the actual ML-ready tabmetadata columns plus 200+ kmer_XXX columns (amino-acid3-mer frequencies from the concatenated protein) as features, and label_pathogenicity_class etc. as targets.
+- ortho_segment_divergence.parquet — per-isolate k-mer dist possible reassortment candidates (not confirmed — just"worth checking"). Ex: s_kmer_distance, reassortment_status: not_assessable.
+- ortho_risk_table.parquet — per-isolate epidemiological ricase-fatality band, and a computedsurveillance_priority_score. Ex: an Andes virus isolate scores cfr_band_label: high_gt_30pct, priority 7.5.
+- ortho_reassortment_table.parquet — the opt-in phylogeneti ran --phylogenetics): actual tree-basedconfirmation/rejection of reassortment per isolate, with bootstrap support. Ex: reassortment_call: no_conflict.
+
+Rollups
+- ortho_species_table.parquet — one row per virus species, 2567 isolates, top host Myodes glareolus, cfr_band_label:low_lt_1pct.
+- ortho_host_table.parquet — one row per host organism, agg → 2652 accessions across 1655 isolates, mostly PUUV.
+
+Rule of thumb: accession-level tables = "what NCBI gave us,evel tables = "what animal/sample this actually came from,segments merged"; species/host tables = "summary stats"; risk/divergence/reassortment = "derived scientific judgments on top of the isolate table."
+
 </details>
