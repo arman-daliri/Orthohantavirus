@@ -156,7 +156,7 @@ submitters actually use to tie an isolate's S, M and L segments together.
 | 5 | species + strain + location | 0.65 |
 | — | accession only | 0.10 |
 
-Result on this package: **1,777 groups with all three S, M and L segments present**, and 222
+Result on this package: **1,795 groups with all three S, M and L segments present**, and 223
 where all three are coding-complete. The coding-complete count is bounded by the data — only
 1,339 of 15,991 records are `COMPLETE` at all — not by the grouping.
 
@@ -478,6 +478,19 @@ Usable = has a concatenated S+M protein and is not `is_vaccine_strain` (`is_lab_
 
 Built by `build_ml_sequence_rows`. Row filter (all three, isolate-level): `has_complete_triplet` (coding-complete S **and** M **and** L), **and not** `is_lab_derived`, **and not** `is_vaccine_strain` — stricter than `ortho_ml_feature_matrix.csv`, which keeps `is_lab_derived` isolates flagged rather than filtered; a raw sequence fed to a model as "wild-type" input is exactly the case passage history would mislead, unlike a k-mer composition feature. An isolate is also silently dropped if its genomic FASTA sequence is missing for a segment despite being coding-complete (logged as a count, not per-row).
 
+**How 15,991 accessions become 206 rows**, on this package:
+
+| # | Step | Function | Count | What's removed and why |
+|---|---|---|---|---|
+| 1 | Raw accessions | `iter_jsonl(data_report)` | 15,991 | — (starting point) |
+| 2 | Reconstructed into isolates | `build_isolate_records` | 9,852 | Accessions sharing an isolate/strain/biosample label are grouped into one S/M/L isolate (see [Isolate grouping](#isolate-grouping)) — this is a many→fewer collapse, not a filter |
+| 3 | Isolates with a full-complete S+M+L triplet | `has_complete_triplet` | 223 | −9,629: missing one or more segments outright, or a present segment isn't NCBI-`complete` + length-qualified (see [Completeness](#completeness)) |
+| 4 | Minus laboratory-host isolates | `is_lab_derived` | 206 | −17: host recorded as a laboratory host on at least one segment (`isLabHost`) |
+| 5 | Minus vaccine-strain isolates | `is_vaccine_strain` | 206 | −0 in this package (none of the 223 complete triplets are vaccine strains) |
+| 6 | Minus missing genomic FASTA sequence | `genomic_index` lookup | **206** | −0 in this package (every remaining isolate's S/M/L genomic sequence was present in `genomic.fna`) |
+
+Step 3 is where almost all of the reduction happens — **not** the lab/vaccine filter (steps 4–5), which only removes 17 isolates on top. Most reconstructed isolates simply never had all three segments sequenced at all (see [Isolate grouping](#isolate-grouping): only 1,795 of 9,852 isolates have all three segments present at *any* completeness, before the coding-complete requirement even applies). Host *species* (human vs. reservoir animal) is never a filter at any step — see the row counts by `host_role` in the table itself for the actual mix.
+
 - `isolate_name` — `isolate.isolate`, falling back to `isolate.strain`, falling back to `isolate_key` if both are blank. Note this is the **submitter-provided label verbatim** — it can be a bare number like `"3"` or `"136"` when that's literally what was submitted to NCBI (`isolate.name`/`source` in `data_report.jsonl`); it is not unique across species (two different species can each have an isolate named `"3"`), only unique in combination with `species_name` (see `ortho_isolate_table.csv` for that context, joinable on `isolate_key`).
 - `s_sequence`/`m_sequence`/`l_sequence` — full genomic segment sequence (not the CDS-only sequence `--phylogenetics` uses), straight from the genomic FASTA, keyed by `s_accession`/`m_accession`/`l_accession`.
 - `cfr_reported_range` — `species_risk_profile(species_name)["cfr_reported_range"]`, the literature CFR range string (e.g. `"0.1-0.4%"`), verbatim, not the ordinal `cfr_band`.
@@ -568,8 +581,8 @@ data, because segments from the same outbreak are near-identical.
 - **k-mer distances are not PED.** The ICTV 0.1 cutoff needs aligned sequences and ML inference —
   `--phylogenetics` builds real per-segment ML trees but does not compute a DEmARC-style
   concatenated-PED value; it is aimed at the reassortment question, not species re-demarcation.
-- **222 coding-complete triplets** is a ceiling set by the data (1,339 COMPLETE records total),
-  not by the pipeline. 1,777 groups have all three segments present at some completeness.
+- **223 coding-complete triplets** is a ceiling set by the data (1,339 COMPLETE records total),
+  not by the pipeline. 1,795 groups have all three segments present at some completeness.
 - **2,386 records are `unclassified Orthohantavirus` or genus-only** and carry no species-level
   risk label. They are retained, not discarded.
 - **CFR bands are literature ranges, not computed from this data.** Sources conflict; both values
