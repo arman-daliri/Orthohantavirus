@@ -375,6 +375,7 @@ maximum-likelihood inference. These clusters are an alignment-free proxy and are
 | `ortho_segment_divergence.csv` | 9,852 × 17 | Per-segment nearest neighbours and rank separations — **diagnostics, not reassortment calls** |
 | `ortho_ml_feature_matrix.csv` | 7,651 × 229 | Raw features + labels, with `group_id` and `year` for leakage-free CV |
 | `ortho_ml_segments.csv` | 15,781 × 19 | Segment-level table for per-segment models |
+| `ortho_ml_sequence_table.csv` | 206 × 5 | One row per isolate with a coding-complete S+M+L triplet (lab-derived and vaccine-strain isolates excluded): isolate name, raw S/M/L genomic sequences, CFR range |
 | `ortho_suppressed.csv` | 1,032 × 16 | Non-representative accessions with the reason |
 | `ortho_qc_report.csv` | 15,991 × 11 | Per-accession QC including failed transforms with traceback |
 | `ortho_feature_scaling.json` | — | Per-feature mean/std, to be fitted **inside** your CV fold |
@@ -387,6 +388,140 @@ and `year` are all-digit strings by design (they are identifiers, not quantities
 leave them blank) — a bare `pd.read_csv(...)` will infer them as numeric and either error on the
 blank rows or silently turn them into floats. Read these columns with `dtype=str` if you need them
 back as they were written.
+
+### Column reference
+
+Every column in every table, grouped by file. `int()`-coded booleans (`is_lab_derived`,
+`has_complete_triplet`, etc.) are `0`/`1`; `;`-joined columns (`sra_accessions`,
+`protein_accessions`, `warning_flags`, etc.) hold zero or more values in one cell.
+
+<details>
+<summary><code>ortho_accession_table.csv</code> — one row per GenBank accession</summary>
+
+**Identity & taxonomy** — `accession`, `sequence_hash` (CRC32 from NCBI, zero-padded); `species_name`/`species_taxid`/`species_status` (canonical ICTV species, see [Taxonomy resolution](#taxonomy-resolution)); `observed_organism`/`observed_taxid` (NCBI's raw, pre-canonicalization label); `genus`/`subfamily`/`family`/`order`/`class`/`phylum` (from `virus.lineage`); `virus_abbrev`/`pathogenicity_class`/`expected_reservoir_order` (curated, from `SPECIES_RISK`); `host_jump_status` (`host_order_mismatch` if this record's host order differs from its species' expected reservoir order).
+
+**Segment & completeness** — `segment` (S/M/L or empty if unresolved); `segment_source`/`segment_confidence` (which evidence tier resolved it, see [Segment resolution](#segment-resolution)); `completeness`/`completeness_source` (NCBI's `PARTIAL`/`COMPLETE` field, authoritative); `is_coding_complete` (length-qualified completeness, the basis for `has_complete_triplet` downstream); `nt_length`.
+
+**Sample / isolate metadata** — `biosample`, `bioproject`, `sra_accessions`; `isolate`/`strain` (submitter-provided labels, used to group S/M/L into one isolate); `collection_date`/`year`; `location`/`country`/`region`.
+
+**Host** — `host_name`/`host_taxid`/`host_order`/`host_family`; `host_source` (`data_report` or `biosample`, whichever supplied it); `host_role` (`reservoir_*`, `spillover_host_human`, or `laboratory_host`, from lineage rank not string matching); `isolation_source`/`tissue_source`; `is_lab_host`/`lab_host` (NCBI's `isLabHost`/`labHost` fields — the immediate recorded host, not sequence provenance, see [Host classification](#host-classification)); `is_vaccine_strain` (NCBI's `isVaccineStrain`).
+
+**Protein / annotation** — `protein_accessions`, `annotation_products`, `protein_product`, `has_nss_orf` (encodes the NSs virulence-factor ORF).
+
+**Grouping / provenance / QC** — `group_key` (the isolate this accession was grouped into, see [Isolate grouping](#isolate-grouping)); `grouping_tier`/`group_confidence` (which of the 5 grouping tiers fired, 1.00 down to 0.10); `is_refseq`; `source_database`; `warning_flags` (e.g. `missing_host`, `lab_host`, `vaccine_strain`, `missing_genomic_sequence`, `no_annotation`, length anomalies).
+</details>
+
+<details>
+<summary><code>ortho_species_table.csv</code> — one row per canonical ICTV species (rollup)</summary>
+
+`species_name`/`species_status`; `observed_taxids`/`canonical_taxids` (every raw taxid that canonicalized to this species); `legacy_synonyms` (superseded organism labels merged in); `subfamily`/`family`/`order`; every key from `species_risk_profile` (`virus_abbrev`, `disease_syndrome`, `cfr_band`, `cfr_band_label`, `cfr_reported_range`, `reservoir_host`, `endemic_region`, `pathogenicity_class`, `risk_citation`, `reservoir_order` — see [Pathogenicity labels](#pathogenicity-labels)); `reported_reassortment` (literature summary, informational only, not computed); `accession_count`/`isolate_count`/`complete_triplet_count`; `s_count`/`m_count`/`l_count`; `distinct_hosts`/`top_host`; `human_derived_count`; `distinct_countries`/`top_country`; `year_min`/`year_max`.
+</details>
+
+<details>
+<summary><code>ortho_isolate_table.csv</code> — one row per reconstructed isolate (the core biological unit)</summary>
+
+**Identity** — `isolate_key` (the grouping key, see [Isolate grouping](#isolate-grouping)); `species_name`/`species_taxid`/`species_status`; `virus_abbrev`/`pathogenicity_class`; `kmer_cluster_id` (within-species cluster, see [Species clustering](#species-clustering)); `biosample`/`isolate`/`strain`.
+
+**Host & sample metadata** — `host_name`/`host_taxid`/`host_order`/`host_family`/`host_role`; `collection_date`/`year`; `location`/`country`/`region`; `grouping_tier`/`grouping_confidence`.
+
+**Segments** — `s_accession`/`m_accession`/`l_accession` (the chosen representative accession per segment); `s_completeness`/`m_completeness`/`l_completeness`; `s_nt_length`/`m_nt_length`/`l_nt_length`; `segments_present`/`coding_complete_segments`; `triplet_status` (`coding_complete_triplet` / `all_segments_present_not_all_complete` / `partial_triplet_with_complete_segment` / `incomplete_triplet`); `has_complete_triplet` (`triplet_status == coding_complete_triplet` — the flag `ortho_ml_sequence_table.csv` filters on); `concatenated_protein_aa`/`concatenated_protein_length` (S+M protein, the ML feature matrix's raw input); `s_protein_accessions`/`m_protein_accessions`/`l_protein_accessions`; `all_accessions` (every accession folded into this isolate, including suppressed duplicates).
+
+**Flags & diagnostics** — `is_lab_derived`/`is_vaccine_strain`/`has_nss_orf`; `metadata_conflict` (segments disagreed on collection date or location); `taxonomic_incongruence` (segments assigned to more than one species); `cross_species_partners`; `divergence_assessable`/`reassortment_status`/`sl_rank_separation`/`m_rank_offset` (k-mer divergence diagnostics — **not** reassortment calls, see [Reassortment](#reassortment)); `warnings`.
+</details>
+
+<details>
+<summary><code>ortho_host_table.csv</code> — one row per host taxon (rollup)</summary>
+
+`host_name`/`host_taxid`/`host_order`/`host_family`/`host_role` (modal role across its records); `host_risk_prior` (curated, from `HOST_ORDER_RISK_PRIOR`); `accession_count`/`isolate_count`; `distinct_virus_species`/`top_virus_species`/`all_virus_species`; `representative_biosample`/`representative_isolate` (first non-empty example, for spot-checking).
+</details>
+
+<details>
+<summary><code>ortho_risk_table.csv</code> — one row per isolate, surveillance triage ranking (sorted by score, descending)</summary>
+
+**Risk profile** — `isolate_key`/`species_name`/`virus_abbrev`/`pathogenicity_class`/`disease_syndrome`; `cfr_band`/`cfr_band_label`/`cfr_reported_range` (see [Pathogenicity labels](#pathogenicity-labels)); `reservoir_host`/`endemic_region`/`risk_citation`.
+
+**This isolate** — `host_role`/`host_order`/`expected_reservoir_order`/`host_jump_status`/`observed_host`; `country`/`year`; `triplet_status`/`has_complete_triplet`/`has_nss_orf`; `reassortment_status` (k-mer diagnostic, informational); `taxonomic_incongruence`/`cross_species_partners`; `phylo_reassortment_call` (from `--phylogenetics`, empty string if that stage wasn't run or didn't reach this isolate).
+
+**Score** — `priority_cfr_term`, `priority_human_spillover_term`, `priority_taxonomic_incongruence_term`, `priority_host_jump_term`, `priority_triplet_term`, `priority_nss_term`, `priority_reassortment_term` (one column per additive term — always present and `0.0` if `--phylogenetics` wasn't run), and `surveillance_priority_score` (their sum). See [Risk score](#risk-score) below for the weight of each term.
+</details>
+
+<details>
+<summary><code>ortho_segment_divergence.csv</code> — one row per isolate, k-mer divergence diagnostics (not reassortment calls)</summary>
+
+`isolate_key`/`species_name`; `assessable`/`not_assessable_reason` (needs `--min-species-size` assessable isolates in the species); `reassortment_status` (`requires_phylogenetic_confirmation` or `not_assessable` — **never a positive/negative call**); `taxonomic_incongruence`; `sl_rank_separation`/`m_rank_offset` (the actual diagnostic signal — normalized rank-distance metrics); `s_nearest_neighbour`/`m_nearest_neighbour`/`l_nearest_neighbour` (nearest isolate by k-mer distance, per segment); `s_kmer_distance`/`m_kmer_distance`/`l_kmer_distance`; `reported_species_prior`; `distance_metric`/`interpretation_warning` (fixed text, restating why this is a proxy and not a reassortment call — see [Reassortment](#reassortment)).
+</details>
+
+<details>
+<summary><code>ortho_ml_feature_matrix.csv</code> — one row per ML-usable isolate (k-mer feature matrix + labels)</summary>
+
+Usable = has a concatenated S+M protein and is not `is_vaccine_strain` (`is_lab_derived` isolates are *kept*, flagged — see [Host classification](#host-classification)).
+
+**Identity / grouping** — `isolate_key`, `group_id` (= `species_name`, split your CV on this), `kmer_cluster_id`, `year`, `species_name`/`species_taxid`, `host_name`/`host_taxid`/`host_order`/`host_role`, `country`.
+
+**Segment / quality features** — `s_nt_length`/`m_nt_length`/`l_nt_length`, `n_segments_present`, `n_coding_complete`, `has_complete_triplet`, `has_nss_orf`, `protein_length`, `divergence_assessable`, `sl_rank_separation`, `m_rank_offset`, `taxonomic_incongruence`, `host_jump_status`, `is_lab_derived` (retained as a feature to ablate/stratify on, not filtered).
+
+**Effort / confound controls** (prefix `effort_`, one block per species — sampling intensity, not biology; see the `build_ml_tables` docstring) — `effort_n_accessions`, `effort_n_isolates`, `effort_n_countries`, `effort_n_years`, `effort_first_year`, `effort_years_since_first`, `effort_n_complete_triplets`.
+
+**Labels** — `label_pathogenicity_class`, `label_disease_syndrome`, `label_cfr_band`, `label_is_human_derived`.
+
+**Features** — `kmer_<3-mer>` × up to `--max-features` (default 200) columns: raw counts of the top-variance amino-acid 3-mers over the concatenated S+M protein, unscaled (see `ortho_feature_scaling.json` and [Using the ML tables](#using-the-ml-tables)).
+</details>
+
+<details>
+<summary><code>ortho_ml_segments.csv</code> — one row per S/M/L accession, slim per-segment table</summary>
+
+`accession`/`sequence_hash`/`segment`/`segment_source`; `species_name`/`species_taxid`; `pathogenicity_class`/`cfr_band`; `host_name`/`host_taxid`/`host_order`/`host_role`; `country`/`year`; `nt_length`/`completeness`/`is_coding_complete`; `is_lab_host`; `group_key` (join key back to `ortho_isolate_table.csv`).
+</details>
+
+<details>
+<summary><code>ortho_ml_sequence_table.csv</code> — one row per qualifying isolate, raw S/M/L sequences for sequence-based ML</summary>
+
+Built by `build_ml_sequence_rows`. Row filter (all three, isolate-level): `has_complete_triplet` (coding-complete S **and** M **and** L), **and not** `is_lab_derived`, **and not** `is_vaccine_strain` — stricter than `ortho_ml_feature_matrix.csv`, which keeps `is_lab_derived` isolates flagged rather than filtered; a raw sequence fed to a model as "wild-type" input is exactly the case passage history would mislead, unlike a k-mer composition feature. An isolate is also silently dropped if its genomic FASTA sequence is missing for a segment despite being coding-complete (logged as a count, not per-row).
+
+- `isolate_name` — `isolate.isolate`, falling back to `isolate.strain`, falling back to `isolate_key` if both are blank. Note this is the **submitter-provided label verbatim** — it can be a bare number like `"3"` or `"136"` when that's literally what was submitted to NCBI (`isolate.name`/`source` in `data_report.jsonl`); it is not unique across species (two different species can each have an isolate named `"3"`), only unique in combination with `species_name` (see `ortho_isolate_table.csv` for that context, joinable on `isolate_key`).
+- `s_sequence`/`m_sequence`/`l_sequence` — full genomic segment sequence (not the CDS-only sequence `--phylogenetics` uses), straight from the genomic FASTA, keyed by `s_accession`/`m_accession`/`l_accession`.
+- `cfr_reported_range` — `species_risk_profile(species_name)["cfr_reported_range"]`, the literature CFR range string (e.g. `"0.1-0.4%"`), verbatim, not the ordinal `cfr_band`.
+</details>
+
+<details>
+<summary><code>ortho_suppressed.csv</code> — non-representative accessions, with why</summary>
+
+`accession`/`sequence_hash`; `species_name`/`species_taxid`; `segment`/`completeness`/`nt_length`; `biosample`/`isolate`/`strain`; `collection_date`/`location`; `host_name`/`host_taxid`; `group_key`; `suppression_reason` (`duplicate_sequence_of:<accession>`, `segment_unresolved`, one of `warning_flags`, or `not_best_representative_for_group`).
+</details>
+
+<details>
+<summary><code>ortho_qc_report.csv</code> — one row per accession, transform pass/fail</summary>
+
+`accession`; `group_key`/`grouping_tier`/`group_confidence`; `species_name`; `segment`/`segment_source`; `completeness`/`nt_length`; `transform_ok` (`False` only if the accession threw during transform — a single bad record never aborts the run); `warnings`; `traceback` (present only on `transform_ok == False` rows).
+</details>
+
+<details>
+<summary><code>ortho_feature_scaling.json</code> — fit-outside-your-fold reference stats for the ML feature matrix</summary>
+
+`k`/`alphabet`/`selection` (method used to pick the `kmer_*` columns); `n_features`/`features` (the exact column names selected); `mean`/`std` per feature, computed on the **full** table — a caution/`note`/`caveat` field spells out why these must be refit inside your own CV fold, not applied before splitting; `recommended_cv`; `n_label_bearing_groups` (distinct species with a real, non-`unknown` CFR band).
+</details>
+
+<details>
+<summary><code>ortho_summary.json</code> — provenance, integrity, counts, methods, limitations</summary>
+
+Top-level sections: `pipeline_version`/`generated_at_utc`/`dataset_catalog_api_version`; `provenance` (taxon id, `datasets` CLI version, package release-date range); `integrity` (md5 + sequence-hash verification results, per-file); `counts` (accessions, species, isolates, complete triplets, host/biosample/human/lab/vaccine record counts); a set of `*_counts` breakdowns (`segment_counts`, `completeness_counts`, `grouping_tier_counts`, `triplet_status_counts`, `host_order_counts`, `host_role_counts`, `pathogenicity_counts`, `host_jump_counts`, `reassortment_status_counts`, `qc_warning_counts`); `taxonomic_incongruence_count`; `methods` (prose description of each resolution step, mirroring this README); and a stated `limitations` block.
+</details>
+
+<details>
+<summary><code>ortho_reassortment_table.csv</code> — <code>--phylogenetics</code> only, one row per candidate isolate per requested scope</summary>
+
+Every field is always present (even for a not-yet-analyzed or failed row) so the table has one stable, joinable schema — see `_phylo_row`'s docstring. Full methodology in [Reassortment → `--phylogenetics`](#--phylogenetics-the-rigorous-replacement).
+
+**Identity / selection** — `isolate_key`/`species_name` (the isolate's true species, never the phylogroup label); `candidate_tags` (why it was selected: `human_affecting_or_likely` / `divergence_candidate` / `complete_triplet`, can be more than one); `analysis_scope` (`species` or `phylogroup` — a candidate can appear once per scope under `--phylo-scope=both`, the default); `phylogroup_assignment_basis` (`curated_reservoir` or `observed_host_order`, only meaningful at `analysis_scope == phylogroup`).
+
+**Tree status** — `n_taxa_in_species_tree` (taxa in *this row's* tree, despite the name — imprecise for phylogroup-scope rows on purpose, see the code comment); `phylo_status` (`analyzed` / `failed` / `species_below_min_taxa`); `phylo_error`.
+
+**Per-isolate tree diagnostics** (real phylogenetic distance, the same statistical shape as the k-mer diagnostics but the actual fix for their failure mode) — `tree_s_nearest_isolate`/`tree_m_nearest_isolate`/`tree_l_nearest_isolate`; `tree_s_distance`/`tree_m_distance`/`tree_l_distance` (patristic/branch-length); `tree_s_rank_offset`/`tree_m_rank_offset`/`tree_l_rank_offset`; `tree_sm_rank_separation`/`tree_sl_rank_separation`/`tree_ml_rank_separation`; `discordant_segment`; `matches_canonical_m_exchange` (S and L agree, M's neighbour differs — the literature's M-exchange signature).
+
+**Bootstrap gate & call** — `m_clade_bootstrap_support`/`discordant_clade_bootstrap_support` (`None`, not `0.0`, when no discordant clade exists to measure — a real 0% support must stay distinguishable from "not applicable"); `bootstrap_support_source` (`mrca` / `nearest_supported_ancestor` / `unsupported_root`, empty for not-yet-analyzed/`no_conflict` rows); `reassortment_call` (`not_analyzed` / `no_conflict` / `weak_signal_low_bootstrap_support` / `supported_reassortment_candidate` — **only** the last one contributes to `priority_reassortment_term` in `ortho_risk_table.csv`).
+
+**Per-tree (species or phylogroup) topology summary** — `species_rf_s_vs_m`/`species_rf_m_vs_l`/`species_rf_s_vs_l` (Robinson-Foulds distance between segment tree pairs, via `dendropy`) and their `_normalized` counterparts; `s_alignment_path`/`m_alignment_path`/`l_alignment_path`/`s_tree_path`/`m_tree_path`/`l_tree_path` (on-disk locations under `<output>/phylogenetics/<species>/<segment>/`).
+</details>
 
 ### Risk score
 
