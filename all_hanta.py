@@ -3674,6 +3674,7 @@ def build_ml_sequence_rows(isolates: Sequence[IsolateRecord],
 
         risk = species_risk_profile(isolate.species_name)
         rows.append({
+            "species_name": isolate.species_name,
             "isolate_name": isolate.isolate or isolate.strain or isolate.isolate_key,
             "s_sequence": s_rec.sequence,
             "m_sequence": m_rec.sequence,

@@ -375,7 +375,7 @@ maximum-likelihood inference. These clusters are an alignment-free proxy and are
 | `ortho_segment_divergence.csv` | 9,852 × 17 | Per-segment nearest neighbours and rank separations — **diagnostics, not reassortment calls** |
 | `ortho_ml_feature_matrix.csv` | 7,651 × 236 | Raw features + labels, with `group_id` and `year` for leakage-free CV |
 | `ortho_ml_segments.csv` | 15,781 × 19 | Segment-level table for per-segment models |
-| `ortho_ml_sequence_table.csv` | 206 × 5 | One row per isolate with a coding-complete S+M+L triplet (lab-derived and vaccine-strain isolates excluded): isolate name, raw S/M/L genomic sequences, CFR range |
+| `ortho_ml_sequence_table.csv` | 206 × 6 | One row per isolate with a coding-complete S+M+L triplet (lab-derived and vaccine-strain isolates excluded): species name, isolate name, raw S/M/L genomic sequences, CFR range |
 | `ortho_suppressed.csv` | 1,032 × 16 | Non-representative accessions with the reason |
 | `ortho_qc_report.csv` | 15,991 × 11 | Per-accession QC including failed transforms with traceback |
 | `ortho_feature_scaling.json` | — | Per-feature mean/std, to be fitted **inside** your CV fold |
@@ -491,7 +491,8 @@ Built by `build_ml_sequence_rows`. Row filter (all three, isolate-level): `has_c
 
 Step 3 is where almost all of the reduction happens — **not** the lab/vaccine filter (steps 4–5), which only removes 17 isolates on top. Most reconstructed isolates simply never had all three segments sequenced at all (see [Isolate grouping](#isolate-grouping): only 1,795 of 9,852 isolates have all three segments present at *any* completeness, before the coding-complete requirement even applies). Host *species* (human vs. reservoir animal) is never a filter at any step — see the row counts by `host_role` in the table itself for the actual mix.
 
-- `isolate_name` — `isolate.isolate`, falling back to `isolate.strain`, falling back to `isolate_key` if both are blank. Note this is the **submitter-provided label verbatim** — it can be a bare number like `"3"` or `"136"` when that's literally what was submitted to NCBI (`isolate.name`/`source` in `data_report.jsonl`); it is not unique across species (two different species can each have an isolate named `"3"`), only unique in combination with `species_name` (see `ortho_isolate_table.csv` for that context, joinable on `isolate_key`).
+- `species_name` — the isolate's canonical ICTV species (`isolate.species_name`, see [Taxonomy resolution](#taxonomy-resolution)). Never blank — every isolate in this table came through species resolution before grouping. This is also what disambiguates `isolate_name`, see below.
+- `isolate_name` — `isolate.isolate`, falling back to `isolate.strain`, falling back to `isolate_key` if both are blank. Note this is the **submitter-provided label verbatim** — it can be a bare number like `"3"` or `"136"` when that's literally what was submitted to NCBI (`isolate.name`/`source` in `data_report.jsonl`); it is not unique across species (two different species can each have an isolate named `"3"`), only unique in combination with `species_name`.
 - `s_sequence`/`m_sequence`/`l_sequence` — full genomic segment sequence (not the CDS-only sequence `--phylogenetics` uses), straight from the genomic FASTA, keyed by `s_accession`/`m_accession`/`l_accession`.
 - `cfr_reported_range` — `species_risk_profile(species_name)["cfr_reported_range"]`, the literature CFR range string (e.g. `"0.1-0.4%"`), verbatim, not the ordinal `cfr_band`.
 </details>
