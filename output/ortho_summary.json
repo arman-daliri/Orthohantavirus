@@ -1,7 +1,14 @@
 {
   "pipeline_version": "2.0.0",
-  "generated_at_utc": "2026-08-01T11:55:46Z",
+  "generated_at_utc": "2026-08-03T11:35:04Z",
   "dataset_catalog_api_version": "V2",
+  "provenance": {
+    "taxon_id": 1980442,
+    "datasets_cli_version": "not found on PATH",
+    "package_release_date_min": "1987-11-29T00:00:00Z",
+    "package_release_date_max": "2026-07-07T00:00:00Z",
+    "note": "release_date_min/max identify WHICH NCBI snapshot this package is; the md5 check under integrity below proves the files are intact, not which query/date produced them. datasets_cli_version records what a user could re-fetch an equivalent package with; it is never used by this pipeline itself."
+  },
   "integrity": {
     "model": "verified against NCBI's published md5sum.txt (file level) and nucleotide.sequenceHash / CRC32 (content level)",
     "md5sum_file_present": true,

@@ -610,5 +610,7 @@
     "kmer_YTY": 0.002155074501616855,
     "kmer_YVS": 0.0023981334151625404
   },
-  "recommended_cv": "GroupKFold on group_id (species), or a temporal split on year"
+  "recommended_cv": "GroupKFold on group_id (species), or a temporal split on year",
+  "n_label_bearing_groups": 32,
+  "caveat": "Labels (label_pathogenicity_class, label_disease_syndrome, label_cfr_band) are constant within group_id: every isolate of one species carries the same label. Under GroupKFold on group_id, the effective sample size is therefore the number of label-bearing SPECIES (32), not the number of isolates in this table. Any split that is NOT grouped by group_id leaks completely, because 3-mer amino-acid composition separates species trivially -- a model can identify the species (and therefore its label) from the kmer_* columns alone, with no biology learned at all."
 }

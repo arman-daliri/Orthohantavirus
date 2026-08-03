@@ -371,9 +371,9 @@ maximum-likelihood inference. These clusters are an alignment-free proxy and are
 | `ortho_species_table.csv` | 39 × 32 | One row per canonical ICTV species: merged taxids, legacy synonyms, risk profile, segment and host counts |
 | `ortho_isolate_table.csv` | 9,852 × 52 | Reconstructed isolates with S/M/L representatives, triplet status, concatenated protein, divergence diagnostics |
 | `ortho_host_table.csv` | 253 × 13 | One row per host taxon with risk prior and virus species carried |
-| `ortho_risk_table.csv` | 9,852 × 31 | Pathogenicity class, CFR band, citation, and an auditable additive `surveillance_priority_score` |
+| `ortho_risk_table.csv` | 9,852 × 33 | Pathogenicity class, CFR band, citation, and an auditable additive `surveillance_priority_score` |
 | `ortho_segment_divergence.csv` | 9,852 × 17 | Per-segment nearest neighbours and rank separations — **diagnostics, not reassortment calls** |
-| `ortho_ml_feature_matrix.csv` | 7,651 × 229 | Raw features + labels, with `group_id` and `year` for leakage-free CV |
+| `ortho_ml_feature_matrix.csv` | 7,651 × 236 | Raw features + labels, with `group_id` and `year` for leakage-free CV |
 | `ortho_ml_segments.csv` | 15,781 × 19 | Segment-level table for per-segment models |
 | `ortho_ml_sequence_table.csv` | 206 × 5 | One row per isolate with a coding-complete S+M+L triplet (lab-derived and vaccine-strain isolates excluded): isolate name, raw S/M/L genomic sequences, CFR range |
 | `ortho_suppressed.csv` | 1,032 × 16 | Non-representative accessions with the reason |
@@ -504,7 +504,7 @@ Built by `build_ml_sequence_rows`. Row filter (all three, isolate-level): `has_c
 <details>
 <summary><code>ortho_summary.json</code> — provenance, integrity, counts, methods, limitations</summary>
 
-Top-level sections: `pipeline_version`/`generated_at_utc`/`dataset_catalog_api_version`; `provenance` (taxon id, `datasets` CLI version, package release-date range); `integrity` (md5 + sequence-hash verification results, per-file); `counts` (accessions, species, isolates, complete triplets, host/biosample/human/lab/vaccine record counts); a set of `*_counts` breakdowns (`segment_counts`, `completeness_counts`, `grouping_tier_counts`, `triplet_status_counts`, `host_order_counts`, `host_role_counts`, `pathogenicity_counts`, `host_jump_counts`, `reassortment_status_counts`, `qc_warning_counts`); `taxonomic_incongruence_count`; `methods` (prose description of each resolution step, mirroring this README); and a stated `limitations` block.
+Top-level sections: `pipeline_version`/`generated_at_utc`/`dataset_catalog_api_version`; `provenance` (taxon id, `datasets` CLI version, package release-date range); `integrity` (md5 + sequence-hash verification results, per-file); `counts` (accessions, species, isolates, complete triplets, host/biosample/human/lab/vaccine record counts); a set of `*_counts` breakdowns (`segment_counts`, `segment_source_counts`, `completeness_counts`, `grouping_tier_counts`, `triplet_status_counts`, `host_order_counts`, `host_role_counts`, `pathogenicity_counts`, `host_jump_counts`, `reassortment_status_counts`, `qc_warning_counts`); `taxonomic_incongruence_count`; `inputs` (package dir name and every file found in it); and `methods` — prose mirroring this README, with nested `reassortment` (withdrawal rationale and numbers) and `reservoir_curation_audit` objects, a `LIMITATION` string (alignment-free k-mer distances vs. true ICTV PED), and `citations`.
 </details>
 
 <details>
