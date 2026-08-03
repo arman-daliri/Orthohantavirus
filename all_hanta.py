@@ -3636,6 +3636,58 @@ def build_ml_segment_rows(accessions: Sequence[AccessionRecord]) -> List[Dict[st
     return rows
 
 
+def build_ml_sequence_rows(isolates: Sequence[IsolateRecord],
+                           genomic_index: Dict[str, FastaRecord]) -> List[Dict[str, Any]]:
+    """Wide, sequence-level ML table: one row per isolate with its raw S/M/L genomic
+    sequences side by side, for tasks that want the sequences themselves rather than
+    derived k-mer features (see build_ml_tables for that).
+
+    Three filters, all isolate-level:
+    - has_complete_triplet: coding-complete S, M and L all present (see
+      build_isolate_records). Weaker "all three segments present" isolates are dropped,
+      since a partial/non-coding segment here would just be a gap in the sequence column.
+    - is_lab_derived excluded: unlike build_ml_tables (which keeps these, flagged, because
+      k-mer composition doesn't care about passage history -- see its docstring), a raw
+      sequence handed to a model as "wild-type" input is exactly the case that history
+      would mislead.
+    - is_vaccine_strain excluded: an attenuated strain's sequence is not representative of
+      wild-type pathogenicity, same reasoning build_ml_tables already applies.
+
+    An isolate can still be dropped here even after passing those filters if its genomic
+    FASTA sequence is missing for one of the three accessions (coding-complete is
+    determined from annotation length, not genomic-FASTA presence, so the two can
+    disagree in rare cases) -- these are logged and skipped rather than emitting a row
+    with a blank sequence column.
+    """
+    rows: List[Dict[str, Any]] = []
+    skipped_missing_sequence = 0
+    for isolate in isolates:
+        if not isolate.has_complete_triplet or isolate.is_lab_derived or isolate.is_vaccine_strain:
+            continue
+
+        s_rec = genomic_index.get(isolate.s_accession)
+        m_rec = genomic_index.get(isolate.m_accession)
+        l_rec = genomic_index.get(isolate.l_accession)
+        if not (s_rec and m_rec and l_rec):
+            skipped_missing_sequence += 1
+            continue
+
+        risk = species_risk_profile(isolate.species_name)
+        rows.append({
+            "isolate_name": isolate.isolate or isolate.strain or isolate.isolate_key,
+            "s_sequence": s_rec.sequence,
+            "m_sequence": m_rec.sequence,
+            "l_sequence": l_rec.sequence,
+            "cfr_reported_range": risk["cfr_reported_range"],
+        })
+
+    if skipped_missing_sequence:
+        logging.warning(
+            "ML sequence table: %s complete-triplet isolate(s) skipped, missing genomic "
+            "FASTA sequence for at least one segment", skipped_missing_sequence)
+    return rows
+
+
 def build_suppressed_rows(accessions: Sequence[AccessionRecord],
                           isolates: Sequence[IsolateRecord]) -> List[Dict[str, Any]]:
     representative = {a for i in isolates for a in (i.s_accession, i.m_accession, i.l_accession) if a}
@@ -3986,6 +4038,7 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
     write_csv("ortho_segment_divergence.csv", build_segment_divergence_rows(divergence))
     write_csv("ortho_ml_feature_matrix.csv", ml_rows)
     write_csv("ortho_ml_segments.csv", build_ml_segment_rows(accessions))
+    write_csv("ortho_ml_sequence_table.csv", build_ml_sequence_rows(isolates, genomic_index))
     write_csv("ortho_suppressed.csv", build_suppressed_rows(accessions, isolates))
     write_csv("ortho_qc_report.csv", qc_rows)
     write_json("ortho_feature_scaling.json", scaling)
