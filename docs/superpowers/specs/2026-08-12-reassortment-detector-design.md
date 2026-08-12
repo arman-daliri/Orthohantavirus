@@ -123,40 +123,57 @@ do.
 
 ### Track A — Universal structural integrity
 
-A small per-species **structural reference table**, not a single fixed reference species:
+A small per-species **structural reference table**, not a single fixed reference species.
+Researched directly (fetched and cross-checked primary sources) during this design session:
 
-| Species | Segment | Accession | Basis |
+| Species | Segment/region | Accession | Basis |
 |---|---|---|---|
-| PUUV (Sotkamo) | M | MN832783.1 | `solved` — Tscherne et al. 2025 §4.2/§4.4 |
-| HTNV (76-118) | M | *(TBD at implementation)* | `homology_inferred` — mapped by alignment to PUUV Sotkamo |
-| ANDV | M | *(TBD at implementation, only if source data supports it)* | `homology_inferred` |
+| PUUV (Sotkamo) | M (Gc) | MN832783.1 | `solved` — Tscherne et al. 2025 §4.2/§4.4 |
+| ANDV (Chile-9717869) | GPC precursor, Gc aa 652–1107 | NP_604472.1 | `solved` — Guardado-Calvo et al., *"The Hantavirus Surface Glycoprotein Lattice and Its Fusion Control Mechanism,"* PMC7572791 |
+| HTNV (76-118) | Gn only | P08668.1 (PMC7572791); AIL25321.1 residues 18–371 (an older, separate construct) | `partial` — Gn structure solved, WAASA confirmed, but no citable TMIS/pH-switch residue numbers found for HTNV Gc; those positions are `homology_inferred` from the PUUV/ANDV anchors if used at all, explicitly flagged as unconfirmed |
 
-Verified directly against Tscherne et al. 2025 (fetched and checked during this design session):
+Key finding from cross-checking two independent papers: PUUV's TMIS/pH-switch numbers
+(Tscherne et al. 2025) turned out to be **identical** to ANDV's own independently solved
+numbers (Guardado-Calvo et al., PMC7572791) — Trp766/Tyr745/Phe900 (TMIS) and Glu757/Asp759
+(pH-switch) appear in both papers at the same positions. This isn't coincidence: Guardado-Calvo
+co-authors both papers and the group reuses its own ANDV-established Gc numbering convention for
+PUUV, because the two species' Gc ectodomains align with essentially no indels in this region.
+So the table has **two independently `solved` anchors that agree**, not one PUUV-only reference
+being stretched across the genus — meaningfully stronger grounding than the original v2 draft
+assumed, and exactly the reason the check below is alignment-based rather than a hardcoded
+integer, since agreement between two solved structures is not a guarantee every candidate's
+indel pattern will match.
 
-- **WAASA cleavage motif** — "the cleavage site is located downstream of the conserved WAASA
-  amino acid motif" (§4.4).
-- **TMIS fusion residues** — "the side chains of three key hydrophobic residues (W766, Y745,
-  and F900) are buried" (§4.2), PUUV Sotkamo M-segment numbering (MN832783.1).
-- **pH-switch residues** — "an unusual acidic hydrogen bond forms at low pH between the side
-  chains of the conserved E757 and D759 residues" (§4.2).
+- **WAASA cleavage motif** — confirmed independently for both PUUV (Tscherne et al. 2025 §4.4)
+  and HTNV (2017 *J Virol* PMC5640846: "WAASA recognition sequence during protein
+  biosynthesis") — genus-general, not anchor-specific.
+- **TMIS fusion residues** — Trp766, Tyr745, Phe900, confirmed independently in both the PUUV
+  (Tscherne et al. 2025 §4.2) and ANDV (PMC7572791) papers.
+- **pH-switch residues** — Glu757/Asp759, same dual confirmation. PMC7572791 additionally notes
+  His953 makes contacts with Asp679/Lys833/Asn955 around the post-fusion trimer's 3-fold axis in
+  ANDV specifically (`H953F` is a known trimer-destabilizing mutation) — recorded as an optional
+  ANDV-specific extra check, not required for the core Track A pass/fail.
 - Sotkamo accessions per Tscherne et al. 2025 Figure 1: MN832782.1 (L), **MN832783.1 (M)**,
   MN832784.1 (S) — corrected from v2's draft, which cited a single accession with a `.1–.4`
   range; there are three accessions, one per segment, and only the M-segment one
   (MN832783.1) is relevant to these Gn/Gc features.
 
 Checked by **alignment, not fixed integer position**: candidate M-segment protein is aligned to
-whichever species row Gate 1 implicated (falling back to the closest relative with a table
-entry); the motif/residues are checked at the aligned position, so the check is correct
-regardless of indels between the candidate and the reference row. Output per feature:
-`structural_feature_conserved` (bool) for WAASA / TMIS / pH-switch, plus an N-linked
-glycosylation site count delta (loss of a conserved glycan is a known trafficking-impairment
-signal; gain of a novel site is rare and separately noted) and ORF continacy at the segment
-junctions (no premature stop introduced by the swap).
+whichever anchor Gate 1's implicated species is closer to (PUUV or ANDV row; HTNV candidates
+align to whichever of the two gives the higher-identity alignment, since HTNV's own Gc numbering
+for these positions isn't independently confirmed); the motif/residues are checked at the
+aligned position, so the check is correct regardless of indels between the candidate and the
+reference row. Output per feature: `structural_feature_conserved` (bool) for WAASA / TMIS /
+pH-switch, plus an N-linked glycosylation site count delta (loss of a conserved glycan is a
+known trafficking-impairment signal; gain of a novel site is rare and separately noted) and ORF
+continuity at the segment junctions (no premature stop introduced by the swap).
 
-**No confidence penalty for `homology_inferred` rows** — the check runs the same way regardless
-of species. The only "unavailable" case is when neither the implicated species nor any close
-relative has a table entry at all: output `structural_check_not_available`, Track A skipped for
-that candidate, not treated as a weak fail.
+**No confidence penalty for using the ANDV vs. PUUV anchor** — both are independently `solved`
+and agree, so the check runs the same way regardless of which one a given candidate aligns
+better to. The only "unavailable" case is when neither anchor aligns usably (candidate's
+implicated species/clade is too distant from both PUUV and ANDV for a meaningful alignment):
+output `structural_check_not_available`, Track A skipped for that candidate, not treated as a
+weak fail.
 
 ### Track B — Lineage-specific signature check (species-matched)
 
@@ -292,12 +309,35 @@ Reuses `all_hanta.py`'s existing flags where they mean the same thing:
 - No real structural/docking modeling for Gate 2 Track A — alignment-mapped motif/residue
   checks only, explicitly informational.
 - No changes to `all_hanta.py` itself.
-- HTNV/ANDV structural-table rows beyond what's derivable by homology from the one verified
-  PUUV entry are deferred to implementation time — see open item below.
+- SEOV and any species beyond PUUV/ANDV/HTNV have no solved-structure anchor found; Track A
+  is `structural_check_not_available` for candidates that don't align usably to one of the
+  three table rows.
 
 ## 14. Open items for implementation
 
-- Confirm the exact HTNV 76-118 and (if used) ANDV M-segment reference accessions before
-  building their `homology_inferred` table rows — not yet looked up as of this spec.
+- HTNV's own Gc TMIS/pH-switch residue numbers are not confirmed by any source found during
+  this design's research (only its Gn structure and its WAASA motif are directly sourced —
+  P08668.1 / PMC7572791; AIL25321.1 residues 18–371 / 2017 *J Virol* PMC5640846). HTNV
+  candidates use the PUUV or ANDV anchor (whichever aligns better) for TMIS/pH-switch, tagged
+  `homology_inferred`, not a third independently-solved HTNV Gc anchor.
 - `select_primary_cds`/ORF-extractor edge cases (ambiguous bases, frameshift-looking candidates)
   need explicit handling: Gate 0 should catch these as an ORF-length failure, not crash.
+
+## 15. References for Gate 2 Track A (verified this session)
+
+- Tscherne, A., Guardado-Calvo, P., Clark, J., Krause, R., & Krammer, F. (2025). Puumala
+  orthohantavirus: prevalence, biology, disease, animal models and recent advances in
+  therapeutics development and structural biology. *Frontiers in Immunology*, 16.
+  doi:10.3389/fimmu.2025.1575112 — WAASA (§4.4), TMIS W766/Y745/F900 and pH-switch E757/D759
+  (§4.2), PUUV Sotkamo accessions MN832782–4.1 (L/M/S) (Figure 1).
+- Guardado-Calvo, P. et al. *The Hantavirus Surface Glycoprotein Lattice and Its Fusion Control
+  Mechanism.* PMC7572791 — ANDV strain Chile-9717869 (NP_604472.1, Gn aa 21–484, Gc aa
+  652–1107), same TMIS/pH-switch residue numbers as Tscherne et al. 2025, plus ANDV-specific
+  His953/Asp679/Lys833/Asn955 post-fusion trimer contacts; HTNV GnH accession P08668.1, strain
+  76-118.
+- 2017 *J Virol*, *Structural Transitions of the Conserved and Metastable Hantaviral
+  Glycoprotein Envelope*, PMC5640846 — HTNV Gn construct (AIL25321.1, residues 18–371), WAASA
+  motif confirmed for HTNV independently of PUUV/ANDV.
+- Fusion-loop mutagenesis (Glu677/Asp679/Arg951/His953 abolish ANDV fusion; His953 protonation
+  drives pH-triggered Gc homodimer dissociation) — consistent with the PMC7572791 numbering
+  above.
