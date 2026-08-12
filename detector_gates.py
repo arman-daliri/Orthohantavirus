@@ -354,3 +354,54 @@ def gate2_track_a(candidate_m_protein: str, implicated_species: List[str]) -> Ga
         ph_switch_conserved=ph_ok,
         structural_check_not_available=False,
     )
+
+
+@dataclass
+class Gate2TrackBResult:
+    lineage_marker_match: Optional[bool] = None
+    matched_species: str = ""
+    marker_set_used: str = ""
+
+
+def gate2_track_b(candidate_proteins: Dict[str, str], implicated_species: List[str]) -> Gate2TrackBResult:
+    for species in implicated_species:
+        entry = rd.LINEAGE_MARKER_TABLE.get(species)
+        if entry is None:
+            continue
+        candidate_protein = candidate_proteins.get(entry["segment"], "")
+        if not candidate_protein:
+            continue
+        all_match = True
+        for label, position in entry["markers"].items():
+            residue, aligned = rd.find_aligned_residue(candidate_protein, entry["sequence"], position)
+            ref_residue = entry["sequence"][position - 1]
+            if not aligned or residue != ref_residue:
+                all_match = False
+        return Gate2TrackBResult(
+            lineage_marker_match=all_match, matched_species=species,
+            marker_set_used=f"{species}:{entry['accession']}")
+    return Gate2TrackBResult(lineage_marker_match=None, matched_species="", marker_set_used="")
+
+
+@dataclass
+class Gate2TrackCResult:
+    sl_mismatch_high_risk: bool = False
+    receptor_class_note: str = "unknown"
+
+
+def gate2_track_c(gate1: Gate1Result) -> Gate2TrackCResult:
+    sl_mismatch = gate1.discordant_segment in ("S", "L")
+
+    receptor_note = "unknown"
+    if gate1.discordant_segment == "M" and len(gate1.implicated_species) >= 2:
+        clades = {
+            species in rd.NEW_WORLD_SPECIES for species in gate1.implicated_species
+        }
+        if clades == {True, False}:
+            # Ambiguous about which side donor/recipient are without more info -- record
+            # the crossing happened, not a specific direction claim.
+            receptor_note = "new_world_to_old_world"
+        else:
+            receptor_note = "same_clade"
+
+    return Gate2TrackCResult(sl_mismatch_high_risk=sl_mismatch, receptor_class_note=receptor_note)

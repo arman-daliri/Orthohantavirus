@@ -192,5 +192,51 @@ class Gate2TrackATest(unittest.TestCase):
         self.assertIsNone(result.waasa_intact)
 
 
+class Gate2TrackBTest(unittest.TestCase):
+    def test_no_marker_set_for_implicated_species_is_not_informative(self):
+        result = dg.gate2_track_b({"S": "M" * 400, "M": "M" * 1100}, ["Orthohantavirus hantanense"])
+        self.assertIsNone(result.lineage_marker_match)
+        self.assertEqual(result.marker_set_used, "")
+
+    def test_empty_marker_table_never_raises(self):
+        # LINEAGE_MARKER_TABLE ships empty by design (spec section 7) -- this must not
+        # crash regardless of which species Gate 1 implicates.
+        for species in ["Orthohantavirus andesense", "Orthohantavirus puumalaense", "Unlisted sp."]:
+            result = dg.gate2_track_b({"S": "M" * 400, "M": "M" * 1100}, [species])
+            self.assertIsNone(result.lineage_marker_match)
+
+
+class Gate2TrackCTest(unittest.TestCase):
+    def test_no_flag_when_gate1_concordant(self):
+        gate1 = dg.Gate1Result(implicated_species=["Orthohantavirus andesense"],
+                               discordant_segment="", pattern="concordant")
+        result = dg.gate2_track_c(gate1)
+        self.assertFalse(result.sl_mismatch_high_risk)
+
+    def test_s_discordant_flags_sl_mismatch_high_risk(self):
+        gate1 = dg.Gate1Result(implicated_species=["Orthohantavirus andesense", "Orthohantavirus puumalaense"],
+                               discordant_segment="S", pattern="s_or_l_involving")
+        result = dg.gate2_track_c(gate1)
+        self.assertTrue(result.sl_mismatch_high_risk)
+
+    def test_m_only_never_flags_sl_mismatch(self):
+        gate1 = dg.Gate1Result(implicated_species=["Orthohantavirus andesense", "Orthohantavirus hantanense"],
+                               discordant_segment="M", pattern="m_only")
+        result = dg.gate2_track_c(gate1)
+        self.assertFalse(result.sl_mismatch_high_risk)
+
+    def test_m_only_new_world_to_old_world_crossing_is_noted(self):
+        gate1 = dg.Gate1Result(implicated_species=["Orthohantavirus andesense", "Orthohantavirus hantanense"],
+                               discordant_segment="M", pattern="m_only")
+        result = dg.gate2_track_c(gate1)
+        self.assertIn(result.receptor_class_note, {"new_world_to_old_world", "old_world_to_new_world"})
+
+    def test_m_only_within_same_clade_is_same_clade(self):
+        gate1 = dg.Gate1Result(implicated_species=["Orthohantavirus hantanense", "Orthohantavirus puumalaense"],
+                               discordant_segment="M", pattern="m_only")
+        result = dg.gate2_track_c(gate1)
+        self.assertEqual(result.receptor_class_note, "same_clade")
+
+
 if __name__ == "__main__":
     unittest.main()
