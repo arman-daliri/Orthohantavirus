@@ -667,19 +667,44 @@ def gate0_check(
 
         consensus5, consensus3 = panhandle_consensus.get(segment, ("", ""))
         if consensus5 and consensus3 and len(genomic) >= len(consensus5):
-            observed5 = genomic[:len(consensus5)].upper()
-            observed3 = genomic[-len(consensus3):].upper()
-            # Consensus region only (positions 2-12, i.e. index 1 onward): archived
-            # "complete" sequences can carry 1-2 artificially added terminal bases
-            # (Liu et al. 2024) -- checking the very first/last base as a hard
-            # requirement would false-positive on real, correctly-submitted isolates.
-            core5_match = observed5[1:] == consensus5[1:]
-            core3_match = observed3[:-1] == consensus3[:-1]
-            if not (core5_match and core3_match):
-                failures.append(f"{segment}: terminal panhandle motif not recognizable")
-            elif observed5[0] != consensus5[0] or observed3[-1] != consensus3[-1]:
+            def _core_match(candidate_seq: str) -> Tuple[bool, bool]:
+                """(core_match, exact_match) for one orientation of candidate_seq
+                against consensus5/consensus3. Consensus region only (positions 2-12,
+                i.e. index 1 onward): archived "complete" sequences can carry 1-2
+                artificially added terminal bases (Liu et al. 2024) -- checking the
+                very first/last base as a hard requirement would false-positive on
+                real, correctly-submitted isolates.
+                """
+                observed5 = candidate_seq[:len(consensus5)].upper()
+                observed3 = candidate_seq[-len(consensus3):].upper()
+                core = observed5[1:] == consensus5[1:] and observed3[:-1] == consensus3[:-1]
+                exact = observed5[0] == consensus5[0] and observed3[-1] == consensus3[-1]
+                return core, exact
+
+            core_match, exact_match = _core_match(genomic)
+            if not core_match:
+                # Real deposits aren't always oriented the same way -- e.g. this
+                # dataset's own puumalaense isolate OR915064.1 (vindeln) starts
+                # "GGGAGTCTACTACTA", whose reverse complement is
+                # "TAGTAGTAGACTCCC", a near-exact panhandle match. The ORF search
+                # already checks both strands (_longest_orf_span); this check should
+                # too, rather than penalizing a real isolate for strand orientation.
+                core_match, exact_match = _core_match(_reverse_complement(genomic))
+
+            if core_match and not exact_match:
                 warnings.append(f"{segment}: terminal base mismatch at position 1 (or last), "
                                 f"consistent with GenBank submission padding, not a failure")
+            elif not core_match:
+                # A downgrade from Gate 0's original design: measured directly against
+                # this project's own reference dataset, only ~22% of genomic S records
+                # start with the recognizable panhandle motif even after checking both
+                # orientations -- many real, non-junk NCBI submissions simply don't
+                # include the untranslated terminal region. Treating this as a hard
+                # failure would call real reference isolates "junk_sequence". ORF
+                # length and overall genomic length remain the load-bearing structural
+                # checks; a missing panhandle is now informational only.
+                warnings.append(f"{segment}: terminal panhandle motif not recognizable "
+                                f"in either orientation")
 
     passed_structure = not failures
 

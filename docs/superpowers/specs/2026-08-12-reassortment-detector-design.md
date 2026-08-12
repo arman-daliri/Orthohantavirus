@@ -77,14 +77,25 @@ New relative to the report (which assumes well-formed input). Per segment:
   added terminal bases (Liu et al. 2024; matches `Orthohantavirus_01.md` point 7's note about
   GenBank submission adding missing terminal bases). A single terminal-base mismatch is a
   warning, not a failure. The motif itself is derived empirically as the consensus first/last
-  ~11nt across reference isolates for that segment — not asserted from memory.
+  ~11nt across reference isolates for that segment — not asserted from memory. **Checked and
+  measured against the real dataset during implementation (Task 11's integration test):** only
+  ~22% of this project's own reference genomic S sequences start with the recognizable motif in
+  forward orientation — many real NCBI submissions are deposited on the opposite strand (e.g.
+  isolate OR915064.1/"vindeln" starts `GGGAGTCTACTACTA`, whose reverse complement,
+  `TAGTAGTAGACTCCC`, is a near-exact panhandle match) or simply omit the untranslated terminal
+  region entirely. So the check now also tries the reverse complement (mirroring how the ORF
+  search already checks both strands), and even after that, a panhandle mismatch is
+  **informational only, not a Gate 0 failure** — measured directly against this dataset, treating
+  it as a hard failure would have called real reference isolates `junk_sequence`. ORF length and
+  overall genomic length remain the load-bearing structural checks.
 - Minimum k-mer-identity floor to anything in the reference set (existing `kmer_profile` /
   cosine distance machinery).
 
 **Split outcome:**
 
-- Fails length / ORF / terminal-motif structure → verdict `junk_sequence`, with the specific
-  failing check named. Short-circuits — no tree-building wasted.
+- Fails length / ORF structure → verdict `junk_sequence`, with the specific failing check named
+  (terminal panhandle mismatch alone no longer triggers this — see above). Short-circuits — no
+  tree-building wasted.
 - Passes structure but fails the k-mer identity floor → verdict-track `divergent_novel_candidate`,
   **not junk**. A genuinely novel lineage (new shrew/mole-borne species are still being
   described) looks exactly like this. Routes into Gate 4 with the comparator set built from
