@@ -1,8 +1,13 @@
 # test_detector_gates.py
+import argparse
+import random
+import tempfile
 import unittest
+from pathlib import Path
 
 import all_hanta as ah
 import detector_gates as dg
+import detector_reference as dr
 import reassortment_reference_data as rd
 
 
@@ -294,6 +299,181 @@ class Gate3CheckTest(unittest.TestCase):
         ]
         result = dg.gate3_check(["SpA", "SpB"], isolates)
         self.assertEqual(result.status, "ecology_unknown")  # SpA has no WILD isolates
+
+
+def _make_isolate(key, species, s_protein, m_protein, l_protein):
+    return ah.IsolateRecord(
+        isolate_key=key, species_name=species, species_taxid="999", species_status="classified",
+        biosample="", isolate=key, strain="", host_name="Test host", host_taxid="1",
+        host_order="Rodentia", host_family="", host_role="reservoir_rodent",
+        collection_date="", year="2020", location="", country="Testland", region="",
+        grouping_tier="tier_2_species_isolate", grouping_confidence=1.0,
+        s_accession="SACC", m_accession="MACC", l_accession="LACC",
+        s_completeness="complete", m_completeness="complete", l_completeness="complete",
+        s_nt_length=len(s_protein) * 3, m_nt_length=len(m_protein) * 3, l_nt_length=len(l_protein) * 3,
+        s_protein_aa=s_protein, m_protein_aa=m_protein, l_protein_aa=l_protein,
+        concatenated_protein_aa=s_protein + m_protein + l_protein,
+        segments_present=["S", "M", "L"], coding_complete_segments=["S", "M", "L"],
+        triplet_status="coding_complete_triplet", has_complete_triplet=True,
+        is_lab_derived=False, is_vaccine_strain=False, has_nss_orf=False,
+        metadata_conflict=False, taxonomic_incongruence=False, cross_species_partners=[],
+        kmer_cluster_id="", s_protein_accessions=[], m_protein_accessions=[],
+        l_protein_accessions=[], all_accessions=["SACC", "MACC", "LACC"], warnings=[],
+    )
+
+
+def _make_reference_isolate_with_cds(key, species, seed):
+    rng = random.Random(seed)
+    bases = "ACGT"
+
+    def rand_seq(n):
+        return "".join(rng.choice(bases) for _ in range(n))
+
+    isolate = _make_isolate(key, species, "M" * 60, "M" * 60, "M" * 60)
+    isolate.s_accession, isolate.m_accession, isolate.l_accession = f"{key}S", f"{key}M", f"{key}L"
+    isolate.all_accessions = [isolate.s_accession, isolate.m_accession, isolate.l_accession]
+    cds = {"S": rand_seq(150), "M": rand_seq(150), "L": rand_seq(150)}
+    return isolate, cds
+
+
+class CandidateCdsFromOrfTest(unittest.TestCase):
+    def test_returns_the_orfs_own_nucleotide_span(self):
+        genomic = "TTTTT" + "ATG" + "GCT" * 5 + "TAA" + "GGGGG"
+        cds = dg.candidate_cds_from_orf(genomic)
+        self.assertTrue(cds.startswith("ATG"))
+        self.assertTrue(cds.endswith("TAA"))
+        self.assertEqual(len(cds), 3 + 15 + 3)
+
+
+class BuildComparatorMembersTest(unittest.TestCase):
+    def test_builds_members_from_reference_isolates_with_cds(self):
+        isolates, cds_index = [], {}
+        for i in range(5):
+            isolate, cds = _make_reference_isolate_with_cds(f"SpA_{i}", "SpA", seed=i)
+            isolates.append(isolate)
+            for segment, accession in (("S", isolate.s_accession), ("M", isolate.m_accession),
+                                       ("L", isolate.l_accession)):
+                cds_index[accession] = [("nucleocapsid" if segment == "S" else
+                                         "glycoprotein" if segment == "M" else "polymerase",
+                                         cds[segment])]
+        reference = dr.ReferenceData(isolates=isolates, cds_index=cds_index, genomic_index={})
+        members, status = dg.build_comparator_members(["SpA"], reference, phylo_min_taxa=4)
+        self.assertEqual(status, "")
+        self.assertEqual(len(members), 5)
+        self.assertTrue(all(set(m.sequences) == {"S", "M", "L"} for m in members))
+
+    def test_too_few_comparators_reports_insufficient(self):
+        isolates, cds_index = [], {}
+        for i in range(2):
+            isolate, cds = _make_reference_isolate_with_cds(f"SpA_{i}", "SpA", seed=i)
+            isolates.append(isolate)
+            for segment, accession in (("S", isolate.s_accession), ("M", isolate.m_accession),
+                                       ("L", isolate.l_accession)):
+                cds_index[accession] = [("nucleocapsid" if segment == "S" else
+                                         "glycoprotein" if segment == "M" else "polymerase",
+                                         cds[segment])]
+        reference = dr.ReferenceData(isolates=isolates, cds_index=cds_index, genomic_index={})
+        members, status = dg.build_comparator_members(["SpA"], reference, phylo_min_taxa=4)
+        self.assertEqual(status, "insufficient_comparators")
+        self.assertEqual(members, [])
+
+
+class Gate4CheckEndToEndTest(unittest.TestCase):
+    """Mirrors test_all_hanta.py's PhylogeneticsScopeEndToEndTest fake-binary pattern --
+    mafft/iqtree are not installed in this environment (confirmed via `which` during
+    design), so this uses the same structurally-valid-but-meaningless fake scripts.
+    """
+
+    _FAKE_MAFFT = '''#!/usr/bin/env python3
+import sys
+path = sys.argv[-1]
+seqs, label, buf = [], None, []
+with open(path) as f:
+    for line in f:
+        line = line.rstrip("\\n")
+        if line.startswith(">"):
+            if label is not None:
+                seqs.append((label, "".join(buf)))
+            label, buf = line[1:], []
+        else:
+            buf.append(line)
+    if label is not None:
+        seqs.append((label, "".join(buf)))
+maxlen = max(len(s) for _, s in seqs)
+for label, s in seqs:
+    print(f">{label}")
+    print(s.ljust(maxlen, "-"))
+'''
+
+    _FAKE_IQTREE = '''#!/usr/bin/env python3
+import random, sys
+argv = sys.argv[1:]
+def get_opt(flag):
+    return argv[argv.index(flag) + 1] if flag in argv else None
+alignment, prefix, seed = get_opt("-s"), get_opt("--prefix"), get_opt("--seed")
+random.seed(int(seed) if seed else 0)
+labels = []
+with open(alignment) as f:
+    for line in f:
+        if line.startswith(">"):
+            labels.append(line[1:].strip())
+nodes = list(labels)
+random.shuffle(nodes)
+cur = f"{nodes[0]}:{random.random():.4f}"
+for label in nodes[1:-1]:
+    cur = f"({cur},{label}:{random.random():.4f}){random.randint(50, 100)}:{random.random():.4f}"
+cur = f"({cur},{nodes[-1]}:{random.random():.4f})"
+with open(f"{prefix}.treefile", "w") as f:
+    f.write(cur + ";\\n")
+'''
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        tmp_path = Path(self.tmpdir.name)
+        self.mafft_bin = tmp_path / "fake_mafft.py"
+        self.iqtree_bin = tmp_path / "fake_iqtree.py"
+        self.mafft_bin.write_text(self._FAKE_MAFFT)
+        self.iqtree_bin.write_text(self._FAKE_IQTREE)
+        self.mafft_bin.chmod(0o755)
+        self.iqtree_bin.chmod(0o755)
+        self.output_dir = tmp_path / "output"
+        self.output_dir.mkdir()
+
+        isolates, cds_index = [], {}
+        for i in range(5):
+            isolate, cds = _make_reference_isolate_with_cds(f"SpA_{i}", "SpA", seed=i)
+            isolates.append(isolate)
+            for segment, accession in (("S", isolate.s_accession), ("M", isolate.m_accession),
+                                       ("L", isolate.l_accession)):
+                cds_index[accession] = [("nucleocapsid" if segment == "S" else
+                                         "glycoprotein" if segment == "M" else "polymerase",
+                                         cds[segment])]
+        self.reference = dr.ReferenceData(isolates=isolates, cds_index=cds_index, genomic_index={})
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def test_candidate_gets_analyzed_and_placed_in_the_tree(self):
+        candidate = dg.CandidateInput(candidate_id="CAND1", s_genomic="", m_genomic="", l_genomic="")
+        candidate_cds = {"S": "ACGT" * 40, "M": "TGCA" * 40, "L": "AATT" * 40}
+        result = dg.gate4_check(
+            candidate, candidate_cds, ["SpA"], self.reference, self.output_dir,
+            str(self.mafft_bin), str(self.iqtree_bin), phylo_min_taxa=4, bootstrap=10,
+            min_bootstrap_support=95.0, phylo_seed=42, phylo_threads=1,
+        )
+        self.assertEqual(result.phylo_status, "analyzed")
+        self.assertIn(result.reassortment_call, {"no_conflict", "supported_reassortment_candidate",
+                                                  "weak_signal_low_bootstrap_support"})
+
+    def test_insufficient_comparators_short_circuits_without_running_mafft(self):
+        candidate = dg.CandidateInput(candidate_id="CAND1", s_genomic="", m_genomic="", l_genomic="")
+        candidate_cds = {"S": "ACGT" * 40, "M": "TGCA" * 40, "L": "AATT" * 40}
+        empty_reference = dr.ReferenceData(isolates=[], cds_index={}, genomic_index={})
+        result = dg.gate4_check(
+            candidate, candidate_cds, ["SpUnknown"], empty_reference, self.output_dir,
+            str(self.mafft_bin), str(self.iqtree_bin), phylo_min_taxa=4,
+        )
+        self.assertEqual(result.phylo_status, "insufficient_comparators")
 
 
 if __name__ == "__main__":

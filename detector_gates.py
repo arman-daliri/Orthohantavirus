@@ -5,8 +5,10 @@ See docs/superpowers/specs/2026-08-12-reassortment-detector-design.md for the fu
 framework this implements.
 """
 
+import argparse
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -444,3 +446,125 @@ def gate3_check(implicated_species: List[str], isolates: List["ah.IsolateRecord"
         return Gate3Result(status="ecology_unknown", detail="insufficient metadata to judge overlap")
     return Gate3Result(status="no_ecological_route",
                        detail=f"no shared host order/country found between {a} and {b}")
+
+
+def candidate_cds_from_orf(genomic_seq: str) -> str:
+    """The ORF's own nucleotide span (ATG..stop, stop included) -- what Gate 4 aligns,
+    since _analyze_group works on nucleotide CDS, not translated protein. Reuses
+    _longest_orf_span (Task 2) rather than re-implementing the same 6-frame ORF search --
+    that function already returns exactly this span; longest_orf_protein is the one that
+    additionally translates it.
+    """
+    return _longest_orf_span(genomic_seq)
+
+
+def build_candidate_isolate_record(candidate_id: str, species_label: str) -> "ah.IsolateRecord":
+    """Minimal synthetic IsolateRecord for Gate 4's PhyloCandidate -- only the fields
+    _analyze_group, group_candidates and _phylo_row actually read are given meaningful
+    values (confirmed by reading all_hanta.py directly during design: isolate_key,
+    species_name, host_order, is_lab_derived, is_vaccine_strain, species_status,
+    has_complete_triplet). Everything else is a valid placeholder of the right type,
+    following the same pattern test_all_hanta.py's _make_isolate already uses.
+    """
+    return ah.IsolateRecord(
+        isolate_key=f"CANDIDATE:{candidate_id}", species_name=species_label, species_taxid="",
+        species_status="classified", biosample="", isolate=candidate_id, strain="",
+        host_name="", host_taxid="", host_order="", host_family="", host_role="",
+        collection_date="", year="", location="", country="", region="",
+        grouping_tier="", grouping_confidence=0.0,
+        s_accession="", m_accession="", l_accession="",
+        s_completeness="", m_completeness="", l_completeness="",
+        s_nt_length=0, m_nt_length=0, l_nt_length=0,
+        s_protein_aa="", m_protein_aa="", l_protein_aa="", concatenated_protein_aa="",
+        segments_present=["S", "M", "L"], coding_complete_segments=["S", "M", "L"],
+        triplet_status="coding_complete_triplet", has_complete_triplet=True,
+        is_lab_derived=False, is_vaccine_strain=False, has_nss_orf=False,
+        metadata_conflict=False, taxonomic_incongruence=False, cross_species_partners=[],
+        kmer_cluster_id="", s_protein_accessions=[], m_protein_accessions=[],
+        l_protein_accessions=[], all_accessions=[], warnings=[],
+    )
+
+
+def build_comparator_members(
+    implicated_species: List[str], reference: "dr.ReferenceData", phylo_min_taxa: int,
+) -> Tuple[List["ah.PhyloCandidate"], str]:
+    """Union of reference isolates (with full S+M+L CDS) from every implicated species --
+    not a single-species tree, so an M-only exchange candidate has both the S/L-matching
+    and M-matching species' isolates available to be visible against.
+    """
+    members: List["ah.PhyloCandidate"] = []
+    for isolate in reference.isolates:
+        if isolate.species_name not in implicated_species:
+            continue
+        if isolate.is_lab_derived or isolate.is_vaccine_strain:
+            continue
+        sequences: Dict[str, str] = {}
+        for segment, accession in (("S", isolate.s_accession), ("M", isolate.m_accession),
+                                   ("L", isolate.l_accession)):
+            records = reference.cds_index.get(ah.accession_base(accession)) if accession else None
+            seq = ah.select_primary_cds(records, segment)
+            if len(seq) >= ah.MIN_CDS_LENGTH:
+                sequences[segment] = seq
+        if len(sequences) == 3:
+            members.append(ah.PhyloCandidate(isolate=isolate, tags=["comparator"], sequences=sequences))
+
+    if len(members) < phylo_min_taxa:
+        return [], "insufficient_comparators"
+    return sorted(members, key=lambda m: m.isolate.isolate_key), ""
+
+
+@dataclass
+class Gate4Result:
+    phylo_status: str = "not_analyzed"
+    reassortment_call: str = "not_analyzed"
+    discordant_segment: str = ""
+    bootstrap_support: Optional[float] = None
+    detail: Dict[str, Any] = field(default_factory=dict)
+
+
+def gate4_check(
+    candidate: CandidateInput,
+    candidate_cds: Dict[str, str],
+    implicated_species: List[str],
+    reference: "dr.ReferenceData",
+    output_dir: Path,
+    mafft_bin: str,
+    iqtree_bin: str,
+    phylo_min_taxa: int = 4,
+    bootstrap: int = 1000,
+    min_bootstrap_support: float = 95.0,
+    phylo_seed: int = 42,
+    phylo_threads: int = 1,
+) -> Gate4Result:
+    comparator_members, status = build_comparator_members(implicated_species, reference, phylo_min_taxa)
+    if status:
+        return Gate4Result(phylo_status=status, reassortment_call="not_analyzed")
+
+    if len(set(candidate_cds) & {"S", "M", "L"}) < 3:
+        return Gate4Result(phylo_status="failed", reassortment_call="not_analyzed",
+                           detail={"error": "candidate is missing CDS for one or more segments"})
+
+    species_label = implicated_species[0] if implicated_species else "unclassified"
+    candidate_isolate = build_candidate_isolate_record(candidate.candidate_id, species_label)
+    candidate_member = ah.PhyloCandidate(
+        isolate=candidate_isolate, tags=["candidate"], sequences=dict(candidate_cds))
+
+    members = [candidate_member] + comparator_members
+    args = argparse.Namespace(
+        phylo_outgroup=None, bootstrap=bootstrap, min_bootstrap_support=min_bootstrap_support,
+        phylo_seed=phylo_seed, phylo_threads=phylo_threads,
+    )
+    group_dir_root = output_dir / "candidate_phylogenetics" / candidate.candidate_id
+    rows = ah._analyze_group(
+        "+".join(sorted(implicated_species)), "species", members, group_dir_root, output_dir,
+        args, mafft_bin, iqtree_bin,
+    )
+    candidate_row = next(r for r in rows if r["isolate_key"] == candidate_isolate.isolate_key)
+
+    return Gate4Result(
+        phylo_status=candidate_row["phylo_status"],
+        reassortment_call=candidate_row["reassortment_call"],
+        discordant_segment=candidate_row["discordant_segment"],
+        bootstrap_support=candidate_row["discordant_clade_bootstrap_support"],
+        detail=candidate_row,
+    )
