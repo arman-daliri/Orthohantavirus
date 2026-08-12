@@ -313,13 +313,34 @@ Reuses `all_hanta.py`'s existing flags where they mean the same thing:
   is `structural_check_not_available` for candidates that don't align usably to one of the
   three table rows.
 
-## 14. Open items for implementation
+## 14. Open items for implementation — resolved
 
-- HTNV's own Gc TMIS/pH-switch residue numbers are not confirmed by any source found during
-  this design's research (only its Gn structure and its WAASA motif are directly sourced —
-  P08668.1 / PMC7572791; AIL25321.1 residues 18–371 / 2017 *J Virol* PMC5640846). HTNV
-  candidates use the PUUV or ANDV anchor (whichever aligns better) for TMIS/pH-switch, tagged
-  `homology_inferred`, not a third independently-solved HTNV Gc anchor.
+HTNV's own Gc TMIS/pH-switch numbers were not confirmed by any paper found during research,
+so this was verified empirically instead: fetched the three actual GPC proteins (PUUV
+QOC68549.1, ANDV NP_604472.1, HTNV P08668.1), anchored each on its own WAASA motif position,
+and checked whether the WAASA-relative offset that works for ANDV's raw citation (Y745/E757/
+D759/W766/F900) reproduces the same residue identities in the other two:
+
+| Species | Accession | WAASA at (1-based) | Offset vs. ANDV | Y745/E757/D759/W766/F900 match |
+|---|---|---|---|---|
+| ANDV | NP_604472.1 | 647 | 0 (reference) | 5/5 — exact at cited integers |
+| PUUV | QOC68549.1 | 654 | −7 | 5/5 — but only after the −7 shift; **not** at Tscherne et al. 2025's literal integers, confirming that citation reuses ANDV's own numbering convention rather than counting from QOC68549.1 itself |
+| HTNV | P08668.1 | 644 | +3 | 4/5 (Y745/E757/D759/W766 match; F900's equivalent position is N, likely a local indel near that specific loop, not a broken anchor) |
+
+This directly validates the alignment-based (not fixed-integer) implementation this spec already
+called for, with a concrete counterexample (PUUV) showing why: a naive fixed-position lookup
+using Tscherne's literal numbers against QOC68549.1 would have been silently wrong. HTNV's Gc
+row is upgraded from "unconfirmed" to `homology_inferred_verified` — this project's own
+alignment check, not a cited paper, confirmed 4 of 5 positions directly against primary sequence
+data; F900's HTNV equivalent should be treated as a known exception, not extended confidently to
+novel candidates without its own check.
+
+The three reference sequences (fetched via NCBI eutils, embedded verbatim in the implementation
+plan so no network access is needed to build Track A) are the actual data files Track A aligns
+candidates against — see the implementation plan for the full FASTA content.
+
+Remaining open item:
+
 - `select_primary_cds`/ORF-extractor edge cases (ambiguous bases, frameshift-looking candidates)
   need explicit handling: Gate 0 should catch these as an ORF-length failure, not crash.
 
