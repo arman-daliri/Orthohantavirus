@@ -1154,7 +1154,7 @@ class Gate2TrackATest(unittest.TestCase):
     def test_disrupted_tmis_residue_is_detected(self):
         andv_seq = rd.STRUCTURAL_ANCHORS["Orthohantavirus andesense"]["sequence"]
         mutated = list(andv_seq)
-        mutated[765 - 1] = "A"  # W766 -> A, breaking the TMIS hydrophobic residue
+        mutated[766 - 1] = "A"  # W766 -> A, breaking the TMIS hydrophobic residue
         result = dg.gate2_track_a("".join(mutated), ["Orthohantavirus andesense"])
         self.assertFalse(result.tmis_conserved)
 
