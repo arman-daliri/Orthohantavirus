@@ -476,5 +476,85 @@ with open(f"{prefix}.treefile", "w") as f:
         self.assertEqual(result.phylo_status, "insufficient_comparators")
 
 
+class CombineVerdictTest(unittest.TestCase):
+    def setUp(self):
+        self.gate0_pass = dg.Gate0Result(passed_structure=True, passed_identity_floor=True)
+        self.gate2a_clean = dg.Gate2TrackAResult(structural_check_not_available=True)
+        self.gate2b_clean = dg.Gate2TrackBResult()
+        self.gate2c_clean = dg.Gate2TrackCResult()
+
+    def test_gate0_structural_failure_is_junk_sequence(self):
+        gate0 = dg.Gate0Result(passed_structure=False, passed_identity_floor=True, failures=["S: bad"])
+        verdict = dg.combine_verdict(
+            gate0, dg.Gate1Result(), self.gate2a_clean, self.gate2b_clean, self.gate2c_clean,
+            dg.Gate3Result(), dg.Gate4Result())
+        self.assertEqual(verdict, "junk_sequence")
+
+    def test_gate0_identity_floor_failure_is_divergent_novel(self):
+        gate0 = dg.Gate0Result(passed_structure=True, passed_identity_floor=False)
+        verdict = dg.combine_verdict(
+            gate0, dg.Gate1Result(), self.gate2a_clean, self.gate2b_clean, self.gate2c_clean,
+            dg.Gate3Result(), dg.Gate4Result())
+        self.assertEqual(verdict, "divergent_novel_candidate")
+
+    def test_undetectable_by_design_pattern_wins_regardless_of_gate4(self):
+        gate1 = dg.Gate1Result(pattern="undetectable_by_design", discordant_segment="M")
+        gate4 = dg.Gate4Result(phylo_status="analyzed", reassortment_call="no_conflict")
+        verdict = dg.combine_verdict(
+            self.gate0_pass, gate1, self.gate2a_clean, self.gate2b_clean, self.gate2c_clean,
+            dg.Gate3Result(), gate4)
+        self.assertEqual(verdict, "undetectable_by_design")
+
+    def test_insufficient_comparators_from_gate4(self):
+        gate4 = dg.Gate4Result(phylo_status="insufficient_comparators")
+        verdict = dg.combine_verdict(
+            self.gate0_pass, dg.Gate1Result(), self.gate2a_clean, self.gate2b_clean,
+            self.gate2c_clean, dg.Gate3Result(), gate4)
+        self.assertEqual(verdict, "insufficient_comparators")
+
+    def test_no_ecological_route_from_gate3(self):
+        gate4 = dg.Gate4Result(phylo_status="analyzed", reassortment_call="no_conflict")
+        verdict = dg.combine_verdict(
+            self.gate0_pass, dg.Gate1Result(pattern="m_only", discordant_segment="M"),
+            self.gate2a_clean, self.gate2b_clean, self.gate2c_clean,
+            dg.Gate3Result(status="no_ecological_route"), gate4)
+        self.assertEqual(verdict, "no_ecological_route")
+
+    def test_ecology_unknown_does_not_block_a_supported_call(self):
+        gate4 = dg.Gate4Result(phylo_status="analyzed", reassortment_call="supported_reassortment_candidate",
+                               bootstrap_support=98.0)
+        verdict = dg.combine_verdict(
+            self.gate0_pass, dg.Gate1Result(pattern="m_only", discordant_segment="M"),
+            self.gate2a_clean, self.gate2b_clean, self.gate2c_clean,
+            dg.Gate3Result(status="ecology_unknown"), gate4)
+        self.assertEqual(verdict, "supported_reassortment_candidate")
+
+    def test_weak_bootstrap_is_insufficient_evidence(self):
+        gate4 = dg.Gate4Result(phylo_status="analyzed", reassortment_call="weak_signal_low_bootstrap_support",
+                               bootstrap_support=60.0)
+        verdict = dg.combine_verdict(
+            self.gate0_pass, dg.Gate1Result(pattern="m_only", discordant_segment="M"),
+            self.gate2a_clean, self.gate2b_clean, self.gate2c_clean,
+            dg.Gate3Result(status="ecological_overlap_plausible"), gate4)
+        self.assertEqual(verdict, "insufficient_evidence")
+
+    def test_supported_with_structural_warning_when_track_a_flags_a_red_flag(self):
+        gate4 = dg.Gate4Result(phylo_status="analyzed", reassortment_call="supported_reassortment_candidate",
+                               bootstrap_support=99.0)
+        gate2a = dg.Gate2TrackAResult(structural_check_not_available=False, tmis_conserved=False)
+        verdict = dg.combine_verdict(
+            self.gate0_pass, dg.Gate1Result(pattern="m_only", discordant_segment="M"), gate2a,
+            self.gate2b_clean, self.gate2c_clean,
+            dg.Gate3Result(status="ecological_overlap_plausible"), gate4)
+        self.assertEqual(verdict, "supported_reassortment_candidate_with_structural_warning")
+
+    def test_no_conflict_when_gate4_finds_nothing(self):
+        gate4 = dg.Gate4Result(phylo_status="analyzed", reassortment_call="no_conflict")
+        verdict = dg.combine_verdict(
+            self.gate0_pass, dg.Gate1Result(pattern="concordant"), self.gate2a_clean,
+            self.gate2b_clean, self.gate2c_clean, dg.Gate3Result(), gate4)
+        self.assertEqual(verdict, "no_conflict")
+
+
 if __name__ == "__main__":
     unittest.main()

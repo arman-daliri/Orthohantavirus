@@ -568,3 +568,44 @@ def gate4_check(
         bootstrap_support=candidate_row["discordant_clade_bootstrap_support"],
         detail=candidate_row,
     )
+
+
+def combine_verdict(
+    gate0: Gate0Result,
+    gate1: Gate1Result,
+    gate2a: Gate2TrackAResult,
+    gate2b: Gate2TrackBResult,
+    gate2c: Gate2TrackCResult,
+    gate3: Gate3Result,
+    gate4: Gate4Result,
+    min_bootstrap_support: float = 95.0,
+) -> str:
+    """Combines every gate's finding into one verdict, per the rubric in
+    docs/superpowers/specs/2026-08-12-reassortment-detector-design.md section 10.
+    """
+    if not gate0.passed_structure:
+        return "junk_sequence"
+    if not gate0.passed_identity_floor:
+        return "divergent_novel_candidate"
+    if gate1.pattern == "undetectable_by_design":
+        return "undetectable_by_design"
+    if gate4.phylo_status == "insufficient_comparators":
+        return "insufficient_comparators"
+    if gate3.status == "no_ecological_route":
+        return "no_ecological_route"
+    if gate4.reassortment_call == "no_conflict" or gate4.phylo_status != "analyzed":
+        return "no_conflict"
+    if gate4.reassortment_call == "weak_signal_low_bootstrap_support":
+        return "insufficient_evidence"
+    if gate4.reassortment_call == "supported_reassortment_candidate":
+        structural_red_flag = (
+            gate2a.tmis_conserved is False
+            or gate2a.ph_switch_conserved is False
+            or gate2a.waasa_intact is False
+            or gate2b.lineage_marker_match is False
+            or gate2c.sl_mismatch_high_risk
+        )
+        if structural_red_flag:
+            return "supported_reassortment_candidate_with_structural_warning"
+        return "supported_reassortment_candidate"
+    return "no_conflict"
