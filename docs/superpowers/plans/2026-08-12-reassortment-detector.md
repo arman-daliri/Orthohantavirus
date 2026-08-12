@@ -350,6 +350,9 @@ git commit -m "Add Gate 2 Track A structural reference data, empirically verifie
   `kmer_profile`, `profiles_to_matrix`, `cosine_distance_matrix`)
 - Produces: `CandidateInput` dataclass (fields: `candidate_id: str`, `s_genomic: str`,
   `m_genomic: str`, `l_genomic: str`)
+- Produces: `_longest_orf_span(genomic_seq: str) -> str` (internal helper: longest ATG..stop
+  nucleotide span, stop codon included; Task 8's `candidate_cds_from_orf` reuses this
+  directly rather than re-implementing the same 6-frame search)
 - Produces: `longest_orf_protein(genomic_seq: str) -> str`
 - Produces: `empirical_protein_length_range(protein_lengths: List[int]) -> Tuple[int, int]`
 - Produces: `empirical_panhandle_consensus(genomic_sequences: List[str], n: int = 11) -> Tuple[str, str]`
@@ -538,10 +541,12 @@ def _translate(seq: str) -> str:
     return "".join(protein)
 
 
-def longest_orf_protein(genomic_seq: str) -> str:
-    """Longest ATG...stop ORF across all 6 reading frames, translated to protein (stop
-    codon excluded). Returns '' if no in-frame stop codon terminates any ATG-initiated
-    ORF -- Gate 0 treats that as a structural failure, not a crash.
+def _longest_orf_span(genomic_seq: str) -> str:
+    """Longest ATG...stop nucleotide span (stop codon included) across all 6 reading
+    frames. Shared by longest_orf_protein (Gate 0, translates it) and
+    candidate_cds_from_orf (Gate 4, uses the nucleotide span directly) so the ORF-search
+    loop exists exactly once. Returns '' if no in-frame stop codon terminates any
+    ATG-initiated ORF.
     """
     genomic_seq = genomic_seq.upper()
     best = ""
@@ -554,13 +559,22 @@ def longest_orf_protein(genomic_seq: str) -> str:
                     while j < len(strand_seq) - 2:
                         codon = strand_seq[j:j + 3]
                         if codon in _STOP_CODONS:
-                            protein = _translate(strand_seq[i:j])
-                            if len(protein) > len(best):
-                                best = protein
+                            span = strand_seq[i:j + 3]
+                            if len(span) > len(best):
+                                best = span
                             break
                         j += 3
                 i += 3
     return best
+
+
+def longest_orf_protein(genomic_seq: str) -> str:
+    """Longest ATG...stop ORF across all 6 reading frames, translated to protein (stop
+    codon excluded). Returns '' if no in-frame stop codon terminates any ATG-initiated
+    ORF -- Gate 0 treats that as a structural failure, not a crash.
+    """
+    span = _longest_orf_span(genomic_seq)
+    return _translate(span[:-3]) if span else ""
 
 
 def empirical_protein_length_range(protein_lengths: List[int]) -> Tuple[int, int]:
@@ -1531,9 +1545,10 @@ git commit -m "Add Gate 3 ecological opportunity check"
 **Interfaces:**
 - Consumes: `ah.IsolateRecord`, `ah.PhyloCandidate`, `ah._analyze_group`, `ah.MIN_CDS_LENGTH`,
   `ah.select_primary_cds`, `ah.accession_base` (all confirmed present in `all_hanta.py` by
-  reading it during design); `CandidateInput`, `Gate0Result.orf_proteins` is NOT what Gate 4
-  aligns (Gate 4 needs CDS *nucleotide*, not translated protein — see the note in Step 3);
-  `Gate1Result.implicated_species`; `ReferenceData` (Task 3)
+  reading it during design); `CandidateInput`, `_longest_orf_span` (Task 2 — reused directly,
+  not reimplemented); `Gate0Result.orf_proteins` is NOT what Gate 4 aligns (Gate 4 needs CDS
+  *nucleotide*, not translated protein — see the note in Step 3); `Gate1Result.implicated_species`;
+  `ReferenceData` (Task 3)
 - Produces: `build_candidate_isolate_record(candidate_id: str, species_label: str) -> ah.IsolateRecord`
 - Produces: `candidate_cds_from_orf(genomic_seq: str) -> str` (the ORF's own nucleotide span, not
   its translation — needed because `_analyze_group` aligns nucleotide CDS)
@@ -1729,27 +1744,12 @@ already present, then append:
 
 def candidate_cds_from_orf(genomic_seq: str) -> str:
     """The ORF's own nucleotide span (ATG..stop, stop included) -- what Gate 4 aligns,
-    since _analyze_group works on nucleotide CDS, not translated protein. Distinct from
-    longest_orf_protein, which returns the translation for Gate 0's length check.
+    since _analyze_group works on nucleotide CDS, not translated protein. Reuses
+    _longest_orf_span (Task 2) rather than re-implementing the same 6-frame ORF search --
+    that function already returns exactly this span; longest_orf_protein is the one that
+    additionally translates it.
     """
-    genomic_seq = genomic_seq.upper()
-    best = ""
-    for strand_seq in (genomic_seq, _reverse_complement(genomic_seq)):
-        for frame in range(3):
-            i = frame
-            while i < len(strand_seq) - 2:
-                if strand_seq[i:i + 3] == "ATG":
-                    j = i + 3
-                    while j < len(strand_seq) - 2:
-                        codon = strand_seq[j:j + 3]
-                        if codon in _STOP_CODONS:
-                            span = strand_seq[i:j + 3]
-                            if len(span) > len(best):
-                                best = span
-                            break
-                        j += 3
-                i += 3
-    return best
+    return _longest_orf_span(genomic_seq)
 
 
 def build_candidate_isolate_record(candidate_id: str, species_label: str) -> "ah.IsolateRecord":
