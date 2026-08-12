@@ -1069,11 +1069,28 @@ def gate1_check(
         "M")
     pattern = "m_only" if discordant_segment == "M" else "s_or_l_involving"
 
+    # too_divergent: the discordant segment doesn't convincingly match ANYTHING in the
+    # reference set (best_distance is itself close to 1.0) -- no plausible phylogenetic
+    # bridge, more consistent with an artifact than a real donor. This uses the
+    # candidate's own best-match distance, which is the right quantity for "no good
+    # match exists at all".
+    #
+    # undetectable_by_design: a *different* question -- can the top-2 candidate parent
+    # species for this segment even be told apart? A tiny GAP between the best and
+    # second-best hit's distances means the segment is genuinely ambiguous between two
+    # near-identical parents (Reassortment_Report.md's "reassortment between
+    # near-identical parents is invisible to any tree-based method" case). Deliberately
+    # NOT based on best_distance itself: a small best_distance means a confident,
+    # high-quality match -- the opposite of ambiguous -- so gating on that quantity
+    # would mislabel every clean match as "undetectable".
     discordant_distance = best_distance[discordant_segment]
-    if discordant_distance <= undetectable_floor:
-        pattern = "undetectable_by_design"
-    elif discordant_distance >= too_divergent_ceiling:
+    if discordant_distance >= too_divergent_ceiling:
         pattern = "too_divergent"
+    else:
+        discordant_hits = top_hits[discordant_segment]
+        if len(discordant_hits) >= 2 and (
+                discordant_hits[1].distance - discordant_hits[0].distance) <= undetectable_floor:
+            pattern = "undetectable_by_design"
 
     implicated_species = list({s for s in best_species.values() if s})
     return Gate1Result(top_hits=top_hits, implicated_species=implicated_species,
