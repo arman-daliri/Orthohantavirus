@@ -1,6 +1,7 @@
 # test_detector_gates.py
 import unittest
 
+import all_hanta as ah
 import detector_gates as dg
 import reassortment_reference_data as rd
 
@@ -236,6 +237,63 @@ class Gate2TrackCTest(unittest.TestCase):
                                discordant_segment="M", pattern="m_only")
         result = dg.gate2_track_c(gate1)
         self.assertEqual(result.receptor_class_note, "same_clade")
+
+
+def _make_ecology_isolate(species, country, host_order, year, lab=False, vaccine=False):
+    return ah.IsolateRecord(
+        isolate_key=f"{species}|{country}|{year}", species_name=species, species_taxid="999",
+        species_status="classified", biosample="", isolate="", strain="", host_name="Test host",
+        host_taxid="1", host_order=host_order, host_family="", host_role="reservoir_rodent",
+        collection_date=year, year=year, location="", country=country, region="",
+        grouping_tier="tier_2_species_isolate", grouping_confidence=1.0,
+        s_accession="", m_accession="", l_accession="",
+        s_completeness="", m_completeness="", l_completeness="",
+        s_nt_length=0, m_nt_length=0, l_nt_length=0,
+        s_protein_aa="", m_protein_aa="", l_protein_aa="", concatenated_protein_aa="",
+        segments_present=[], coding_complete_segments=[], triplet_status="", has_complete_triplet=False,
+        is_lab_derived=lab, is_vaccine_strain=vaccine, has_nss_orf=False,
+        metadata_conflict=False, taxonomic_incongruence=False, cross_species_partners=[],
+        kmer_cluster_id="", s_protein_accessions=[], m_protein_accessions=[],
+        l_protein_accessions=[], all_accessions=[], warnings=[],
+    )
+
+
+class Gate3CheckTest(unittest.TestCase):
+    def test_single_implicated_species_needs_no_overlap_check(self):
+        isolates = [_make_ecology_isolate("SpA", "Finland", "Rodentia", "2010")]
+        result = dg.gate3_check(["SpA"], isolates)
+        self.assertEqual(result.status, "ecology_unknown")
+
+    def test_sympatric_host_order_and_country_is_plausible_overlap(self):
+        isolates = [
+            _make_ecology_isolate("SpA", "Finland", "Rodentia", "2010"),
+            _make_ecology_isolate("SpB", "Finland", "Rodentia", "2011"),
+        ]
+        result = dg.gate3_check(["SpA", "SpB"], isolates)
+        self.assertEqual(result.status, "ecological_overlap_plausible")
+
+    def test_different_continents_and_host_orders_is_no_route(self):
+        isolates = [
+            _make_ecology_isolate("SpA", "Finland", "Rodentia", "2010"),
+            _make_ecology_isolate("SpC", "Guinea", "Eulipotyphla", "1990"),
+        ]
+        result = dg.gate3_check(["SpA", "SpC"], isolates)
+        self.assertEqual(result.status, "no_ecological_route")
+
+    def test_missing_metadata_for_a_parent_is_unknown_not_no_route(self):
+        isolates = [_make_ecology_isolate("SpA", "Finland", "Rodentia", "2010")]
+        # SpB has no reference isolates at all -- metadata absent, not evidence of
+        # non-overlap.
+        result = dg.gate3_check(["SpA", "SpB"], isolates)
+        self.assertEqual(result.status, "ecology_unknown")
+
+    def test_lab_and_vaccine_isolates_excluded_from_consideration(self):
+        isolates = [
+            _make_ecology_isolate("SpA", "Finland", "Rodentia", "2010", lab=True),
+            _make_ecology_isolate("SpB", "Finland", "Rodentia", "2011"),
+        ]
+        result = dg.gate3_check(["SpA", "SpB"], isolates)
+        self.assertEqual(result.status, "ecology_unknown")  # SpA has no WILD isolates
 
 
 if __name__ == "__main__":

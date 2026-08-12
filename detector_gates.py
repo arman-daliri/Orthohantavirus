@@ -5,7 +5,7 @@ See docs/superpowers/specs/2026-08-12-reassortment-detector-design.md for the fu
 framework this implements.
 """
 
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -405,3 +405,42 @@ def gate2_track_c(gate1: Gate1Result) -> Gate2TrackCResult:
             receptor_note = "same_clade"
 
     return Gate2TrackCResult(sl_mismatch_high_risk=sl_mismatch, receptor_class_note=receptor_note)
+
+
+@dataclass
+class Gate3Result:
+    status: str = "ecology_unknown"
+    detail: str = ""
+
+
+def gate3_check(implicated_species: List[str], isolates: List["ah.IsolateRecord"]) -> Gate3Result:
+    if len(implicated_species) < 2:
+        return Gate3Result(status="ecology_unknown", detail="single implicated species, no overlap to test")
+
+    by_species: Dict[str, List["ah.IsolateRecord"]] = defaultdict(list)
+    for isolate in isolates:
+        if isolate.is_lab_derived or isolate.is_vaccine_strain:
+            continue
+        if isolate.species_name in implicated_species:
+            by_species[isolate.species_name].append(isolate)
+
+    missing = [s for s in implicated_species if not by_species.get(s)]
+    if missing:
+        return Gate3Result(status="ecology_unknown",
+                           detail=f"no wild reference isolate metadata for: {', '.join(missing)}")
+
+    host_orders = {s: {i.host_order for i in members if i.host_order} for s, members in by_species.items()}
+    countries = {s: {i.country for i in members if i.country} for s, members in by_species.items()}
+
+    species_list = implicated_species[:2]
+    a, b = species_list[0], species_list[1]
+    host_overlap = bool(host_orders[a] & host_orders[b])
+    country_overlap = bool(countries[a] & countries[b])
+
+    if host_overlap and country_overlap:
+        return Gate3Result(status="ecological_overlap_plausible",
+                           detail=f"shared host order and country between {a} and {b}")
+    if not host_orders[a] or not host_orders[b] or not countries[a] or not countries[b]:
+        return Gate3Result(status="ecology_unknown", detail="insufficient metadata to judge overlap")
+    return Gate3Result(status="no_ecological_route",
+                       detail=f"no shared host order/country found between {a} and {b}")
