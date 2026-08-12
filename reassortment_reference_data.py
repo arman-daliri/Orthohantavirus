@@ -7,7 +7,7 @@ session -- see docs/superpowers/specs/2026-08-12-reassortment-detector-design.md
 that found PUUV's own accession does NOT match Tscherne et al. 2025's literal integers.
 """
 
-from typing import Any, Dict, FrozenSet, Optional, Tuple
+from typing import Any, Dict, FrozenSet, Tuple
 
 from Bio.Align import PairwiseAligner, substitution_matrices
 

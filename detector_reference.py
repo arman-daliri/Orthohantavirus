@@ -6,7 +6,6 @@ that function, lines ~3960-4001) without any of the table-building, ML-matrix, o
 output-writing steps this detector doesn't need.
 """
 
-from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple

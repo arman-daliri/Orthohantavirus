@@ -11,8 +11,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
-
 import all_hanta as ah
 import reassortment_reference_data as rd
 
@@ -603,10 +601,14 @@ def combine_verdict(
     gate2c: Gate2TrackCResult,
     gate3: Gate3Result,
     gate4: Gate4Result,
-    min_bootstrap_support: float = 95.0,
 ) -> str:
     """Combines every gate's finding into one verdict, per the rubric in
     docs/superpowers/specs/2026-08-12-reassortment-detector-design.md section 10.
+
+    No min_bootstrap_support parameter here: gate4.reassortment_call already reflects
+    the threshold (all_hanta.py's classify_reassortment_call applies it when gate4_check
+    calls _analyze_group), so re-checking it here would be a second, redundant copy of
+    the same decision rather than an independent gate.
     """
     if not gate0.passed_structure:
         return "junk_sequence"

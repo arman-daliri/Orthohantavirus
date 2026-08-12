@@ -88,8 +88,7 @@ def score_candidate(
         phylo_seed=args.phylo_seed, phylo_threads=args.phylo_threads,
     )
 
-    verdict = dg.combine_verdict(gate0, gate1, gate2a, gate2b, gate2c, gate3, gate4,
-                                 min_bootstrap_support=args.min_bootstrap_support)
+    verdict = dg.combine_verdict(gate0, gate1, gate2a, gate2b, gate2c, gate3, gate4)
 
     return {
         "candidate_id": candidate.candidate_id,
