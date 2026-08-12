@@ -184,14 +184,31 @@ V71/G700/D967 GP per `Orthohantavirus_01.md` — never applied cross-species. Ou
 `lineage_marker_match` (bool), `matched_species`, `marker_set_used`. No marker set for the
 implicated species → `not_informative`, never a fail.
 
+**Implementation note:** `Orthohantavirus_01.md` names these residues but doesn't cite which
+strain's numbering they're counted against, and a targeted search during this design session
+didn't turn up a citable HTNV NP reference accession for L179 specifically (unlike Track A's
+residues, which were run down to primary sources). Track B ships as a working, tested mechanism
+with its marker table **empty** rather than guessing a reference accession — every candidate
+gets `not_informative` until a sourced entry is added, which is exactly the designed fallback
+for "no marker set for the implicated species." Filling in the real HTNV entry is future work,
+not silently assumed.
+
 ### Track C — Interaction compatibility (informational)
 
 - `sl_mismatch_high_risk` (bool): flagged when Gate 1 implicates different parents for S and L
   — experimental systems mostly show instability here, but documented natural exceptions exist
   (Park et al. 2025 HTNV L-segment reassortants), so this is a flag, never a fail.
-- `receptor_class_note`: if M moved, notes whether the donor and recipient species' known
-  receptor classes (β3-integrins vs. Protocadherin-1, per `Orthohantavirus_01.md`) match —
-  informational only.
+- `receptor_class_note`: if M moved, checked against literature more current than
+  `Orthohantavirus_01.md`'s "β3-integrins vs. Protocadherin-1" framing, which turns out to be an
+  oversimplification — Jangra et al. 2018 (*Nature*, doi:10.1038/s41586-018-0702-1) established
+  PCDH1 as required for New World hantavirus (ANDV, SNV) entry specifically, and Gerrard et al.
+  2021's genetic-depletion study (eLife, PMID 34232859) found β3/β1 integrin loss had "little or
+  no effect" on entry for a broad panel of hantaviruses — challenging the integrin-as-receptor
+  assumption rather than confirming an Old-World counterpart to PCDH1. So the check is scoped to
+  what's actually established: `new_world_pcdh1_dependent` vs. `old_world_pcdh1_independent`
+  (by genus clade, using the existing `PHYLOGROUP`/geography data — no per-species integrin claim
+  asserted), noting only whether an M-segment donor/recipient pair crosses that New World/Old
+  World line, not a specific receptor-molecule match.
 
 ### Gate 2 output columns
 
