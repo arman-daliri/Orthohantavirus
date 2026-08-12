@@ -205,3 +205,105 @@ def gate0_check(
         orf_proteins=orf_proteins,
         best_kmer_identity=best_kmer_identity,
     )
+
+
+@dataclass
+class SpeciesHit:
+    species: str
+    distance: float
+
+
+def nearest_species_by_kmer(
+    candidate_protein: str, reference_profiles: List[Tuple[str, str]], top_n: int = 3,
+) -> List[SpeciesHit]:
+    """Top-n distinct species by minimum per-isolate cosine distance to
+    candidate_protein. Deliberately per-isolate (not pre-aggregated per species) so a
+    single close outlier isolate is still found, matching how compute_segment_divergence
+    already works in all_hanta.py.
+
+    Builds one candidate-vs-all matrix (not the full NxN pairwise matrix
+    cosine_distance_matrix would build if handed all reference isolates together) --
+    the candidate is always row 0.
+    """
+    if not candidate_protein or not reference_profiles:
+        return []
+    profiles = [ah.kmer_profile(candidate_protein)] + [
+        ah.kmer_profile(protein) for _species, protein in reference_profiles]
+    matrix, _vocab = ah.profiles_to_matrix(profiles)
+    distances = ah.cosine_distance_matrix(matrix)[0, 1:]
+
+    best_per_species: Dict[str, float] = {}
+    for (species, _protein), distance in zip(reference_profiles, distances.tolist()):
+        if species not in best_per_species or distance < best_per_species[species]:
+            best_per_species[species] = distance
+
+    ranked = sorted(best_per_species.items(), key=lambda item: item[1])
+    return [SpeciesHit(species=species, distance=distance) for species, distance in ranked[:top_n]]
+
+
+@dataclass
+class Gate1Result:
+    top_hits: Dict[str, List[SpeciesHit]] = field(default_factory=dict)
+    implicated_species: List[str] = field(default_factory=list)
+    discordant_segment: str = ""
+    pattern: str = "concordant"
+
+
+def gate1_check(
+    orf_proteins: Dict[str, str],
+    reference_profiles: Dict[str, List[Tuple[str, str]]],
+    undetectable_floor: float = 0.02,
+    too_divergent_ceiling: float = 0.9,
+) -> Gate1Result:
+    top_hits = {
+        segment: nearest_species_by_kmer(orf_proteins.get(segment, ""), reference_profiles.get(segment, []))
+        for segment in ("S", "M", "L")
+    }
+    best_species = {
+        segment: hits[0].species if hits else "" for segment, hits in top_hits.items()
+    }
+    best_distance = {
+        segment: hits[0].distance if hits else 1.0 for segment, hits in top_hits.items()
+    }
+
+    if len({s for s in best_species.values() if s}) <= 1:
+        implicated = [s for s in {best_species["S"]} if s]
+        return Gate1Result(top_hits=top_hits, implicated_species=implicated,
+                            discordant_segment="", pattern="concordant")
+
+    # Discordant segment = whichever disagrees with the other two (S/L majority vs M,
+    # or S vs M/L, etc.) -- with only 3 segments, the odd one out is whichever species
+    # doesn't match at least one other segment's top hit.
+    counts = Counter(best_species.values())
+    majority_species, majority_count = counts.most_common(1)[0]
+    discordant_segment = next(
+        (segment for segment, species in best_species.items() if species != majority_species),
+        "M")
+    pattern = "m_only" if discordant_segment == "M" else "s_or_l_involving"
+
+    # too_divergent: the discordant segment doesn't convincingly match ANYTHING in the
+    # reference set (best_distance is itself close to 1.0) -- no plausible phylogenetic
+    # bridge, more consistent with an artifact than a real donor. This uses the
+    # candidate's own best-match distance, which is the right quantity for "no good
+    # match exists at all".
+    #
+    # undetectable_by_design: a *different* question -- can the top-2 candidate parent
+    # species for this segment even be told apart? A tiny GAP between the best and
+    # second-best hit's distances means the segment is genuinely ambiguous between two
+    # near-identical parents (Reassortment_Report.md's "reassortment between
+    # near-identical parents is invisible to any tree-based method" case). Deliberately
+    # NOT based on best_distance itself: a small best_distance means a confident,
+    # high-quality match -- the opposite of ambiguous -- so gating on that quantity
+    # would mislabel every clean match as "undetectable".
+    discordant_distance = best_distance[discordant_segment]
+    if discordant_distance >= too_divergent_ceiling:
+        pattern = "too_divergent"
+    else:
+        discordant_hits = top_hits[discordant_segment]
+        if len(discordant_hits) >= 2 and (
+                discordant_hits[1].distance - discordant_hits[0].distance) <= undetectable_floor:
+            pattern = "undetectable_by_design"
+
+    implicated_species = list({s for s in best_species.values() if s})
+    return Gate1Result(top_hits=top_hits, implicated_species=implicated_species,
+                        discordant_segment=discordant_segment, pattern=pattern)

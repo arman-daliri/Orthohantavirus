@@ -113,5 +113,52 @@ class Gate0CheckTest(unittest.TestCase):
         self.assertFalse(result.passed_identity_floor)
 
 
+class NearestSpeciesByKmerTest(unittest.TestCase):
+    def test_returns_top_n_distinct_species_sorted_by_distance(self):
+        reference = [
+            ("SpA", "MMMMMMMMMM"),
+            ("SpA", "MMMMMMMMMA"),  # near-duplicate of SpA, must not count as a 2nd species
+            ("SpB", "WYWYWYWYWY"),
+            ("SpC", "MMMMMMMMMW"),
+        ]
+        hits = dg.nearest_species_by_kmer("MMMMMMMMMM", reference, top_n=3)
+        self.assertEqual(len(hits), 3)
+        self.assertEqual(hits[0].species, "SpA")
+        self.assertLessEqual(hits[0].distance, hits[1].distance)
+        self.assertLessEqual(hits[1].distance, hits[2].distance)
+
+    def test_empty_reference_returns_empty(self):
+        self.assertEqual(dg.nearest_species_by_kmer("MMM", [], top_n=3), [])
+
+
+class Gate1CheckTest(unittest.TestCase):
+    def setUp(self):
+        self.reference = {
+            "S": [("SpA", "M" * 50), ("SpB", "W" * 50)],
+            "M": [("SpA", "M" * 50), ("SpB", "W" * 50)],
+            "L": [("SpA", "M" * 50), ("SpB", "W" * 50)],
+        }
+
+    def test_all_segments_concordant(self):
+        orf_proteins = {"S": "M" * 50, "M": "M" * 50, "L": "M" * 50}
+        result = dg.gate1_check(orf_proteins, self.reference)
+        self.assertEqual(result.pattern, "concordant")
+        self.assertEqual(result.discordant_segment, "")
+        self.assertEqual(result.implicated_species, ["SpA"])
+
+    def test_m_only_discordant_flags_m_pattern(self):
+        orf_proteins = {"S": "M" * 50, "M": "W" * 50, "L": "M" * 50}
+        result = dg.gate1_check(orf_proteins, self.reference)
+        self.assertEqual(result.discordant_segment, "M")
+        self.assertEqual(result.pattern, "m_only")
+        self.assertEqual(set(result.implicated_species), {"SpA", "SpB"})
+
+    def test_s_discordant_flags_s_or_l_involving_pattern(self):
+        orf_proteins = {"S": "W" * 50, "M": "M" * 50, "L": "M" * 50}
+        result = dg.gate1_check(orf_proteins, self.reference)
+        self.assertEqual(result.discordant_segment, "S")
+        self.assertEqual(result.pattern, "s_or_l_involving")
+
+
 if __name__ == "__main__":
     unittest.main()
