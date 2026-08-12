@@ -569,12 +569,13 @@ def _longest_orf_span(genomic_seq: str) -> str:
 
 
 def longest_orf_protein(genomic_seq: str) -> str:
-    """Longest ATG...stop ORF across all 6 reading frames, translated to protein (stop
-    codon excluded). Returns '' if no in-frame stop codon terminates any ATG-initiated
-    ORF -- Gate 0 treats that as a structural failure, not a crash.
+    """Longest ATG...stop ORF across all 6 reading frames, translated to protein (start
+    and stop codons both excluded from the returned protein -- the initiator Met is not
+    counted). Returns '' if no in-frame stop codon terminates any ATG-initiated ORF --
+    Gate 0 treats that as a structural failure, not a crash.
     """
     span = _longest_orf_span(genomic_seq)
-    return _translate(span[:-3]) if span else ""
+    return _translate(span[3:-3]) if span else ""
 
 
 def empirical_protein_length_range(protein_lengths: List[int]) -> Tuple[int, int]:
@@ -702,7 +703,7 @@ def gate0_check(
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `python3 -m unittest test_detector_gates -v`
-Expected: PASS (9 tests)
+Expected: PASS (11 tests)
 
 - [ ] **Step 5: Commit**
 
