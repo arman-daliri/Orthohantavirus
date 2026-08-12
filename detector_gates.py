@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 import all_hanta as ah
+import reassortment_reference_data as rd
 
 _STOP_CODONS = {"TAA", "TAG", "TGA"}
 _CODON_TABLE = {
@@ -307,3 +308,49 @@ def gate1_check(
     implicated_species = list({s for s in best_species.values() if s})
     return Gate1Result(top_hits=top_hits, implicated_species=implicated_species,
                         discordant_segment=discordant_segment, pattern=pattern)
+
+
+@dataclass
+class Gate2TrackAResult:
+    anchor_species: str = ""
+    anchor_basis: str = ""
+    waasa_intact: Optional[bool] = None
+    tmis_conserved: Optional[bool] = None
+    ph_switch_conserved: Optional[bool] = None
+    structural_check_not_available: bool = True
+
+
+def gate2_track_a(candidate_m_protein: str, implicated_species: List[str]) -> Gate2TrackAResult:
+    anchor_species = next((s for s in implicated_species if s in rd.STRUCTURAL_ANCHORS), None)
+    if anchor_species is None or not candidate_m_protein:
+        return Gate2TrackAResult(structural_check_not_available=True)
+
+    anchor = rd.STRUCTURAL_ANCHORS[anchor_species]
+    ref_seq = anchor["sequence"]
+
+    tmis_ok = True
+    tmis_checked_any = False
+    for _label, position in anchor["tmis"].items():
+        if position is None:
+            continue
+        tmis_checked_any = True
+        residue, aligned = rd.find_aligned_residue(candidate_m_protein, ref_seq, position)
+        ref_residue = ref_seq[position - 1]
+        if not aligned or residue != ref_residue:
+            tmis_ok = False
+
+    ph_ok = True
+    for _label, position in anchor["ph_switch"].items():
+        residue, aligned = rd.find_aligned_residue(candidate_m_protein, ref_seq, position)
+        ref_residue = ref_seq[position - 1]
+        if not aligned or residue != ref_residue:
+            ph_ok = False
+
+    return Gate2TrackAResult(
+        anchor_species=anchor_species,
+        anchor_basis=anchor["basis"],
+        waasa_intact="WAASA" in candidate_m_protein,
+        tmis_conserved=tmis_ok if tmis_checked_any else None,
+        ph_switch_conserved=ph_ok,
+        structural_check_not_available=False,
+    )

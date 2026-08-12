@@ -2,6 +2,7 @@
 import unittest
 
 import detector_gates as dg
+import reassortment_reference_data as rd
 
 
 class LongestOrfProteinTest(unittest.TestCase):
@@ -158,6 +159,37 @@ class Gate1CheckTest(unittest.TestCase):
         result = dg.gate1_check(orf_proteins, self.reference)
         self.assertEqual(result.discordant_segment, "S")
         self.assertEqual(result.pattern, "s_or_l_involving")
+
+
+class Gate2TrackATest(unittest.TestCase):
+    def test_candidate_identical_to_andv_anchor_conserves_everything(self):
+        andv_seq = rd.STRUCTURAL_ANCHORS["Orthohantavirus andesense"]["sequence"]
+        result = dg.gate2_track_a(andv_seq, ["Orthohantavirus andesense"])
+        self.assertEqual(result.anchor_species, "Orthohantavirus andesense")
+        self.assertEqual(result.anchor_basis, "solved")
+        self.assertTrue(result.waasa_intact)
+        self.assertTrue(result.tmis_conserved)
+        self.assertTrue(result.ph_switch_conserved)
+        self.assertFalse(result.structural_check_not_available)
+
+    def test_candidate_identical_to_puuv_anchor_also_conserves_everything(self):
+        puuv_seq = rd.STRUCTURAL_ANCHORS["Orthohantavirus puumalaense"]["sequence"]
+        result = dg.gate2_track_a(puuv_seq, ["Orthohantavirus puumalaense"])
+        self.assertTrue(result.waasa_intact)
+        self.assertTrue(result.tmis_conserved)
+        self.assertTrue(result.ph_switch_conserved)
+
+    def test_disrupted_tmis_residue_is_detected(self):
+        andv_seq = rd.STRUCTURAL_ANCHORS["Orthohantavirus andesense"]["sequence"]
+        mutated = list(andv_seq)
+        mutated[766 - 1] = "A"  # W766 -> A, breaking the TMIS hydrophobic residue
+        result = dg.gate2_track_a("".join(mutated), ["Orthohantavirus andesense"])
+        self.assertFalse(result.tmis_conserved)
+
+    def test_unimplicated_species_without_a_table_entry_is_not_available(self):
+        result = dg.gate2_track_a("M" * 1100, ["Orthohantavirus seoulense"])
+        self.assertTrue(result.structural_check_not_available)
+        self.assertIsNone(result.waasa_intact)
 
 
 if __name__ == "__main__":
