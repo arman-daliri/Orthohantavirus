@@ -2471,7 +2471,7 @@ def build_risk_rows(
             # matches the string-typed convention every other column in this table uses;
             # surveillance_priority is the one place None vs "not analyzed" is worth
             # distinguishing (see ortho_reassortment_table.csv), not this summary table.
-            "phylo_reassortment_call": phylo_call or "",
+            "phylo_reassortment_call": "",
             **terms,
         })
     rows.sort(key=lambda r: r["surveillance_priority_score"], reverse=True)
