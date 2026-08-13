@@ -312,7 +312,11 @@ represented by many near-identical outbreak sequences get stable neighbour order
 flags; species represented by a handful of divergent, scattered sequences get noisy orderings and
 many flags. CHOV at 100% with n=8 is the clearest symptom.
 
-This approach has been entirely replaced by Stage 2. **To detect reassortment properly**, build
+The k-mer diagnostic is retained as an informational signal (`reassortment_status`,
+`sl_rank_separation`, `m_rank_offset`, still emitted in `ortho_isolate_table.csv` and
+`ortho_risk_table.csv`); only the standalone `ortho_segment_divergence.csv` file was dropped,
+since it duplicated data already in those two tables. Stage 2 replaces the *call* (a real
+reassortment verdict), not the underlying measurement. **To detect reassortment properly**, build
 per-segment alignments (MAFFT) and trees (IQ-TREE) and test topological incongruence between the
 S, M and L trees. The constraints worth testing against: M-segment exchange dominates, S and L
 cosegregate from the same parent, and events occur within a reservoir host species or between
