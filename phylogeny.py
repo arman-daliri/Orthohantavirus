@@ -916,3 +916,102 @@ def _phylo_call_by_isolate(phylo_rows: Sequence[Dict[str, Any]]) -> Dict[str, st
             best[key] = call
             best_rank[key] = rank
     return best
+
+
+def run_phylogeny(paths: "ah.InputPaths", args: argparse.Namespace) -> None:
+    """Mirrors all_hanta.py's run_pipeline() ingest chain exactly through
+    compute_segment_divergence (needed for divergence_by_key, which
+    collect_phylo_candidates uses to tag divergence_candidate isolates) -- see spec
+    section 3.2 for why this ~duplication is a deliberate choice, not an oversight.
+    """
+    logging.info("Verifying package integrity against NCBI md5sum.txt")
+    checksums = ah.verify_inputs(paths)
+    ah.report_checksums(checksums, allow_mismatch=args.allow_checksum_mismatch)
+
+    logging.info("Loading reports")
+    data_records = list(ah.iter_jsonl(paths.data_report))
+    annotation_index = ah.build_annotation_index(ah.iter_jsonl(paths.annotation_report))
+    biosample_index = ah.build_biosample_index(ah.iter_jsonl(paths.biosample_report))
+
+    logging.info("Parsing FASTA")
+    genomic_index = ah.parse_fasta(paths.genomic_fasta)
+    protein_index = ah.parse_fasta(paths.protein_fasta)
+
+    logging.info("Transforming accession records")
+    accessions = []
+    for record in data_records:
+        transformed, _qc_row = ah.transform_one_record(
+            record, annotation_index, biosample_index, genomic_index, protein_index)
+        if transformed is not None:
+            accessions.append(transformed)
+
+    logging.info("Reconstructing isolates")
+    isolates = ah.build_isolate_records(accessions)
+    logging.info("  %s isolates, %s complete triplets",
+                 len(isolates), sum(1 for i in isolates if i.has_complete_triplet))
+
+    ah.assign_kmer_clusters(isolates, args.cluster_threshold)
+    divergence = ah.compute_segment_divergence(isolates, min_species_size=args.min_species_size)
+    divergence_by_key = {d.isolate_key: d for d in divergence}
+
+    logging.info("Loading CDS")
+    cds_index = parse_cds_fasta(paths.cds_fasta)
+    logging.info("  cds: %s accessions with at least one CDS", len(cds_index))
+
+    logging.info("Running phylogenetics stage")
+    phylo_rows = run_phylogenetics_stage(isolates, divergence_by_key, cds_index, paths.output_dir, args)
+    ah.safe_write_csv(paths.output_dir / "ortho_reassortment_table.csv", phylo_rows)
+    logging.info("Done. %s candidate rows written to ortho_reassortment_table.csv", len(phylo_rows))
+
+
+def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Orthohantavirus phylogenetics stage: MAFFT + IQ-TREE reassortment analysis "
+                    "over the reference isolate set (Stage 2 of the three-stage pipeline)",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--input", default=".",
+                        help="Package root containing all_hanta/ncbi_dataset/data")
+    parser.add_argument("--output", help="Output directory; defaults to <input>/output")
+    parser.add_argument("--allow-checksum-mismatch", action="store_true",
+                        help="Continue even if inputs do not match NCBI's md5sum.txt")
+    parser.add_argument("--cluster-threshold", type=float, default=0.02,
+                        help="Cosine k-mer distance for single-linkage clustering within a species")
+    parser.add_argument("--min-species-size", type=int, default=8,
+                        help="Minimum assessable isolates in a species before divergence "
+                             "diagnostics (and divergence_candidate tagging) are computed")
+    parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
+    parser.add_argument("--mafft-bin", default=None, help="Path to mafft (default: PATH lookup)")
+    parser.add_argument("--iqtree-bin", default=None, help="Path to iqtree (default: PATH lookup)")
+    parser.add_argument("--phylo-min-taxa", type=int, default=4,
+                        help="Minimum candidate isolates in a species before building segment trees")
+    parser.add_argument("--bootstrap", type=int, default=1000,
+                        help="IQ-TREE ultrafast bootstrap replicates (>=1000)")
+    parser.add_argument("--min-bootstrap-support", type=float, default=95.0,
+                        help="Minimum ultrafast bootstrap support to call a topology conflict supported")
+    parser.add_argument("--phylo-seed", type=int, default=42,
+                        help="Fixed IQ-TREE random seed, for reproducible trees")
+    parser.add_argument("--phylo-threads", type=int, default=max(1, (os.cpu_count() or 4) - 1),
+                        help="Threads for mafft and iqtree")
+    parser.add_argument("--phylo-scope", choices=("species", "phylogroup", "both"), default="both",
+                        help="species: within-species trees only. phylogroup: trees spanning "
+                             "every species in a reservoir-host phylogroup (see ah.PHYLOGROUP), "
+                             "for interspecies signal a species-only tree structurally cannot "
+                             "show. both: run each independently.")
+    parser.add_argument("--phylo-outgroup", default=None,
+                        help="Accession or isolate_key to root trees on, via IQ-TREE's -o.")
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    args = parse_args(argv)
+    paths = ah.resolve_inputs(Path(args.input), output=Path(args.output) if args.output else None)
+    ah.configure_logging(paths.log_file, verbose=args.verbose)
+    logging.info("Orthohantavirus phylogenetics stage (Stage 2)")
+    logging.info("Package: %s", paths.data_dir)
+    logging.info("Output : %s", paths.output_dir)
+    run_phylogeny(paths, args)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
