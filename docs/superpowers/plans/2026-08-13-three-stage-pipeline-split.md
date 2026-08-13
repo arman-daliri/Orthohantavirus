@@ -29,7 +29,7 @@ Four exact line ranges in `all_hanta.py` (1-indexed, inclusive) move to `phyloge
 | 1 | 451–456 | `HOST_ORDER_PHYLOGROUP_FALLBACK` dict |
 | 2 | 732–745 | `@dataclass class PhyloCandidate` |
 | 3 | 2028–2066 | `_segment_rank_metrics` |
-| 4 | 2295–3115 | Section banner comment through `_phylo_call_by_isolate` (24 defs: `HUMAN_AFFECTING_CLASSES`, `MIN_CDS_LENGTH`, `is_human_affecting_or_likely`, `parse_cds_fasta`, `select_primary_cds`, `collect_phylo_candidates`, `_phylogroup_for_isolate`, `_phylogroup_for_candidate`, `_assignment_basis`, `_candidate_group_key`, `group_candidates`, `group_candidates_by_species`, `resolve_binary`, `write_segment_fasta`, `run_mafft`, `run_iqtree`, `_patristic_distance_matrix`, `tree_divergence_for_species`, `_nearest_supported_descendant`, `bootstrap_support_for_pair`, `classify_reassortment_call`, `_phylo_row`, `_resolve_outgroup_label`, `_analyze_group`, `_run_phylogenetics_scope`, `run_phylogenetics_stage`, `_REASSORTMENT_CALL_RANK`, `_phylo_call_by_isolate`) |
+| 4 | 2295–3116 | Section banner comment through `_phylo_call_by_isolate` (24 defs: `HUMAN_AFFECTING_CLASSES`, `MIN_CDS_LENGTH`, `is_human_affecting_or_likely`, `parse_cds_fasta`, `select_primary_cds`, `collect_phylo_candidates`, `_phylogroup_for_isolate`, `_phylogroup_for_candidate`, `_assignment_basis`, `_candidate_group_key`, `group_candidates`, `group_candidates_by_species`, `resolve_binary`, `write_segment_fasta`, `run_mafft`, `run_iqtree`, `_patristic_distance_matrix`, `tree_divergence_for_species`, `_nearest_supported_descendant`, `bootstrap_support_for_pair`, `classify_reassortment_call`, `_phylo_row`, `_resolve_outgroup_label`, `_analyze_group`, `_run_phylogenetics_scope`, `run_phylogenetics_stage`, `_REASSORTMENT_CALL_RANK`, `_phylo_call_by_isolate`) |
 
 Range 4's true start (2295, not 2329 as the design spec's first draft said) was found by checking every symbol used-but-not-called in the block, not just function calls — `HUMAN_AFFECTING_CLASSES` (line 2325) sits inside a section banner comment (2295–2323) that starts 34 lines before `MIN_CDS_LENGTH`. Missing this would have split a defined-and-used-together pair across two files.
 
@@ -82,7 +82,7 @@ def extract(start, end):
 host_fallback = extract(451, 456)
 phylo_candidate = extract(732, 745)
 segment_rank_metrics = extract(2028, 2066)
-main_block = extract(2295, 3115)
+main_block = extract(2295, 3116)  # not 3115 -- see Task 1's fix-round finding: _phylo_call_by_isolate's actual last line (`return best`) is 3116
 
 body = "\n\n".join([host_fallback.rstrip("\n"), phylo_candidate.rstrip("\n"),
                     segment_rank_metrics.rstrip("\n"), main_block.rstrip("\n")]) + "\n"
@@ -741,8 +741,11 @@ from pathlib import Path
 lines = Path("all_hanta.py").read_text().splitlines(keepends=True)
 
 # Delete ranges in reverse order so earlier line numbers stay valid as later ones are cut.
-# (1-indexed, inclusive; matches the plan's Verified Extraction Inventory table exactly.)
-for start, end in [(2295, 3115), (2028, 2066), (732, 745), (451, 456)]:
+# (1-indexed, inclusive.) Main block ends at 3116, not the plan's original 3115 -- Task 1's
+# review found the extraction was one line short (all_hanta.py:3115 is `best_rank[key] = rank`,
+# :3116 is `return best`, _phylo_call_by_isolate's actual last line). Using 3115 here would
+# leave a bare `return best` in all_hanta.py, outside any function -- a SyntaxError.
+for start, end in [(2295, 3116), (2028, 2066), (732, 745), (451, 456)]:
     del lines[start - 1:end]
 
 Path("all_hanta.py").write_text("".join(lines))
