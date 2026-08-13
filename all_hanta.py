@@ -438,18 +438,6 @@ PHYLOGROUP: Dict[str, str] = {
     for species, entry in SPECIES_RISK.items()
 }
 
-# Host-order fallback for isolates PHYLOGROUP can't place -- species not yet formally
-# named or classified (species_status != 'classified'), which have no curated reservoir
-# to look up. Only usable where a WHOLE taxonomic order maps to one phylogroup: every
-# Eulipotyphla genus in GENUS_PHYLOGROUP is soricomorpha_borne, so an unclassified
-# isolate observed in any shrew or mole is unambiguous even without a species-level
-# identification. Chiroptera is included for the same reason, even though no curated
-# SPECIES_RISK reservoir is bat-borne -- this fallback is the only route into
-# chiroptera_borne. Rodentia is deliberately absent: it spans Murinae, Arvicolinae and
-# Sigmodontinae (three different phylogroups) all at once, so the order alone can't
-# pick one -- see _phylogroup_for_isolate.
-
-
 # Single source of truth for the mammalian orders this dataset contains: the host role
 # each implies, and the baseline human-risk prior. Shrew (Eulipotyphla), mole and bat
 # borne hantaviruses are regarded as non-pathogenic to humans (PMC10459939).
