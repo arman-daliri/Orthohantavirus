@@ -90,6 +90,12 @@ stops writing `ortho_segment_divergence.csv` and `ortho_ml_segments.csv` (§5).
 
 ### 3.2 `phylogeny.py` (new, Stage 2)
 
+**Correction from plan-writing (2026-08-13):** the original version of this section said Stage
+3's import fix touched five symbols. Re-deriving the check found a sixth:
+`detector_reference.py` line 40 calls `ah.parse_cds_fasta`, which is also moving. The corrected,
+complete list is six symbols: `resolve_binary`, `PhyloCandidate`, `select_primary_cds`,
+`MIN_CDS_LENGTH`, `_analyze_group`, and `parse_cds_fasta`. §3.3 below is corrected accordingly.
+
 Receives everything listed in §3.1. Gets its own `parse_args`/`main`/pipeline-runner, taking the
 `--phylogenetics`-era CLI flags (minus the `--phylogenetics` toggle itself, since running this
 script *is* the toggle) plus `--input`/`--output`/`--verbose` to match the other two stages'
@@ -110,16 +116,16 @@ there's no longer a conditional branch to log around — running the script *is*
 ### 3.3 `reassortment_detector.py` / `detector_gates.py` / `detector_reference.py` (Stage 3)
 
 No logic changes. Import-surface fix only: these three files currently do `import all_hanta as
-ah` and call `ah.resolve_binary`, `ah.PhyloCandidate`, `ah.select_primary_cds`,
-`ah.MIN_CDS_LENGTH`, `ah._analyze_group` — all five are moving. This was the complete set,
-verified by grepping every `ah.` call site across all three files (not just skimming): every
-other `ah.` reference in these files (`IsolateRecord`, `FastaRecord`, `kmer_profile`,
+ah` and call `ah.resolve_binary` (`reassortment_detector.py`), `ah.PhyloCandidate`,
+`ah.select_primary_cds`, `ah.MIN_CDS_LENGTH`, `ah._analyze_group` (`detector_gates.py`), and
+`ah.parse_cds_fasta` (`detector_reference.py`, line 40) — all six are moving. Every other `ah.`
+reference in these files (`IsolateRecord`, `FastaRecord`, `kmer_profile`,
 `cosine_distance_matrix`, `profiles_to_matrix`, `accession_base`, `parse_fasta`, `iter_jsonl`,
 `build_annotation_index`, `build_biosample_index`, `transform_one_record`,
 `build_isolate_records`, `resolve_inputs`, `configure_logging`, `SEGMENT_LENGTH_RANGE`) is not
 moving and needs no change.
 
-Fix: add `import phylogeny as ph` to all three files; repoint the five call sites above from
+Fix: add `import phylogeny as ph` to all three files; repoint the six call sites above from
 `ah.` to `ph.`.
 
 ## 4. Rejected alternative: stage-to-stage file dependencies
@@ -166,7 +172,12 @@ following the repo's existing one-test-file-per-module convention
 (`test_detector_gates.py` next to `detector_gates.py`). Verified by class-name inspection of
 `test_all_hanta.py`, moving: `ClassifyReassortmentCallTest`, `BootstrapSupportRootFallbackTest`,
 `CollectPhyloCandidatesScopeTest`, `GroupCandidatesTest`, `PhylogeneticsScopeEndToEndTest`,
-`PhyloCallByIsolateTest`, `BuildRiskRowsPhyloIntegrationTest`. Staying in `test_all_hanta.py`:
+`PhyloCallByIsolateTest`. **`BuildRiskRowsPhyloIntegrationTest` is deleted, not moved** — reading
+its body during plan-writing showed it tests `build_risk_rows`'s `phylo_call_by_key` parameter
+directly (`ah.build_risk_rows(isolates, {}, {"iso1": "..."})`), which is being removed from
+`build_risk_rows` entirely per this section's "unconditionally phylo-blind" decision. The
+behavior it tests no longer exists in either module, so it isn't a move candidate. Staying in
+`test_all_hanta.py`:
 `SegmentRankMetricsBackwardCompatTest` (tests `_rank_positions`/`_sl_m_rank_metrics`/
 `_segment_rank_metrics` against each other — `_rank_positions` and `_sl_m_rank_metrics` stay in
 `all_hanta.py`; this test needs `ah._segment_rank_metrics` repointed to `ph._segment_rank_metrics`
