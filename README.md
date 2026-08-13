@@ -54,14 +54,32 @@ python all_hanta.py --input . --output output
 The transform is GIL-bound and runs serially; a full run takes ~16s on the 15,991-record package.
 
 Requires Python 3.11+ (uses `datetime.UTC`) with `pandas`, `pyarrow`, `numpy`. No alignment or
-phylogenetics dependencies for a default run -- those only load if `--phylogenetics` is passed
-(see below).
+phylogenetics dependencies for a default run -- those only load if Stage 2 is run (see below).
 
-### Optional: `--phylogenetics` (MAFFT + IQ-TREE reassortment analysis)
+## Pipeline stages
+
+The pipeline is three independent scripts, each runnable any time after the raw NCBI package
+exists (none requires another to have already run):
+
+| Stage | Script | Needs | Produces |
+|---|---|---|---|
+| 1 | `all_hanta.py` | `pandas`/`pyarrow`/`numpy` only | The core tables above, including `ortho_ml_sequence_table.csv` |
+| 2 | `phylogeny.py` | `mafft`/`iqtree` on PATH, Biopython, `dendropy` | `ortho_reassortment_table.csv`, `phylogenetics/<species>/<segment>/` |
+| 3 | `reassortment_detector.py` | `mafft`/`iqtree` on PATH, Biopython, `dendropy` | Score a new, not-yet-published candidate genome against the 5-gate framework |
+
+`ortho_risk_table.csv` (Stage 1) is always phylo-blind. Combine it with Stage 2's evidence by
+joining `ortho_reassortment_table.csv` on `isolate_key` — there's no automatic recombination
+between the two scripts by design (see `docs/superpowers/specs/2026-08-13-three-stage-pipeline-
+split-design.md` §4 for why).
+
+### Stage 2: `phylogeny.py` (MAFFT + IQ-TREE reassortment analysis)
+
+```bash
+python3 phylogeny.py --input . --output output
+```
 
 | Argument | Default | Purpose |
 |---|---|---|
-| `--phylogenetics` | off | Run the MAFFT + IQ-TREE stage described below |
 | `--mafft-bin` | PATH lookup | Path to `mafft` |
 | `--iqtree-bin` | PATH lookup | Path to `iqtree` |
 | `--phylo-min-taxa` | `4` | Minimum candidate isolates in a species before building segment trees |
@@ -71,8 +89,8 @@ phylogenetics dependencies for a default run -- those only load if `--phylogenet
 | `--phylo-threads` | cores − 1 | Threads for `mafft` and `iqtree` |
 
 Requires `mafft` and `iqtree` (IQ-TREE 3.x; `iqtree2` builds work too, pass `--iqtree-bin`) plus
-Biopython and `dendropy` -- none of which are needed for a default run. Set up once with the
-pinned environment file rather than an ad hoc `conda create`:
+Biopython and `dendropy`. Set up once with the pinned environment file rather than an ad hoc
+`conda create`:
 
 ```bash
 conda config --set channel_priority strict
@@ -231,7 +249,7 @@ attenuated, so labelling its sequence with its parent species' wild-type pathoge
 inject a real signal error, not a hypothetical one — unlike `isLabHost`, this is a case where
 exclusion is the correct default.
 
-**`--phylogenetics` is unaffected by this and keeps excluding both lab-derived and vaccine-strain
+**Stage 2 (`phylogeny.py`) is unaffected by this and keeps excluding both lab-derived and vaccine-strain
 isolates** — a passage/attenuation history is a tree-topology risk (branch-length distortion)
 regardless of whether the sequence is informative as an ML feature.
 
@@ -294,26 +312,22 @@ represented by many near-identical outbreak sequences get stable neighbour order
 flags; species represented by a handful of divergent, scattered sequences get noisy orderings and
 many flags. CHOV at 100% with n=8 is the clearest symptom.
 
-What is emitted instead, in `ortho_segment_divergence.csv`, is the honest underlying
-measurement — per-segment nearest neighbours, k-mer distances, and normalized rank separations
-(`sl_rank_separation`, `m_rank_offset`) — with every assessable isolate marked
-`requires_phylogenetic_confirmation`.
-
-**To detect reassortment properly**, build per-segment alignments (MAFFT) and trees (IQ-TREE) and
-test topological incongruence between the S, M and L trees. The constraints worth testing against:
-M-segment exchange dominates, S and L cosegregate from the same parent, and events occur within a
-reservoir host species or between sympatric lineages.
+This approach has been entirely replaced by Stage 2. **To detect reassortment properly**, build
+per-segment alignments (MAFFT) and trees (IQ-TREE) and test topological incongruence between the
+S, M and L trees. The constraints worth testing against: M-segment exchange dominates, S and L
+cosegregate from the same parent, and events occur within a reservoir host species or between
+sympatric lineages.
 
 The one trustworthy reassortment-adjacent signal here is `taxonomic_incongruence`: one isolate
 label whose segments NCBI assigned to more than one species (70 isolates). That is metadata, not
 inference, and it does feed the risk score. It is computed across groups, not within — the
 grouping key contains the species, so a within-group check can never fire.
 
-### `--phylogenetics`: the rigorous replacement
+### Stage 2 in detail: the rigorous reassortment detection
 
-Passing `--phylogenetics` runs the real thing this section always pointed to: per-segment CDS
+Stage 2 (`phylogeny.py`) runs the real thing this section always pointed to: per-segment CDS
 nucleotide alignments (MAFFT) and maximum-likelihood trees with ultrafast bootstrap support
-(IQ-TREE 3.x), compared for topological incongruence between S, M and L. See the flag table
+(IQ-TREE 3.x), compared for topological incongruence between S, M and L. See the argument table
 above for setup and the runtime caveat.
 
 **Candidate selection.** Three groups, unioned (each is independently a reason an isolate matters
@@ -384,16 +398,14 @@ maximum-likelihood inference. These clusters are an alignment-free proxy and are
 | `ortho_isolate_table.csv` | 9,852 × 52 | Reconstructed isolates with S/M/L representatives, triplet status, concatenated protein, divergence diagnostics |
 | `ortho_host_table.csv` | 253 × 13 | One row per host taxon with risk prior and virus species carried |
 | `ortho_risk_table.csv` | 9,852 × 33 | Pathogenicity class, CFR band, citation, and an auditable additive `surveillance_priority_score` |
-| `ortho_segment_divergence.csv` | 9,852 × 17 | Per-segment nearest neighbours and rank separations — **diagnostics, not reassortment calls** |
 | `ortho_ml_feature_matrix.csv` | 7,651 × 236 | Raw features + labels, with `group_id` and `year` for leakage-free CV |
-| `ortho_ml_segments.csv` | 15,781 × 19 | Segment-level table for per-segment models |
 | `ortho_ml_sequence_table.csv` | 206 × 6 | One row per isolate with a coding-complete S+M+L triplet (lab-derived and vaccine-strain isolates excluded): species name, isolate name, raw S/M/L genomic sequences, CFR range |
 | `ortho_suppressed.csv` | 1,032 × 16 | Non-representative accessions with the reason |
 | `ortho_qc_report.csv` | 15,991 × 11 | Per-accession QC including failed transforms with traceback |
 | `ortho_feature_scaling.json` | — | Per-feature mean/std, to be fitted **inside** your CV fold |
 | `ortho_summary.json` | — | Provenance, integrity results, counts, methods and stated limitations |
-| `ortho_reassortment_table.csv` *(`--phylogenetics` only)* | one row per candidate isolate | Real per-segment tree diagnostics, RF distances, bootstrap-gated `reassortment_call` |
-| `phylogenetics/<species>/<segment>/` *(`--phylogenetics` only)* | — | MAFFT alignment + IQ-TREE outputs per species/segment, for inspection or reuse |
+| `ortho_reassortment_table.csv` *(Stage 2, `phylogeny.py`)* | one row per candidate isolate | Real per-segment tree diagnostics, RF distances, bootstrap-gated `reassortment_call` — join on `isolate_key` with `ortho_risk_table.csv`, which is always phylo-blind |
+| `phylogenetics/<species>/<segment>/` *(Stage 2, `phylogeny.py`)* | — | MAFFT alignment + IQ-TREE outputs per species/segment, for inspection or reuse |
 
 All tables are plain CSV (UTF-8, LF line endings). `species_taxid`, `observed_taxid`, `host_taxid`
 and `year` are all-digit strings by design (they are identifiers, not quantities, and some rows
@@ -452,15 +464,9 @@ Every column in every table, grouped by file. `int()`-coded booleans (`is_lab_de
 
 **Risk profile** — `isolate_key`/`species_name`/`virus_abbrev`/`pathogenicity_class`/`disease_syndrome`; `cfr_band`/`cfr_band_label`/`cfr_reported_range` (see [Pathogenicity labels](#pathogenicity-labels)); `reservoir_host`/`endemic_region`/`risk_citation`.
 
-**This isolate** — `host_role`/`host_order`/`expected_reservoir_order`/`host_jump_status`/`observed_host`; `country`/`year`; `triplet_status`/`has_complete_triplet`/`has_nss_orf`; `reassortment_status` (k-mer diagnostic, informational); `taxonomic_incongruence`/`cross_species_partners`; `phylo_reassortment_call` (from `--phylogenetics`, empty string if that stage wasn't run or didn't reach this isolate).
+**This isolate** — `host_role`/`host_order`/`expected_reservoir_order`/`host_jump_status`/`observed_host`; `country`/`year`; `triplet_status`/`has_complete_triplet`/`has_nss_orf`; `reassortment_status` (k-mer diagnostic, informational); `taxonomic_incongruence`/`cross_species_partners`; `phylo_reassortment_call` (from Stage 2, empty string if that stage wasn't run or didn't reach this isolate).
 
-**Score** — `priority_cfr_term`, `priority_human_spillover_term`, `priority_taxonomic_incongruence_term`, `priority_host_jump_term`, `priority_triplet_term`, `priority_nss_term`, `priority_reassortment_term` (one column per additive term — always present and `0.0` if `--phylogenetics` wasn't run), and `surveillance_priority_score` (their sum). See [Risk score](#risk-score) below for the weight of each term.
-</details>
-
-<details>
-<summary><code>ortho_segment_divergence.csv</code> — one row per isolate, k-mer divergence diagnostics (not reassortment calls)</summary>
-
-`isolate_key`/`species_name`; `assessable`/`not_assessable_reason` (needs `--min-species-size` assessable isolates in the species); `reassortment_status` (`requires_phylogenetic_confirmation` or `not_assessable` — **never a positive/negative call**); `taxonomic_incongruence`; `sl_rank_separation`/`m_rank_offset` (the actual diagnostic signal — normalized rank-distance metrics); `s_nearest_neighbour`/`m_nearest_neighbour`/`l_nearest_neighbour` (nearest isolate by k-mer distance, per segment); `s_kmer_distance`/`m_kmer_distance`/`l_kmer_distance`; `reported_species_prior`; `distance_metric`/`interpretation_warning` (fixed text, restating why this is a proxy and not a reassortment call — see [Reassortment](#reassortment)).
+**Score** — `priority_cfr_term`, `priority_human_spillover_term`, `priority_taxonomic_incongruence_term`, `priority_host_jump_term`, `priority_triplet_term`, `priority_nss_term`, `priority_reassortment_term` (one column per additive term — always present and `0.0` if Stage 2 wasn't run), and `surveillance_priority_score` (their sum). See [Risk score](#risk-score) below for the weight of each term.
 </details>
 
 <details>
@@ -477,12 +483,6 @@ Usable = has a concatenated S+M protein and is not `is_vaccine_strain` (`is_lab_
 **Labels** — `label_pathogenicity_class`, `label_disease_syndrome`, `label_cfr_band`, `label_is_human_derived`.
 
 **Features** — `kmer_<3-mer>` × up to `--max-features` (default 200) columns: raw counts of the top-variance amino-acid 3-mers over the concatenated S+M protein, unscaled (see `ortho_feature_scaling.json` and [Using the ML tables](#using-the-ml-tables)).
-</details>
-
-<details>
-<summary><code>ortho_ml_segments.csv</code> — one row per S/M/L accession, slim per-segment table</summary>
-
-`accession`/`sequence_hash`/`segment`/`segment_source`; `species_name`/`species_taxid`; `pathogenicity_class`/`cfr_band`; `host_name`/`host_taxid`/`host_order`/`host_role`; `country`/`year`; `nt_length`/`completeness`/`is_coding_complete`; `is_lab_host`; `group_key` (join key back to `ortho_isolate_table.csv`).
 </details>
 
 <details>
@@ -505,7 +505,7 @@ Step 3 is where almost all of the reduction happens — **not** the lab/vaccine 
 
 - `species_name` — the isolate's canonical ICTV species (`isolate.species_name`, see [Taxonomy resolution](#taxonomy-resolution)). Never blank — every isolate in this table came through species resolution before grouping. This is also what disambiguates `isolate_name`, see below.
 - `isolate_name` — `isolate.isolate`, falling back to `isolate.strain`, falling back to `isolate_key` if both are blank. Note this is the **submitter-provided label verbatim** — it can be a bare number like `"3"` or `"136"` when that's literally what was submitted to NCBI (`isolate.name`/`source` in `data_report.jsonl`); it is not unique across species (two different species can each have an isolate named `"3"`), only unique in combination with `species_name`.
-- `s_sequence`/`m_sequence`/`l_sequence` — full genomic segment sequence (not the CDS-only sequence `--phylogenetics` uses), straight from the genomic FASTA, keyed by `s_accession`/`m_accession`/`l_accession`.
+- `s_sequence`/`m_sequence`/`l_sequence` — full genomic segment sequence (not the CDS-only sequence Stage 2 uses), straight from the genomic FASTA, keyed by `s_accession`/`m_accession`/`l_accession`.
 - `cfr_reported_range` — `species_risk_profile(species_name)["cfr_reported_range"]`, the literature CFR range string (e.g. `"0.1-0.4%"`), verbatim, not the ordinal `cfr_band`.
 </details>
 
@@ -534,9 +534,9 @@ Top-level sections: `pipeline_version`/`generated_at_utc`/`dataset_catalog_api_v
 </details>
 
 <details>
-<summary><code>ortho_reassortment_table.csv</code> — <code>--phylogenetics</code> only, one row per candidate isolate per requested scope</summary>
+<summary><code>ortho_reassortment_table.csv</code> — Stage 2 only, one row per candidate isolate per requested scope</summary>
 
-Every field is always present (even for a not-yet-analyzed or failed row) so the table has one stable, joinable schema — see `_phylo_row`'s docstring. Full methodology in [Reassortment → `--phylogenetics`](#--phylogenetics-the-rigorous-replacement).
+Every field is always present (even for a not-yet-analyzed or failed row) so the table has one stable, joinable schema — see `_phylo_row`'s docstring. Full methodology in [Stage 2 in detail](#stage-2-in-detail-the-rigorous-reassortment-detection).
 
 **Identity / selection** — `isolate_key`/`species_name` (the isolate's true species, never the phylogroup label); `candidate_tags` (why it was selected: `human_affecting_or_likely` / `divergence_candidate` / `complete_triplet`, can be more than one); `analysis_scope` (`species` or `phylogroup` — a candidate can appear once per scope under `--phylo-scope=both`, the default); `phylogroup_assignment_basis` (`curated_reservoir` or `observed_host_order`, only meaningful at `analysis_scope == phylogroup`).
 
@@ -566,9 +566,9 @@ it can be audited or re-weighted:
 This is a triage aid for surveillance, not a validated epidemiological risk model. No term derives
 from the k-mer divergence diagnostics — weighting a withdrawn classifier would have propagated an
 artefact of sample size into a ranking meant to guide surveillance. `reassortment_call` from
-`--phylogenetics` is likewise **not yet wired into this score** — it lives in a separate,
+Stage 2 is likewise **not yet wired into this score** — it lives in a separate,
 opt-in output table so the default risk table's schema and values stay unchanged whether or not
-`--phylogenetics` was run. Join on `isolate_key` to combine them for your own weighting.
+Stage 2 was run. Join on `isolate_key` to combine them for your own weighting.
 
 ### Using the ML tables
 
@@ -583,16 +583,16 @@ data, because segments from the same outbreak are near-identical.
 
 ## Known limitations
 
-- **No reassortment calls by default.** See above; run with `--phylogenetics` for the real
+- **No reassortment calls by default.** See above; run Stage 2 for the real
   MAFFT + IQ-TREE analysis. Even then, it only covers the three named candidate groups with full
   S+M+L CDS available (1,464 of 15,991 accessions' worth of isolates in this package) — not every
   isolate, and species below `--phylo-min-taxa` are reported but not analyzed.
-- **`--phylogenetics` calls are a single ML tree search per segment, bootstrap-gated, not a formal
+- **Stage 2 (`phylogeny.py`) calls are a single ML tree search per segment, bootstrap-gated, not a formal
   incongruence test** (e.g. no SH-test/AU-test on constrained topologies). `supported_reassortment_
   candidate` means the rank pattern and bootstrap support are consistent with reassortment, not a
   statistically tested certainty.
 - **k-mer distances are not PED.** The ICTV 0.1 cutoff needs aligned sequences and ML inference —
-  `--phylogenetics` builds real per-segment ML trees but does not compute a DEmARC-style
+  Stage 2 builds real per-segment ML trees but does not compute a DEmARC-style
   concatenated-PED value; it is aimed at the reassortment question, not species re-demarcation.
 - **223 coding-complete triplets** is a ceiling set by the data (1,339 COMPLETE records total),
   not by the pipeline. 1,795 groups have all three segments present at some completeness.
