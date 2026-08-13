@@ -94,7 +94,7 @@ def _segment_rank_metrics(
     }
 
 # --------------------------------------------------------------------------------------
-# Rigorous phylogenetic reassortment analysis -- opt-in via --phylogenetics
+# Rigorous phylogenetic reassortment analysis (tree-based MAFFT + IQ-TREE stage)
 # --------------------------------------------------------------------------------------
 #
 # Everything above (assign_kmer_clusters, compute_segment_divergence) is alignment-free
@@ -104,17 +104,18 @@ def _segment_rank_metrics(
 # maximum-likelihood trees with ultrafast bootstrap support (IQ-TREE), compared for
 # topological incongruence between S, M and L.
 #
-# It only runs when --phylogenetics is passed, requires mafft and iqtree on PATH (or
-# --mafft-bin/--iqtree-bin), and Biopython + dendropy (imported lazily below so a
-# default run never needs them). It only ever touches the three named candidate groups
-# -- human-affecting-or-likely, divergence candidates, complete triplets -- and every
-# candidate isolate is reported exactly once PER REQUESTED SCOPE (--phylo-scope) in the
-# output table, tagged with why it was selected and, if analysis didn't happen, why not.
-# Nothing is silently dropped. Species-only trees (scope='species') can only ever show
-# reassortment WITHIN a species, because a segment acquired from a different species has
-# no possible donor in a single-species tree; phylogroup trees (scope='phylogroup') group
-# candidates by reservoir-host phylogroup (ah.PHYLOGROUP) instead, spanning every species
-# that shares one, so interspecies exchange has somewhere to show up (Laenen et al. 2019,
+# This is the phylogenetics stage (Stage 2 of the three-stage pipeline) and requires
+# mafft and iqtree on PATH (or --mafft-bin/--iqtree-bin), and Biopython + dendropy
+# (imported lazily below so a default run never needs them). It only ever touches the
+# three named candidate groups -- human-affecting-or-likely, divergence candidates,
+# complete triplets -- and every candidate isolate is reported exactly once PER
+# REQUESTED SCOPE (--phylo-scope) in the output table, tagged by why it was selected
+# and, if analysis didn't happen, why not. Nothing is silently dropped. Species-only
+# trees (scope='species') can only ever show reassortment WITHIN a species, because a
+# segment acquired from a different species has no possible donor in a single-species
+# tree; phylogroup trees (scope='phylogroup') group candidates by reservoir-host
+# phylogroup (ah.PHYLOGROUP) instead, spanning every species that shares one, so
+# interspecies exchange has somewhere to show up (Laenen et al. 2019,
 # 10.3390/v11090788). --phylo-scope=both (the default) runs both, so a candidate can
 # appear up to twice, once per scope, distinguished by the analysis_scope column -- the
 # old "reported exactly once, full stop" invariant now applies per scope.
@@ -402,9 +403,9 @@ def resolve_binary(explicit: Optional[str], name: str) -> str:
     resolved = shutil.which(candidate) if candidate else None
     if not resolved:
         raise SystemExit(
-            f"--phylogenetics requires '{name}' on PATH (or pass --{name}-bin=/path/to/{name}).\n"
-            "Install both mafft and iqtree with:\n"
-            "  conda create -n hanta_phylo -c bioconda -c conda-forge mafft iqtree biopython dendropy\n"
+            f"Phylogenetics stage requires '{name}' on PATH (or pass --{name}-bin=/path/to/{name}).\n"
+            "Install dependencies with:\n"
+            "  conda env create -f environment.yml\n"
             f"then either 'conda activate hanta_phylo' before running this script, or pass "
             f"--{name}-bin pointing at that environment's bin/{name}."
         )
@@ -704,7 +705,7 @@ def _analyze_group(
     import dendropy
     from dendropy.calculate import treecompare
 
-    group_dir = group_dir_root / normalize_attr_name(group_key)
+    group_dir = group_dir_root / ah.normalize_attr_name(group_key)
     labels = [f"I{i:04d}" for i in range(len(members))]
     label_map: Dict[str, PhyloCandidate] = dict(zip(labels, members))
 
@@ -841,7 +842,7 @@ def run_phylogenetics_stage(
     output_dir: Path,
     args: argparse.Namespace,
 ) -> List[Dict[str, Any]]:
-    """Entry point for --phylogenetics. See the module docstring above this section.
+    """Entry point for the phylogenetics (tree-based) analysis stage.
 
     Runs once per scope named by --phylo-scope ('both', the default, runs species then
     phylogroup). Each candidate is reported once per scope it was analyzed under, so at
@@ -854,8 +855,8 @@ def run_phylogenetics_stage(
         import dendropy.calculate.treecompare  # noqa: F401
     except ImportError as exc:
         raise SystemExit(
-            "--phylogenetics requires biopython and dendropy. Install with:\n"
-            "  conda create -n hanta_phylo -c bioconda -c conda-forge mafft iqtree biopython dendropy\n"
+            "Phylogenetics stage requires biopython and dendropy. Install with:\n"
+            "  conda env create -f environment.yml\n"
             f"(missing: {exc.name})"
         ) from exc
 
@@ -914,3 +915,4 @@ def _phylo_call_by_isolate(phylo_rows: Sequence[Dict[str, Any]]) -> Dict[str, st
         if rank > best_rank.get(key, -1):
             best[key] = call
             best_rank[key] = rank
+    return best
