@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 import all_hanta as ah
+import phylogeny as ph
 
 
 @dataclass
@@ -37,7 +38,7 @@ def load_reference_data(root: Path) -> ReferenceData:
             accessions.append(transformed)
 
     isolates = ah.build_isolate_records(accessions)
-    cds_index = ah.parse_cds_fasta(paths.cds_fasta)
+    cds_index = ph.parse_cds_fasta(paths.cds_fasta)
 
     return ReferenceData(isolates=isolates, cds_index=cds_index, genomic_index=genomic_index)
 

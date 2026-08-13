@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import all_hanta as ah
+import phylogeny as ph
 import detector_gates as dg
 import detector_reference as dr
 
@@ -148,8 +149,8 @@ def main(argv=None) -> int:
     reference = dr.load_reference_data(Path(args.reference_input))
     precomputed = _build_precomputed(reference)
 
-    mafft_bin = ah.resolve_binary(args.mafft_bin, "mafft")
-    iqtree_bin = ah.resolve_binary(args.iqtree_bin, "iqtree")
+    mafft_bin = ph.resolve_binary(args.mafft_bin, "mafft")
+    iqtree_bin = ph.resolve_binary(args.iqtree_bin, "iqtree")
     args.mafft_bin, args.iqtree_bin = mafft_bin, iqtree_bin
 
     rows = [score_candidate(c, reference, precomputed, args) for c in candidates]

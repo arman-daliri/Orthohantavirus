@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import all_hanta as ah
+import phylogeny as ph
 import reassortment_reference_data as rd
 
 _STOP_CODONS = {"TAA", "TAG", "TGA"}
@@ -510,12 +511,12 @@ def build_candidate_isolate_record(candidate_id: str, species_label: str) -> "ah
 
 def build_comparator_members(
     implicated_species: List[str], reference: "dr.ReferenceData", phylo_min_taxa: int,
-) -> Tuple[List["ah.PhyloCandidate"], str]:
+) -> Tuple[List["ph.PhyloCandidate"], str]:
     """Union of reference isolates (with full S+M+L CDS) from every implicated species --
     not a single-species tree, so an M-only exchange candidate has both the S/L-matching
     and M-matching species' isolates available to be visible against.
     """
-    members: List["ah.PhyloCandidate"] = []
+    members: List["ph.PhyloCandidate"] = []
     for isolate in reference.isolates:
         if isolate.species_name not in implicated_species:
             continue
@@ -525,11 +526,11 @@ def build_comparator_members(
         for segment, accession in (("S", isolate.s_accession), ("M", isolate.m_accession),
                                    ("L", isolate.l_accession)):
             records = reference.cds_index.get(ah.accession_base(accession)) if accession else None
-            seq = ah.select_primary_cds(records, segment)
-            if len(seq) >= ah.MIN_CDS_LENGTH:
+            seq = ph.select_primary_cds(records, segment)
+            if len(seq) >= ph.MIN_CDS_LENGTH:
                 sequences[segment] = seq
         if len(sequences) == 3:
-            members.append(ah.PhyloCandidate(isolate=isolate, tags=["comparator"], sequences=sequences))
+            members.append(ph.PhyloCandidate(isolate=isolate, tags=["comparator"], sequences=sequences))
 
     if len(members) < phylo_min_taxa:
         return [], "insufficient_comparators"
@@ -569,7 +570,7 @@ def gate4_check(
 
     species_label = implicated_species[0] if implicated_species else "unclassified"
     candidate_isolate = build_candidate_isolate_record(candidate.candidate_id, species_label)
-    candidate_member = ah.PhyloCandidate(
+    candidate_member = ph.PhyloCandidate(
         isolate=candidate_isolate, tags=["candidate"], sequences=dict(candidate_cds))
 
     members = [candidate_member] + comparator_members
@@ -578,7 +579,7 @@ def gate4_check(
         phylo_seed=phylo_seed, phylo_threads=phylo_threads,
     )
     group_dir_root = output_dir / "candidate_phylogenetics" / candidate.candidate_id
-    rows = ah._analyze_group(
+    rows = ph._analyze_group(
         "+".join(sorted(implicated_species)), "species", members, group_dir_root, output_dir,
         args, mafft_bin, iqtree_bin,
     )
