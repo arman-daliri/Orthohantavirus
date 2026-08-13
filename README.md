@@ -71,16 +71,28 @@ phylogenetics dependencies for a default run -- those only load if `--phylogenet
 | `--phylo-threads` | cores − 1 | Threads for `mafft` and `iqtree` |
 
 Requires `mafft` and `iqtree` (IQ-TREE 3.x; `iqtree2` builds work too, pass `--iqtree-bin`) plus
-Biopython and `dendropy` -- none of which are needed for a default run. Set up once with:
+Biopython and `dendropy` -- none of which are needed for a default run. Set up once with the
+pinned environment file rather than an ad hoc `conda create`:
 
 ```bash
-conda create -n hanta_phylo -c bioconda -c conda-forge mafft iqtree biopython dendropy
+conda config --set channel_priority strict
+conda env create -f environment.yml
 ```
+
+Channel order matters here, not just as style: `-c bioconda -c conda-forge` (bioconda first)
+resolves Biopython from bioconda's own channel, whose newest build is `1.70` and drags in a
+`Python 3.6` / `numpy 1.12` toolchain to satisfy it -- silently, with no error. `environment.yml`
+lists `conda-forge` first and `bioconda` second (the order bioconda's own docs recommend) so
+Biopython, pandas, numpy and pyarrow resolve from conda-forge's current builds, while `mafft` and
+`iqtree` -- which only exist in bioconda -- still resolve there. `mafft`/`iqtree` are pinned to
+exact versions (`7.525` / `3.1.3`); the Python-side packages are floors, not patches, since exact
+patch availability on conda-forge isn't something this repo can assert.
 
 Then either `conda activate hanta_phylo` before running this script, or leave your normal
 environment active and pass `--mafft-bin`/`--iqtree-bin` pointing at that env's `bin/`. **Don't
-just prepend that env's `bin/` to `PATH`** without activating fully -- it currently resolves a
-Python 3.6 interpreter as `python3`, which will shadow the one actually running this script.
+just prepend that env's `bin/` to `PATH`** without activating fully -- an unpinned env resolved
+this way has been observed to install a Python 3.6 interpreter as `python3`, which would shadow
+the one actually running this script.
 
 Runtime is dominated by IQ-TREE's ModelFinder + ultrafast bootstrap and scales with both the
 number of candidate isolates per species and CDS length (L segments are the slowest, ~6.4 kb).
