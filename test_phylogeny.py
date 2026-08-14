@@ -424,7 +424,7 @@ with open(f"{prefix}.treefile", "w") as f:
 
 
 class PhyloCallByIsolateTest(unittest.TestCase):
-    """_phylo_call_by_isolate reduces an isolate's rows (up to one per --phylo-scope) to
+    """phylo_call_by_isolate reduces an isolate's rows (up to one per --phylo-scope) to
     the single most informative call -- a species-scope 'no_conflict' must never mask a
     phylogroup-scope 'supported_reassortment_candidate' for the same isolate, since the
     two scopes answer different questions and can only ever add evidence, not contradict.
@@ -435,21 +435,21 @@ class PhyloCallByIsolateTest(unittest.TestCase):
             {"isolate_key": "iso1", "reassortment_call": "no_conflict"},
             {"isolate_key": "iso1", "reassortment_call": "supported_reassortment_candidate"},
         ]
-        self.assertEqual(ph._phylo_call_by_isolate(rows)["iso1"], "supported_reassortment_candidate")
+        self.assertEqual(ph.phylo_call_by_isolate(rows)["iso1"], "supported_reassortment_candidate")
 
     def test_not_analyzed_never_overrides_an_analyzed_call(self):
         rows = [
             {"isolate_key": "iso1", "reassortment_call": "weak_signal_low_bootstrap_support"},
             {"isolate_key": "iso1", "reassortment_call": "not_analyzed"},
         ]
-        self.assertEqual(ph._phylo_call_by_isolate(rows)["iso1"], "weak_signal_low_bootstrap_support")
+        self.assertEqual(ph.phylo_call_by_isolate(rows)["iso1"], "weak_signal_low_bootstrap_support")
 
     def test_order_of_rows_does_not_matter(self):
         rows = [
             {"isolate_key": "iso1", "reassortment_call": "supported_reassortment_candidate"},
             {"isolate_key": "iso1", "reassortment_call": "no_conflict"},
         ]
-        self.assertEqual(ph._phylo_call_by_isolate(rows), ph._phylo_call_by_isolate(list(reversed(rows))))
+        self.assertEqual(ph.phylo_call_by_isolate(rows), ph.phylo_call_by_isolate(list(reversed(rows))))
 
 
 if __name__ == "__main__":

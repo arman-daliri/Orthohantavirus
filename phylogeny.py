@@ -895,7 +895,7 @@ def run_phylogenetics_stage(
     return rows
 
 
-# Ranks reassortment_call outcomes so _phylo_call_by_isolate can pick the most informative
+# Ranks reassortment_call outcomes so phylo_call_by_isolate can pick the most informative
 # one when an isolate has more than one row (up to one per --phylo-scope).
 _REASSORTMENT_CALL_RANK = {
     "supported_reassortment_candidate": 2,
@@ -904,9 +904,18 @@ _REASSORTMENT_CALL_RANK = {
 }
 
 
-def _phylo_call_by_isolate(phylo_rows: Sequence[Dict[str, Any]]) -> Dict[str, str]:
-    """Reduce ortho_reassortment_table.csv's rows to one reassortment_call per isolate,
-    for surveillance_priority's phylo_call term.
+def phylo_call_by_isolate(phylo_rows: Sequence[Dict[str, Any]]) -> Dict[str, str]:
+    """Reduce ortho_reassortment_table.csv's rows to one reassortment_call per isolate.
+
+    Public utility, not called anywhere in this pipeline's own scripts: before the
+    three-stage split, this fed all_hanta.py's surveillance_priority(phylo_call=...)
+    directly, in the same process. Post-split, ortho_risk_table.csv (Stage 1) is
+    unconditionally phylo-blind by design (see README's Pipeline stages section and
+    docs/superpowers/specs/2026-08-13-three-stage-pipeline-split-design.md section 5),
+    so nothing in Stage 1 or Stage 2 calls this anymore. It's kept, public, and tested
+    for exactly the manual isolate_key join the README documents -- call it yourself on
+    ortho_reassortment_table.csv's rows if you want this same scope-reduction before
+    joining onto ortho_risk_table.csv or your own analysis.
 
     At --phylo-scope=both an isolate can have up to two rows, one per scope, and they can
     disagree WITHOUT contradicting each other: species-only and phylogroup-only trees

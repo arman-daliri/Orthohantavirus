@@ -77,6 +77,17 @@ ran. To combine the two, join `ortho_reassortment_table.csv` on `isolate_key`. T
 not join automatically. This is a design choice — see
 `docs/superpowers/specs/2026-08-13-three-stage-pipeline-split-design.md` §4 for the reasoning.
 
+At `--phylo-scope=both` (the default), an isolate can have up to two rows in
+`ortho_reassortment_table.csv`, one per scope, and the two can disagree without contradicting
+each other (species-only and phylogroup-only trees answer different questions). Reduce them to
+one `reassortment_call` per isolate before joining with `phylogeny.py`'s own
+`_phylo_call_by_isolate(phylo_rows)` — it picks the single most informative call per isolate
+across scopes (`supported_reassortment_candidate` > `weak_signal_low_bootstrap_support` >
+`no_conflict`), the same reduction Stage 1 used to apply automatically before the pipeline split.
+It isn't wired into any script's `main()` (nothing in this pipeline calls it), so pass it
+`pandas.read_csv('output/ortho_reassortment_table.csv').to_dict('records')` yourself if you want
+this exact reduction rather than reimplementing it.
+
 ### Stage 2: `phylogeny.py` (MAFFT + IQ-TREE reassortment analysis)
 
 ```bash
