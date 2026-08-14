@@ -6,32 +6,32 @@
     {
       "filePath": "data_report.jsonl",
       "fileType": "DATA_REPORT",
-      "uncompressedLengthBytes": "35775424"
+      "uncompressedLengthBytes": "35852744"
     },
     {
       "filePath": "annotation_report.jsonl",
       "fileType": "ANNOTATION_REPORT",
-      "uncompressedLengthBytes": "9939568"
+      "uncompressedLengthBytes": "9954634"
     },
     {
       "filePath": "biosample_report.jsonl",
       "fileType": "BIOSAMPLE_REPORT",
-      "uncompressedLengthBytes": "42985"
+      "uncompressedLengthBytes": "49995"
     },
     {
       "filePath": "cds.fna",
       "fileType": "CDS_NUCLEOTIDE_FASTA",
-      "uncompressedLengthBytes": "24768734"
+      "uncompressedLengthBytes": "24841044"
     },
     {
       "filePath": "genomic.fna",
       "fileType": "GENOMIC_NUCLEOTIDE_FASTA",
-      "uncompressedLengthBytes": "25694268"
+      "uncompressedLengthBytes": "25820804"
     },
     {
       "filePath": "protein.faa",
       "fileType": "PROTEIN_FASTA",
-      "uncompressedLengthBytes": "9369686"
+      "uncompressedLengthBytes": "9395442"
     }
   ]
 }]}
