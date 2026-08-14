@@ -106,7 +106,7 @@ STRUCTURAL_ANCHORS: Dict[str, Dict[str, Any]] = {
 }
 
 # Empty by design -- see spec section 7 Track B implementation note. No citable reference
-# accession was found for Orthohantavirus_01.md's L179 NP / V71/G700/D967 GP markers.
+# accession was found for Mydocs/Orthohantavirus_01.md's L179 NP / V71/G700/D967 GP markers.
 # Shape when populated: {species: {"segment": "S"|"M", "accession": str, "sequence": str,
 # "markers": {label: position_1based}}}.
 LINEAGE_MARKER_TABLE: Dict[str, Dict[str, Any]] = {}
@@ -114,7 +114,7 @@ LINEAGE_MARKER_TABLE: Dict[str, Dict[str, Any]] = {}
 # By genus clade (New World vs. Old World), per Jangra et al. 2018 (Nature,
 # doi:10.1038/s41586-018-0702-1) establishing PCDH1 dependence specifically for New
 # World hantaviruses -- see spec section 7 Track C for the correction from
-# Orthohantavirus_01.md's oversimplified beta-3-integrin framing.
+# Mydocs/Orthohantavirus_01.md's oversimplified beta-3-integrin framing.
 NEW_WORLD_SPECIES: FrozenSet[str] = frozenset({
     "Orthohantavirus andesense",
     "Orthohantavirus sinnombreense",

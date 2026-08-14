@@ -1,41 +1,4 @@
 accession,group_key,grouping_tier,group_confidence,species_name,segment,segment_source,completeness,nt_length,transform_ok,warnings
-MW498184.1,t2|Orthohantavirus puumalaense|puuv kyzyl yulskoe lesnichestvo mg 1575 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
-MW498185.1,t2|Orthohantavirus puumalaense|puuv starye salmany mg 1586 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
-MW498186.1,t2|Orthohantavirus puumalaense|puuv starye salmany mg 1589 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
-MW498187.1,t2|Orthohantavirus puumalaense|puuv starye salmany mg 1590 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
-MW498188.1,t2|Orthohantavirus puumalaense|puuv verkhnee almurzino mg 1613 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
-MW498189.1,t2|Orthohantavirus puumalaense|puuv staryi dryush mg 1652 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
-MW498190.1,t2|Orthohantavirus puumalaense|puuv kutemeli mg 1992 2020,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
-MW498191.1,t2|Orthohantavirus puumalaense|puuv dzhalil mg 1998 2020,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
-MW498192.1,t2|Orthohantavirus puumalaense|puuv dzhalil mg 2001 2020,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
-MW498193.1,t2|Orthohantavirus puumalaense|puuv chistopolskie vyselki mg 2030 2020,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
-MW498194.1,t2|Orthohantavirus puumalaense|puuv chistopolskie vyselki mg 2031 2020,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
-MW498195.1,t2|Orthohantavirus puumalaense|puuv chistopolskie vyselki mg 2032 2020,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
-MW498196.1,t2|Orthohantavirus puumalaense|puuv galaktionovo mg 2037 2020,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
-MW498197.1,t2|Orthohantavirus puumalaense|puuv galaktionovo mg 2038 2020,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
-MW498198.1,t2|Orthohantavirus puumalaense|puuv galaktionovo mg 2039 2020,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
-MW498199.1,t2|Orthohantavirus puumalaense|puuv poruchikovo mg 074 2015,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498200.1,t2|Orthohantavirus puumalaense|puuv aksarino mg 108 2015,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498201.1,t2|Orthohantavirus puumalaense|puuv aksarino mg 109 2015,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498202.1,t2|Orthohantavirus puumalaense|puuv nizhnekamsk mg 134 2015,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498203.1,t2|Orthohantavirus puumalaense|puuv nizhnekamsk mg 139 2015,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498204.1,t2|Orthohantavirus puumalaense|puuv krasnyi klyuch mg 158 2015,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498205.1,t2|Orthohantavirus puumalaense|puuv naberezhnye chelny mg 260 2015,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498206.1,t2|Orthohantavirus puumalaense|puuv nizhnekamsk mg 415 2016,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498207.1,t2|Orthohantavirus puumalaense|puuv nizhnekamsk mg 420 2016,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498208.1,t2|Orthohantavirus puumalaense|puuv nizhnekamsk mg 436 2016,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498209.1,t2|Orthohantavirus puumalaense|puuv ilinka mg 998 2017,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498210.1,t2|Orthohantavirus puumalaense|puuv novyi mg 1089 2017,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498211.1,t2|Orthohantavirus puumalaense|puuv almetievsk mg 1182 2018,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498212.1,t2|Orthohantavirus puumalaense|puuv almetievsk mg 1183 2018,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498213.1,t2|Orthohantavirus puumalaense|puuv almetievsk mg 1185 2018,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498214.1,t2|Orthohantavirus puumalaense|puuv kamyshly mg 1196 2018,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498215.1,t2|Orthohantavirus puumalaense|puuv kamyshly mg 1199 2018,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498216.1,t2|Orthohantavirus puumalaense|puuv kamyshly mg 1200 2018,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498217.1,t2|Orthohantavirus puumalaense|puuv zai karatai mg 1206 2018,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498218.1,t2|Orthohantavirus puumalaense|puuv zai karatai mg 1207 2018,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498219.1,t2|Orthohantavirus puumalaense|puuv tatarskoe utiashkino mg 1419 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
-MW498220.1,t2|Orthohantavirus puumalaense|puuv kurkul mg 1459 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
 MW498221.1,t2|Orthohantavirus puumalaense|puuv oktiabrino mg 1469 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
 MW498222.1,t2|Orthohantavirus puumalaense|puuv nizhnekamsk mg 1554 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
 MW498223.1,t2|Orthohantavirus puumalaense|puuv nizhnekamsk mg 1555 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
@@ -771,8 +734,8 @@ NC_043176.1,t2|unclassified Orthohantavirus|ng1453,tier_2_species_isolate,0.95,u
 NC_043407.1,t2|unclassified Orthohantavirus|hv o0020002,tier_2_species_isolate,0.95,unclassified Orthohantavirus,L,explicit,complete,403,True,complete_but_shorter_than_ictv_range;species_unclassified
 NC_043408.1,t2|unclassified Orthohantavirus|hv o0020002,tier_2_species_isolate,0.95,unclassified Orthohantavirus,M,explicit,complete,3637,True,species_unclassified
 NC_043409.1,t2|unclassified Orthohantavirus|hv o0020002,tier_2_species_isolate,0.95,unclassified Orthohantavirus,S,explicit,complete,1960,True,species_unclassified
-NC_043527.1,t2|unclassified Orthohantavirus|ews25,tier_2_species_isolate,0.95,unclassified Orthohantavirus,S,annotation,complete,1641,True,species_unclassified;missing_collection_date
-NC_055147.1,t2|Orthohantavirus tigrayense|et2121,tier_2_species_isolate,0.95,Orthohantavirus tigrayense,L,annotation,complete,6532,True,
+NC_043527.1,t2|unclassified Orthohantavirus|ews25,tier_2_species_isolate,0.95,unclassified Orthohantavirus,S,explicit,complete,1641,True,species_unclassified;missing_collection_date
+NC_055147.1,t2|Orthohantavirus tigrayense|et2121,tier_2_species_isolate,0.95,Orthohantavirus tigrayense,L,explicit,complete,6532,True,
 NC_055635.1,t2|Orthohantavirus tatenalense|upton heath,tier_2_species_isolate,0.95,Orthohantavirus tatenalense,S,explicit,complete,1302,True,
 NC_055636.1,t2|Orthohantavirus tatenalense|upton heath,tier_2_species_isolate,0.95,Orthohantavirus tatenalense,L,explicit,complete,6465,True,
 NC_055637.1,t2|Orthohantavirus tatenalense|upton heath,tier_2_species_isolate,0.95,Orthohantavirus tatenalense,M,explicit,complete,3355,True,
@@ -2812,6 +2775,18 @@ OY759150.1,acc|OY759150.1,fallback_accession_only,0.1,unclassified Orthohantavir
 OZ485011.1,t1|Orthohantavirus andesense|SAMEA122916161|chile 9717869,tier_1_biosample_isolate,1.0,Orthohantavirus andesense,L,explicit,partial,6562,True,missing_host;missing_protein_link
 OZ485012.1,t1|Orthohantavirus andesense|SAMEA122916161|chile 9717869,tier_1_biosample_isolate,1.0,Orthohantavirus andesense,M,explicit,partial,3671,True,missing_host;missing_protein_link
 OZ485013.1,t1|Orthohantavirus andesense|SAMEA122916161|chile 9717869,tier_1_biosample_isolate,1.0,Orthohantavirus andesense,S,explicit,partial,1871,True,missing_host;missing_protein_link
+OZ492894.1,t1|Orthohantavirus andesense|SAMEA123055212|pp 00779bg andv pathoplexus,tier_1_biosample_isolate,1.0,Orthohantavirus andesense,L,explicit,partial,6529,True,missing_protein_link
+OZ492895.1,t1|Orthohantavirus andesense|SAMEA123055212|pp 00779bg andv pathoplexus,tier_1_biosample_isolate,1.0,Orthohantavirus andesense,M,explicit,partial,3518,True,missing_protein_link
+OZ492896.1,t1|Orthohantavirus andesense|SAMEA123055212|pp 00779bg andv pathoplexus,tier_1_biosample_isolate,1.0,Orthohantavirus andesense,S,explicit,partial,1816,True,missing_protein_link
+OZ493628.1,t1|Orthohantavirus andesense|SAMEA123066260|andv nml26 145tc p3,tier_1_biosample_isolate,1.0,Orthohantavirus andesense,L,explicit,partial,6549,True,missing_host;missing_protein_link
+OZ493629.1,t1|Orthohantavirus andesense|SAMEA123066260|andv nml26 145tc p3,tier_1_biosample_isolate,1.0,Orthohantavirus andesense,M,explicit,partial,3665,True,missing_host;missing_protein_link
+OZ493630.1,t1|Orthohantavirus andesense|SAMEA123066260|andv nml26 145tc p3,tier_1_biosample_isolate,1.0,Orthohantavirus andesense,S,explicit,partial,1873,True,missing_host;missing_protein_link
+OZ493647.1,t1|Orthohantavirus andesense|SAMEA123066259|andv nml26 145tc p2,tier_1_biosample_isolate,1.0,Orthohantavirus andesense,L,explicit,partial,6542,True,missing_host;missing_protein_link
+OZ493648.1,t1|Orthohantavirus andesense|SAMEA123066259|andv nml26 145tc p2,tier_1_biosample_isolate,1.0,Orthohantavirus andesense,M,explicit,partial,3647,True,missing_host;missing_protein_link
+OZ493649.1,t1|Orthohantavirus andesense|SAMEA123066259|andv nml26 145tc p2,tier_1_biosample_isolate,1.0,Orthohantavirus andesense,S,explicit,partial,1863,True,missing_host;missing_protein_link
+OZ498378.1,t1|Orthohantavirus andesense|SAMEA123183492|andv nml26 145tc p4,tier_1_biosample_isolate,1.0,Orthohantavirus andesense,L,explicit,partial,6549,True,missing_host;missing_protein_link
+OZ498379.1,t1|Orthohantavirus andesense|SAMEA123183492|andv nml26 145tc p4,tier_1_biosample_isolate,1.0,Orthohantavirus andesense,M,explicit,partial,3647,True,missing_host;missing_protein_link
+OZ498380.1,t1|Orthohantavirus andesense|SAMEA123183492|andv nml26 145tc p4,tier_1_biosample_isolate,1.0,Orthohantavirus andesense,S,explicit,partial,1868,True,missing_host;missing_protein_link
 PD222974.1,acc|PD222974.1,fallback_accession_only,0.1,Orthohantavirus (genus-level only),,unresolved,partial,28,True,segment_unresolved;missing_host;missing_isolate_and_strain;missing_protein_link;species_unclassified;missing_collection_date;missing_location
 PD222975.1,acc|PD222975.1,fallback_accession_only,0.1,Orthohantavirus (genus-level only),,unresolved,partial,92,True,segment_unresolved;missing_host;missing_isolate_and_strain;missing_protein_link;species_unclassified;missing_collection_date;missing_location
 PD222976.1,acc|PD222976.1,fallback_accession_only,0.1,Orthohantavirus (genus-level only),,unresolved,partial,28,True,segment_unresolved;missing_host;missing_isolate_and_strain;missing_protein_link;species_unclassified;missing_collection_date;missing_location
@@ -3804,6 +3779,13 @@ PV605345.1,t1|Orthohantavirus seoulense|SAMN47999750|22sg699,tier_1_biosample_is
 PV796316.1,t2|Orthohantavirus andesense|136,tier_2_species_isolate,0.95,Orthohantavirus andesense,S,explicit,complete,1870,True,
 PV796317.1,t2|Orthohantavirus andesense|136,tier_2_species_isolate,0.95,Orthohantavirus andesense,M,explicit,complete,3657,True,
 PV796318.1,t2|Orthohantavirus andesense|136,tier_2_species_isolate,0.95,Orthohantavirus andesense,L,explicit,complete,6556,True,
+PV798420.1,t2|Orthohantavirus puumalaense|1 gen14 z56527,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,S,explicit,partial,711,True,
+PV798421.1,t2|Orthohantavirus puumalaense|6 gen14 z60057,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,S,explicit,partial,711,True,
+PV798422.1,t2|Orthohantavirus puumalaense|9 gen14 z60031,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,S,explicit,partial,711,True,
+PV798423.1,t2|Orthohantavirus puumalaense|19 gen14 z53707,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,S,explicit,partial,711,True,
+PV798424.1,t2|Orthohantavirus puumalaense|1 gen14 z56527,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,618,True,
+PV798425.1,t2|Orthohantavirus puumalaense|4 gen14 z56058,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,618,True,
+PV798426.1,t2|Orthohantavirus puumalaense|1 gen14 z56527,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,411,True,
 PV805852.1,t2|Orthohantavirus seoulense|har011,tier_2_species_isolate,0.95,Orthohantavirus seoulense,L,explicit,partial,353,True,
 PV805853.1,t2|Orthohantavirus seoulense|har012,tier_2_species_isolate,0.95,Orthohantavirus seoulense,L,explicit,partial,353,True,
 PV805854.1,t2|Orthohantavirus seoulense|har013,tier_2_species_isolate,0.95,Orthohantavirus seoulense,L,explicit,partial,353,True,
@@ -4677,6 +4659,24 @@ PZ377041.1,t2|Orthohantavirus dobravaense|blr 2025 mm 3079,tier_2_species_isolat
 PZ385161.1,t2|Orthohantavirus andesense|andv switzerland hu 3337 2026,tier_2_species_isolate,0.95,Orthohantavirus andesense,L,explicit,complete,6561,True,
 PZ385162.1,t2|Orthohantavirus andesense|andv switzerland hu 3337 2026,tier_2_species_isolate,0.95,Orthohantavirus andesense,M,explicit,complete,3649,True,
 PZ385163.1,t2|Orthohantavirus andesense|andv switzerland hu 3337 2026,tier_2_species_isolate,0.95,Orthohantavirus andesense,S,explicit,complete,1853,True,
+PZ410441.1,t2|unclassified Orthohantavirus|ts10,tier_2_species_isolate,0.95,unclassified Orthohantavirus,L,explicit,partial,5887,True,species_unclassified
+PZ410442.1,t2|unclassified Orthohantavirus|ts10,tier_2_species_isolate,0.95,unclassified Orthohantavirus,M,explicit,partial,3676,True,species_unclassified
+PZ410443.1,t2|unclassified Orthohantavirus|ts10,tier_2_species_isolate,0.95,unclassified Orthohantavirus,S,explicit,partial,1668,True,species_unclassified
+PZ412308.1,t2|Orthohantavirus andesense|arnq2007,tier_2_species_isolate,0.95,Orthohantavirus andesense,S,explicit,partial,1774,True,
+PZ412309.1,t2|Orthohantavirus andesense|arnq2007,tier_2_species_isolate,0.95,Orthohantavirus andesense,M,explicit,partial,3489,True,
+PZ412310.1,t2|Orthohantavirus andesense|arnq2007,tier_2_species_isolate,0.95,Orthohantavirus andesense,L,explicit,partial,4351,True,
+PZ412313.1,t2|Orthohantavirus andesense|arnq1945,tier_2_species_isolate,0.95,Orthohantavirus andesense,S,explicit,partial,1831,True,
+PZ412314.1,t2|Orthohantavirus andesense|arnq1945,tier_2_species_isolate,0.95,Orthohantavirus andesense,M,explicit,partial,3652,True,
+PZ412315.1,t2|Orthohantavirus andesense|arnq1945,tier_2_species_isolate,0.95,Orthohantavirus andesense,L,explicit,partial,6482,True,
+PZ424449.1,t2|Orthohantavirus andesense|arnq2016,tier_2_species_isolate,0.95,Orthohantavirus andesense,S,explicit,partial,1829,True,
+PZ424450.1,t2|Orthohantavirus andesense|arnq2016,tier_2_species_isolate,0.95,Orthohantavirus andesense,M,explicit,partial,3632,True,
+PZ424451.1,t2|Orthohantavirus andesense|arnq2016,tier_2_species_isolate,0.95,Orthohantavirus andesense,L,explicit,partial,6468,True,
+PZ424452.1,t2|Orthohantavirus andesense|arnq1775,tier_2_species_isolate,0.95,Orthohantavirus andesense,S,explicit,partial,1835,True,
+PZ424453.1,t2|Orthohantavirus andesense|arnq1775,tier_2_species_isolate,0.95,Orthohantavirus andesense,M,explicit,partial,3623,True,
+PZ424454.1,t2|Orthohantavirus andesense|arnq1775,tier_2_species_isolate,0.95,Orthohantavirus andesense,L,explicit,partial,6474,True,
+PZ424455.1,t2|Orthohantavirus andesense|arnq1883,tier_2_species_isolate,0.95,Orthohantavirus andesense,S,explicit,partial,1825,True,
+PZ424456.1,t2|Orthohantavirus andesense|arnq1883,tier_2_species_isolate,0.95,Orthohantavirus andesense,M,explicit,partial,3630,True,
+PZ424457.1,t2|Orthohantavirus andesense|arnq1883,tier_2_species_isolate,0.95,Orthohantavirus andesense,L,explicit,partial,6478,True,
 QP547404.1,acc|QP547404.1,fallback_accession_only,0.1,Orthohantavirus hantanense,,unresolved,partial,54,True,segment_unresolved;missing_host;missing_isolate_and_strain;missing_protein_link;missing_collection_date;missing_location
 QP746458.1,acc|QP746458.1,fallback_accession_only,0.1,Orthohantavirus hantanense,,unresolved,partial,435,True,segment_unresolved;missing_host;missing_isolate_and_strain;missing_protein_link;missing_collection_date;missing_location
 QS054044.1,acc|QS054044.1,fallback_accession_only,0.1,Orthohantavirus seoulense,S,length_heuristic,partial,1768,True,segment_from_length_only;missing_host;missing_isolate_and_strain;missing_protein_link;missing_collection_date;missing_location
@@ -4999,43 +4999,6 @@ Z69993.1,t2|Orthohantavirus tulaense|tula moravia 5302v 95,tier_2_species_isolat
 Z70201.1,t2|Orthohantavirus puumalaense|puu virrat 25cg 95,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1194,True,missing_host;missing_protein_link;missing_collection_date;missing_location
 Z84204.1,t2|Orthohantavirus puumalaense|puu kazan,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,S,explicit,partial,1826,True,missing_host;missing_collection_date;missing_location
 Z84205.1,t2|Orthohantavirus puumalaense|puu kazan,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,3682,True,missing_host;missing_collection_date;missing_location
-KT893886.1,t2|Orthohantavirus hantanense|aa14 172,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
-KT893887.1,t2|Orthohantavirus hantanense|aa14 184,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
-KT893888.1,t2|Orthohantavirus hantanense|aa14 190,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
-KT893889.1,t2|Orthohantavirus hantanense|aa14 266,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
-KT893890.1,t2|Orthohantavirus hantanense|aa14 272,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
-KT893891.1,t2|Orthohantavirus hantanense|aa14 362,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
-KT893892.1,t2|Orthohantavirus hantanense|aa14 368,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
-KT893893.1,t2|Orthohantavirus hantanense|aa14 386,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
-KT893894.1,t2|Orthohantavirus hantanense|aa14 404,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
-KT893895.1,t2|Orthohantavirus hantanense|aa14 423,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
-KT893896.1,t2|Orthohantavirus hantanense|aa14 437,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
-KT897724.1,t2|Orthohantavirus seoulense|northeast baltimore,tier_2_species_isolate,0.95,Orthohantavirus seoulense,L,explicit,partial,6402,True,missing_location
-KT897725.1,t2|Orthohantavirus seoulense|northeast baltimore,tier_2_species_isolate,0.95,Orthohantavirus seoulense,M,explicit,partial,3396,True,missing_location
-KT897726.1,t2|Orthohantavirus seoulense|northeast baltimore,tier_2_species_isolate,0.95,Orthohantavirus seoulense,S,explicit,partial,1633,True,missing_location
-KT899701.1,t2|Orthohantavirus fugongense|fg10,tier_2_species_isolate,0.95,Orthohantavirus fugongense,S,explicit,partial,1813,True,
-KT899702.1,t2|Orthohantavirus fugongense|fg10,tier_2_species_isolate,0.95,Orthohantavirus fugongense,M,explicit,complete,3630,True,
-KT899703.1,t2|Orthohantavirus fugongense|fg10,tier_2_species_isolate,0.95,Orthohantavirus fugongense,L,explicit,partial,6531,True,
-KT901295.1,t2|unclassified Orthohantavirus|mvz180979,tier_2_species_isolate,0.95,unclassified Orthohantavirus,S,annotation,partial,1311,True,species_unclassified;missing_collection_date
-KT901296.1,t2|unclassified Orthohantavirus|mvz180979,tier_2_species_isolate,0.95,unclassified Orthohantavirus,M,annotation,partial,594,True,species_unclassified;missing_collection_date
-KT901297.1,t2|unclassified Orthohantavirus|mvz180981,tier_2_species_isolate,0.95,unclassified Orthohantavirus,M,annotation,partial,1574,True,species_unclassified;missing_collection_date
-KT901298.1,t2|unclassified Orthohantavirus|mvz180982,tier_2_species_isolate,0.95,unclassified Orthohantavirus,S,annotation,complete,1802,True,species_unclassified;missing_collection_date
-KT901299.1,t2|unclassified Orthohantavirus|mvz180982,tier_2_species_isolate,0.95,unclassified Orthohantavirus,M,annotation,partial,1574,True,species_unclassified;missing_collection_date
-KT901300.1,t2|unclassified Orthohantavirus|mvz180983,tier_2_species_isolate,0.95,unclassified Orthohantavirus,M,annotation,partial,594,True,species_unclassified;missing_collection_date
-KT901301.1,t2|unclassified Orthohantavirus|mvz180986,tier_2_species_isolate,0.95,unclassified Orthohantavirus,S,annotation,partial,581,True,species_unclassified;missing_collection_date
-KT901302.1,t2|unclassified Orthohantavirus|mvz180986,tier_2_species_isolate,0.95,unclassified Orthohantavirus,M,annotation,partial,1574,True,species_unclassified;missing_collection_date
-KT901303.1,t2|unclassified Orthohantavirus|mvz181004,tier_2_species_isolate,0.95,unclassified Orthohantavirus,M,annotation,partial,1574,True,species_unclassified;missing_collection_date
-KT934956.1,t2|Orthohantavirus hantanense|aa03 161,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
-KT934957.1,t2|Orthohantavirus hantanense|aa03 386,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
-KT934958.1,t2|Orthohantavirus hantanense|aa03 387,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
-KT934959.1,t2|Orthohantavirus hantanense|aa05 190,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
-KT934960.1,t2|Orthohantavirus hantanense|aa05 241,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
-KT934961.1,t2|Orthohantavirus hantanense|aa05 249,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
-KT934962.1,t2|Orthohantavirus hantanense|aa05 331,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
-KT934963.1,t2|Orthohantavirus hantanense|aa05 771,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
-KT934964.1,t2|Orthohantavirus hantanense|aa05 775,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
-KT934965.1,t2|Orthohantavirus hantanense|aa09 652,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
-KT934966.1,t2|Orthohantavirus hantanense|aa09 948,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
 KT934967.1,t2|Orthohantavirus hantanense|aa09 1000,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
 KT934968.1,t2|Orthohantavirus hantanense|aa10 123,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
 KT934969.1,t2|Orthohantavirus hantanense|aa10 288,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
@@ -9999,43 +9962,43 @@ MW498180.1,t2|Orthohantavirus puumalaense|puuv kurkul mg 1459 2019,tier_2_specie
 MW498181.1,t2|Orthohantavirus puumalaense|puuv oktiabrino mg 1469 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
 MW498182.1,t2|Orthohantavirus puumalaense|puuv nizhnekamsk mg 1554 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
 MW498183.1,t2|Orthohantavirus puumalaense|puuv nizhnekamsk mg 1555 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
-AM980530.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo56 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,431,True,missing_collection_date
-AM980531.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo62 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,431,True,missing_collection_date
-AM980532.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm88 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,431,True,missing_collection_date
-AM980533.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm110 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,431,True,missing_collection_date
-AM980534.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm80 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,431,True,missing_collection_date
-AM980535.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm114 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,431,True,missing_collection_date
-AM980536.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm82 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
-AM980537.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo50 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
-AM980538.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm98 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
-AM980539.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm81 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
-AM980540.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo78 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
-AM980541.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm75 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
-AM980542.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo57 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
-AM980543.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm94 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
-AM980544.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm88 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
-AM980545.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm110 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
-AM980546.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo62 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
-AM980547.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo14 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
-AM980548.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo22 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
-AM980549.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm80 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
-AM980550.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo56 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
-AM980551.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo38 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
-AM980552.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm114 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
-AM998806.1,t2|Orthohantavirus thailandense|serang rt60 2000,tier_2_species_isolate,0.95,Orthohantavirus thailandense,L,explicit,partial,412,True,missing_collection_date;missing_location
-AM998807.1,t2|Orthohantavirus thailandense|serang rt60 2000,tier_2_species_isolate,0.95,Orthohantavirus thailandense,M,explicit,partial,343,True,missing_collection_date;missing_location
-AM998808.2,t2|Orthohantavirus thailandense|serang rt60 2000,tier_2_species_isolate,0.95,Orthohantavirus thailandense,S,explicit,partial,1567,True,missing_collection_date
-AY006465.1,t2|Orthohantavirus seoulense|pf26,tier_2_species_isolate,0.95,Orthohantavirus seoulense,S,explicit,partial,1776,True,missing_host;missing_collection_date
-AY017064.1,t2|Orthohantavirus hantanense|84fli,tier_2_species_isolate,0.95,Orthohantavirus hantanense,S,explicit,complete,1688,True,missing_host;missing_collection_date;missing_location
-AY101184.1,t2|Orthohantavirus andesense|and cent plata 1 97,tier_2_species_isolate,0.95,Orthohantavirus andesense,M,explicit,partial,226,True,missing_host;missing_collection_date
-AY101185.1,t2|Orthohantavirus andesense|and cent plata 1 99,tier_2_species_isolate,0.95,Orthohantavirus andesense,M,explicit,partial,226,True,missing_host;missing_collection_date
-AY101391.1,t2|Orthohantavirus puumalaense|france perpignan1999,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,S,explicit,partial,251,True,missing_collection_date;missing_location
-AY168576.1,t2|Orthohantavirus dobravaense|east slovakia 400af 98,tier_2_species_isolate,0.95,Orthohantavirus dobravaense,S,explicit,partial,1673,True,missing_collection_date;missing_location
-AY168577.1,t2|Orthohantavirus dobravaense|east slovakia 400af 98,tier_2_species_isolate,0.95,Orthohantavirus dobravaense,M,explicit,partial,3648,True,missing_collection_date;missing_location
-AY168578.1,t2|Orthohantavirus dobravaense|east slovakia 862aa 97,tier_2_species_isolate,0.95,Orthohantavirus dobravaense,M,explicit,partial,3643,True,missing_collection_date;missing_location
-AY197740.1,t2|Orthohantavirus puumalaense|fusong48,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,S,annotation,partial,903,True,missing_host;missing_collection_date;missing_location
-AY204677.1,t2|Orthohantavirus andesense|ce20,tier_2_species_isolate,0.95,Orthohantavirus andesense,M,explicit,partial,410,True,missing_collection_date
-AY204678.1,t2|Orthohantavirus andesense|ce22,tier_2_species_isolate,0.95,Orthohantavirus andesense,M,explicit,partial,356,True,missing_collection_date
+MW498184.1,t2|Orthohantavirus puumalaense|puuv kyzyl yulskoe lesnichestvo mg 1575 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
+MW498185.1,t2|Orthohantavirus puumalaense|puuv starye salmany mg 1586 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
+MW498186.1,t2|Orthohantavirus puumalaense|puuv starye salmany mg 1589 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
+MW498187.1,t2|Orthohantavirus puumalaense|puuv starye salmany mg 1590 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
+MW498188.1,t2|Orthohantavirus puumalaense|puuv verkhnee almurzino mg 1613 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
+MW498189.1,t2|Orthohantavirus puumalaense|puuv staryi dryush mg 1652 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
+MW498190.1,t2|Orthohantavirus puumalaense|puuv kutemeli mg 1992 2020,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
+MW498191.1,t2|Orthohantavirus puumalaense|puuv dzhalil mg 1998 2020,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
+MW498192.1,t2|Orthohantavirus puumalaense|puuv dzhalil mg 2001 2020,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
+MW498193.1,t2|Orthohantavirus puumalaense|puuv chistopolskie vyselki mg 2030 2020,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
+MW498194.1,t2|Orthohantavirus puumalaense|puuv chistopolskie vyselki mg 2031 2020,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
+MW498195.1,t2|Orthohantavirus puumalaense|puuv chistopolskie vyselki mg 2032 2020,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
+MW498196.1,t2|Orthohantavirus puumalaense|puuv galaktionovo mg 2037 2020,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
+MW498197.1,t2|Orthohantavirus puumalaense|puuv galaktionovo mg 2038 2020,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
+MW498198.1,t2|Orthohantavirus puumalaense|puuv galaktionovo mg 2039 2020,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,1014,True,
+MW498199.1,t2|Orthohantavirus puumalaense|puuv poruchikovo mg 074 2015,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498200.1,t2|Orthohantavirus puumalaense|puuv aksarino mg 108 2015,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498201.1,t2|Orthohantavirus puumalaense|puuv aksarino mg 109 2015,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498202.1,t2|Orthohantavirus puumalaense|puuv nizhnekamsk mg 134 2015,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498203.1,t2|Orthohantavirus puumalaense|puuv nizhnekamsk mg 139 2015,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498204.1,t2|Orthohantavirus puumalaense|puuv krasnyi klyuch mg 158 2015,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498205.1,t2|Orthohantavirus puumalaense|puuv naberezhnye chelny mg 260 2015,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498206.1,t2|Orthohantavirus puumalaense|puuv nizhnekamsk mg 415 2016,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498207.1,t2|Orthohantavirus puumalaense|puuv nizhnekamsk mg 420 2016,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498208.1,t2|Orthohantavirus puumalaense|puuv nizhnekamsk mg 436 2016,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498209.1,t2|Orthohantavirus puumalaense|puuv ilinka mg 998 2017,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498210.1,t2|Orthohantavirus puumalaense|puuv novyi mg 1089 2017,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498211.1,t2|Orthohantavirus puumalaense|puuv almetievsk mg 1182 2018,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498212.1,t2|Orthohantavirus puumalaense|puuv almetievsk mg 1183 2018,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498213.1,t2|Orthohantavirus puumalaense|puuv almetievsk mg 1185 2018,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498214.1,t2|Orthohantavirus puumalaense|puuv kamyshly mg 1196 2018,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498215.1,t2|Orthohantavirus puumalaense|puuv kamyshly mg 1199 2018,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498216.1,t2|Orthohantavirus puumalaense|puuv kamyshly mg 1200 2018,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498217.1,t2|Orthohantavirus puumalaense|puuv zai karatai mg 1206 2018,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498218.1,t2|Orthohantavirus puumalaense|puuv zai karatai mg 1207 2018,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498219.1,t2|Orthohantavirus puumalaense|puuv tatarskoe utiashkino mg 1419 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
+MW498220.1,t2|Orthohantavirus puumalaense|puuv kurkul mg 1459 2019,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,665,True,
 AY204679.1,t2|Orthohantavirus andesense|sa63,tier_2_species_isolate,0.95,Orthohantavirus andesense,M,explicit,partial,405,True,missing_collection_date
 AY204680.1,t2|Orthohantavirus andesense|u89,tier_2_species_isolate,0.95,Orthohantavirus andesense,M,explicit,partial,340,True,missing_collection_date
 AY217102.1,t2|Orthohantavirus puumalaense|fushun28,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,S,annotation,partial,903,True,missing_host;missing_collection_date;missing_location
@@ -14999,6 +14962,43 @@ KT893882.1,t2|Orthohantavirus hantanense|aa13 3,tier_2_species_isolate,0.95,Orth
 KT893883.1,t2|Orthohantavirus hantanense|aa13 20,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
 KT893884.1,t2|Orthohantavirus hantanense|aa13 26,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
 KT893885.1,t2|Orthohantavirus hantanense|aa13 31,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
+KT893886.1,t2|Orthohantavirus hantanense|aa14 172,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
+KT893887.1,t2|Orthohantavirus hantanense|aa14 184,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
+KT893888.1,t2|Orthohantavirus hantanense|aa14 190,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
+KT893889.1,t2|Orthohantavirus hantanense|aa14 266,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
+KT893890.1,t2|Orthohantavirus hantanense|aa14 272,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
+KT893891.1,t2|Orthohantavirus hantanense|aa14 362,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
+KT893892.1,t2|Orthohantavirus hantanense|aa14 368,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
+KT893893.1,t2|Orthohantavirus hantanense|aa14 386,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
+KT893894.1,t2|Orthohantavirus hantanense|aa14 404,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
+KT893895.1,t2|Orthohantavirus hantanense|aa14 423,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
+KT893896.1,t2|Orthohantavirus hantanense|aa14 437,tier_2_species_isolate,0.95,Orthohantavirus hantanense,M,annotation,partial,305,True,missing_host
+KT897724.1,t2|Orthohantavirus seoulense|northeast baltimore,tier_2_species_isolate,0.95,Orthohantavirus seoulense,L,explicit,partial,6402,True,missing_location
+KT897725.1,t2|Orthohantavirus seoulense|northeast baltimore,tier_2_species_isolate,0.95,Orthohantavirus seoulense,M,explicit,partial,3396,True,missing_location
+KT897726.1,t2|Orthohantavirus seoulense|northeast baltimore,tier_2_species_isolate,0.95,Orthohantavirus seoulense,S,explicit,partial,1633,True,missing_location
+KT899701.1,t2|Orthohantavirus fugongense|fg10,tier_2_species_isolate,0.95,Orthohantavirus fugongense,S,explicit,partial,1813,True,
+KT899702.1,t2|Orthohantavirus fugongense|fg10,tier_2_species_isolate,0.95,Orthohantavirus fugongense,M,explicit,complete,3630,True,
+KT899703.1,t2|Orthohantavirus fugongense|fg10,tier_2_species_isolate,0.95,Orthohantavirus fugongense,L,explicit,partial,6531,True,
+KT901295.1,t2|unclassified Orthohantavirus|mvz180979,tier_2_species_isolate,0.95,unclassified Orthohantavirus,S,annotation,partial,1311,True,species_unclassified;missing_collection_date
+KT901296.1,t2|unclassified Orthohantavirus|mvz180979,tier_2_species_isolate,0.95,unclassified Orthohantavirus,M,annotation,partial,594,True,species_unclassified;missing_collection_date
+KT901297.1,t2|unclassified Orthohantavirus|mvz180981,tier_2_species_isolate,0.95,unclassified Orthohantavirus,M,annotation,partial,1574,True,species_unclassified;missing_collection_date
+KT901298.1,t2|unclassified Orthohantavirus|mvz180982,tier_2_species_isolate,0.95,unclassified Orthohantavirus,S,annotation,complete,1802,True,species_unclassified;missing_collection_date
+KT901299.1,t2|unclassified Orthohantavirus|mvz180982,tier_2_species_isolate,0.95,unclassified Orthohantavirus,M,annotation,partial,1574,True,species_unclassified;missing_collection_date
+KT901300.1,t2|unclassified Orthohantavirus|mvz180983,tier_2_species_isolate,0.95,unclassified Orthohantavirus,M,annotation,partial,594,True,species_unclassified;missing_collection_date
+KT901301.1,t2|unclassified Orthohantavirus|mvz180986,tier_2_species_isolate,0.95,unclassified Orthohantavirus,S,annotation,partial,581,True,species_unclassified;missing_collection_date
+KT901302.1,t2|unclassified Orthohantavirus|mvz180986,tier_2_species_isolate,0.95,unclassified Orthohantavirus,M,annotation,partial,1574,True,species_unclassified;missing_collection_date
+KT901303.1,t2|unclassified Orthohantavirus|mvz181004,tier_2_species_isolate,0.95,unclassified Orthohantavirus,M,annotation,partial,1574,True,species_unclassified;missing_collection_date
+KT934956.1,t2|Orthohantavirus hantanense|aa03 161,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
+KT934957.1,t2|Orthohantavirus hantanense|aa03 386,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
+KT934958.1,t2|Orthohantavirus hantanense|aa03 387,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
+KT934959.1,t2|Orthohantavirus hantanense|aa05 190,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
+KT934960.1,t2|Orthohantavirus hantanense|aa05 241,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
+KT934961.1,t2|Orthohantavirus hantanense|aa05 249,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
+KT934962.1,t2|Orthohantavirus hantanense|aa05 331,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
+KT934963.1,t2|Orthohantavirus hantanense|aa05 771,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
+KT934964.1,t2|Orthohantavirus hantanense|aa05 775,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
+KT934965.1,t2|Orthohantavirus hantanense|aa09 652,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
+KT934966.1,t2|Orthohantavirus hantanense|aa09 948,tier_2_species_isolate,0.95,Orthohantavirus hantanense,L,explicit,complete,6530,True,missing_host
 AB010730.1,t2|Orthohantavirus puumalaense|kamiiso 8cr 95,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,S,explicit,partial,1833,True,missing_collection_date;missing_location
 AB010731.1,t2|Orthohantavirus puumalaense|tobetsu 60cr 93,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,S,explicit,partial,1833,True,missing_collection_date;missing_location
 AB010732.1,t2|Orthohantavirus puumalaense|kamiiso 6 cr 95,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,S,explicit,partial,196,True,missing_collection_date;missing_location
@@ -15990,3 +15990,40 @@ AM980526.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo78 2005,tier_2_speci
 AM980527.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm94 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,431,True,missing_collection_date
 AM980528.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo57 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,431,True,missing_collection_date
 AM980529.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm75 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,431,True,missing_collection_date
+AM980530.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo56 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,431,True,missing_collection_date
+AM980531.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo62 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,431,True,missing_collection_date
+AM980532.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm88 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,431,True,missing_collection_date
+AM980533.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm110 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,431,True,missing_collection_date
+AM980534.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm80 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,431,True,missing_collection_date
+AM980535.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm114 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,M,explicit,partial,431,True,missing_collection_date
+AM980536.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm82 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
+AM980537.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo50 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
+AM980538.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm98 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
+AM980539.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm81 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
+AM980540.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo78 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
+AM980541.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm75 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
+AM980542.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo57 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
+AM980543.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm94 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
+AM980544.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm88 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
+AM980545.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm110 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
+AM980546.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo62 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
+AM980547.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo14 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
+AM980548.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo22 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
+AM980549.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm80 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
+AM980550.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo56 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
+AM980551.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgo38 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
+AM980552.1,t2|Orthohantavirus puumalaense|puuv konnevesi mgm114 2005,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,L,explicit,partial,535,True,missing_collection_date
+AM998806.1,t2|Orthohantavirus thailandense|serang rt60 2000,tier_2_species_isolate,0.95,Orthohantavirus thailandense,L,explicit,partial,412,True,missing_collection_date;missing_location
+AM998807.1,t2|Orthohantavirus thailandense|serang rt60 2000,tier_2_species_isolate,0.95,Orthohantavirus thailandense,M,explicit,partial,343,True,missing_collection_date;missing_location
+AM998808.2,t2|Orthohantavirus thailandense|serang rt60 2000,tier_2_species_isolate,0.95,Orthohantavirus thailandense,S,explicit,partial,1567,True,missing_collection_date
+AY006465.1,t2|Orthohantavirus seoulense|pf26,tier_2_species_isolate,0.95,Orthohantavirus seoulense,S,explicit,partial,1776,True,missing_host;missing_collection_date
+AY017064.1,t2|Orthohantavirus hantanense|84fli,tier_2_species_isolate,0.95,Orthohantavirus hantanense,S,explicit,complete,1688,True,missing_host;missing_collection_date;missing_location
+AY101184.1,t2|Orthohantavirus andesense|and cent plata 1 97,tier_2_species_isolate,0.95,Orthohantavirus andesense,M,explicit,partial,226,True,missing_host;missing_collection_date
+AY101185.1,t2|Orthohantavirus andesense|and cent plata 1 99,tier_2_species_isolate,0.95,Orthohantavirus andesense,M,explicit,partial,226,True,missing_host;missing_collection_date
+AY101391.1,t2|Orthohantavirus puumalaense|france perpignan1999,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,S,explicit,partial,251,True,missing_collection_date;missing_location
+AY168576.1,t2|Orthohantavirus dobravaense|east slovakia 400af 98,tier_2_species_isolate,0.95,Orthohantavirus dobravaense,S,explicit,partial,1673,True,missing_collection_date;missing_location
+AY168577.1,t2|Orthohantavirus dobravaense|east slovakia 400af 98,tier_2_species_isolate,0.95,Orthohantavirus dobravaense,M,explicit,partial,3648,True,missing_collection_date;missing_location
+AY168578.1,t2|Orthohantavirus dobravaense|east slovakia 862aa 97,tier_2_species_isolate,0.95,Orthohantavirus dobravaense,M,explicit,partial,3643,True,missing_collection_date;missing_location
+AY197740.1,t2|Orthohantavirus puumalaense|fusong48,tier_2_species_isolate,0.95,Orthohantavirus puumalaense,S,annotation,partial,903,True,missing_host;missing_collection_date;missing_location
+AY204677.1,t2|Orthohantavirus andesense|ce20,tier_2_species_isolate,0.95,Orthohantavirus andesense,M,explicit,partial,410,True,missing_collection_date
+AY204678.1,t2|Orthohantavirus andesense|ce22,tier_2_species_isolate,0.95,Orthohantavirus andesense,M,explicit,partial,356,True,missing_collection_date

@@ -55,11 +55,11 @@ python3 all_hanta.py --input . --output output
 | `--verbose` | off | Debug logging |
 
 The transform is GIL-bound and runs serially. A full run takes about 16 seconds on the
-15,991-record package.
+16,028-record package.
 
-This step needs Python 3.11 or newer (it uses `datetime.UTC`) plus `pandas`, `pyarrow`, and
-`numpy`. It does not need alignment or phylogenetics packages — those load only if Stage 2 runs
-(see below).
+This step needs Python 3.11 or newer (it uses `datetime.UTC`) plus `pandas` and `numpy`. It does
+not need `pyarrow` — outputs are plain CSV, not Parquet — and it does not need alignment or
+phylogenetics packages, which load only if Stage 2 runs (see below).
 
 ## Pipeline stages
 
@@ -68,7 +68,7 @@ package exists. No stage requires another stage to have already run:
 
 | Stage | Script | Needs | Produces |
 |---|---|---|---|
-| 1 | `all_hanta.py` | `pandas`/`pyarrow`/`numpy` only | The core tables above, including `ortho_ml_sequence_table.csv` |
+| 1 | `all_hanta.py` | `pandas`/`numpy` only | The core tables above, including `ortho_ml_sequence_table.csv` |
 | 2 | `phylogeny.py` | `mafft`/`iqtree` on PATH, Biopython, `dendropy` | `ortho_reassortment_table.csv`, `phylogenetics/<species>/<segment>/`, `phylogenetics_phylogroup/<phylogroup>/<segment>/` |
 | 3 | `reassortment_detector.py` | `mafft`/`iqtree` on PATH, Biopython, `dendropy` | Score a new, not-yet-published candidate genome against the 5-gate framework |
 
@@ -162,7 +162,7 @@ record) for sequence identity and de-duplication. This hash does not depend on l
 platform, so it gives the same result everywhere, even on a checkout with mangled line endings.
 NCBI strips leading zeros from these values — this package's observed widths are 5 to 8
 characters — so the pipeline zero-pads them to 8 characters before any comparison. This package
-also has 3,393 exact resubmissions (12,598 distinct hashes over 15,991 records); without
+also has 3,394 exact resubmissions (12,634 distinct hashes over 16,028 records); without
 de-duplication these would inflate group sizes.
 
 The pipeline still uses `hashlib`, but only to hash its own outputs and configuration.
@@ -175,15 +175,15 @@ Runs are deterministic: two consecutive runs produce byte-identical table conten
 ## Taxonomy resolution
 
 The organism-level `virus.taxId` field is **not** usable as a species key. In this package it
-takes **553 distinct values**. Some of those values are strain-level taxa, not species (`Hantaan
+takes **545 distinct values**. Some of those values are strain-level taxa, not species (`Hantaan
 virus Lee` = 11601, `Four Corners hantavirus` = 31621). Some are legacy/current taxid pairs for
 the same species (`Puumala orthohantavirus` = 1980486 and `Orthohantavirus puumalaense` = 3052493
 name the same species under two different IDs).
 
 The `virus.lineage` field has a node immediately below genus *Orthohantavirus* (taxId 1980442).
 That node **is** the ICTV species [1]. Canonicalizing on this node's binomial name merges the
-legacy/current ID pairs. Doing this on the whole package collapses 553 organism values to **38
-species**, plus one `unclassified Orthohantavirus` bucket covering 2,339 records.
+legacy/current ID pairs. Doing this on the whole package collapses 545 organism values to **38
+species**, plus one `unclassified Orthohantavirus` bucket covering 2,342 records.
 
 The rest of `virus.lineage` supplies every higher taxonomic rank for free. This gives the full
 grouping hierarchy, which ends naturally at the top:
@@ -198,8 +198,8 @@ accordingly on these records. It never merges them silently into a named species
 
 ## Isolate grouping
 
-BioSample is present on only **87 of 15,991** records (0.54%). A BioSample-first grouping cascade
-would almost never fire. `isolate.name` is present on 15,491 records (96.9%). This is the field
+BioSample is present on only **99 of 16,028** records (0.62%). A BioSample-first grouping cascade
+would almost never fire. `isolate.name` is present on 15,525 records (96.9%). This is the field
 submitters actually use to tie one isolate's S, M, and L segments together.
 
 | Tier | Key | Confidence |
@@ -211,9 +211,9 @@ submitters actually use to tie one isolate's S, M, and L segments together.
 | 5 | species + strain + location | 0.65 |
 | — | accession only | 0.10 |
 
-On this package, this grouping produces **1,795 groups with all three of S, M, and L present**,
+On this package, this grouping produces **1,806 groups with all three of S, M, and L present**,
 and 223 groups where all three are coding-complete. The data sets the coding-complete count's
-ceiling — only 1,339 of 15,991 records are `COMPLETE` at all — the grouping logic does not.
+ceiling — only 1,339 of 16,028 records are `COMPLETE` at all — the grouping logic does not.
 
 ## Segment resolution
 
@@ -223,18 +223,21 @@ The `segment` field is dirtier than a simple three-value check assumes. Observed
 
 | `segment_source` | Basis | Confidence | Count |
 |---|---|---|---|
-| `explicit` | normalized `segment` field (`G1`/`G2` → M, `N` → S) | 1.00 | 12,431 |
-| `annotation` | CDS product-name majority vote | 0.90 | 3,117 |
+| `explicit` | normalized `segment` field (`G1`/`G2` → M, `N` → S) | 1.00 | 12,470 |
+| `annotation` | CDS product-name majority vote | 0.90 | 3,115 |
 | `defline` | genomic FASTA description | 0.75 | 104 |
 | `length_heuristic` | falls in exactly one ICTV size band | 0.40 | 129 |
 | `unresolved` | — | 0.00 | 210 |
 
-This evidence ordering drops the count of unresolved segments from 405 to 210.
+The `explicit` tier alone resolves every record that has a `segment` field at all (16,028 − 3,558
+with-no-field = 12,470, matching the row above exactly). The `annotation`, `defline`, and
+`length_heuristic` tiers exist entirely to recover records from that 3,558-record no-field group —
+and recover all but 210 of them.
 
 ## Completeness
 
 NCBI's structured `completeness` field is present on 100% of records and is authoritative
-(PARTIAL: 14,652; COMPLETE: 1,339). The pipeline uses sequence length only to qualify a COMPLETE
+(PARTIAL: 14,689; COMPLETE: 1,339). The pipeline uses sequence length only to qualify a COMPLETE
 call as coding-complete. It never uses length to override NCBI's own call. ICTV's published
 segment sizes are: S 1.2–2.1 kb, M 3.4–3.8 kb, L 6.5–6.6 kb [1]. The pipeline applies the S and M
 ranges as published. It widens the L range to 6.3–6.8 kb, because submitted L segments in this
@@ -251,8 +254,8 @@ The pipeline derives host role from the `host.lineage` rank. It does not use sub
 
 | Observed | Count | Role |
 |---|---|---|
-| Rodentia | 11,043 | `reservoir_rodent` |
-| *Homo sapiens* | 2,091 | `spillover_host_human` |
+| Rodentia | 11,053 | `reservoir_rodent` |
+| *Homo sapiens* | 2,109 | `spillover_host_human` |
 | Eulipotyphla | 1,035 | `reservoir_shrew_mole` |
 | Chiroptera | 83 | `reservoir_bat` |
 | `isLabHost` true | 338 | `laboratory_host` |
@@ -261,7 +264,7 @@ The pipeline derives host role from the `host.lineage` rank. It does not use sub
 them directly.
 
 **The ML matrix flags lab-derived isolates. It does not filter them out.** `isLabHost` marks the
-immediate recorded host, not sequence contamination. Of 338 lab-host records (164 isolates), 21
+immediate recorded host, not sequence contamination. Of 338 lab-host records (166 isolates), 21
 isolates have `host_taxid` 9606 (human) — these are lab-acquired or occupational human infections,
 concentrated in the highest-CFR species (HTNV, ANDV, PUUV, DOBV). Most of the rest are samples
 from colony-maintained reservoir animals, not culture-adapted sequences. Excluding all of them
@@ -309,10 +312,11 @@ the shrew-borne Imjin virus), but this is evidence of exposure, not of documente
 two are not the same claim, and this pipeline does not conflate them.
 
 **Curation audit.** Every run checks curated reservoirs against the modal observed host order in
-the package's own data. Six of the original 38 entries disagreed with the package's own host
-annotations at the order level (asikkalaense, fugongense, lankaense, luxiense, sagercreekense,
-tigrayense). The pipeline corrected these six against the data. The audit runs on every
-invocation, so this class of error cannot silently come back.
+the package's own data. An earlier audit found six of the 38 entries disagreed with the package's
+host annotations at the order level (asikkalaense, fugongense, lankaense, luxiense, sagercreekense,
+tigrayense); those six were corrected in `SPECIES_RISK` to match the data. The audit still runs on
+every invocation — on the current package it reports zero disagreements, confirming those six
+corrections still hold — so a regression of this kind cannot silently come back.
 
 ## Case fatality rate (CFR)
 
@@ -360,8 +364,8 @@ replacement.
 Reassortment frequency varies by species, not by genus. One survey across 553 orthohantavirus
 genomes and seven species found reassortment absent in ANDV, and frequent in DOBV, SNV, SEOV,
 PUUV, and TULV [5]. For PUUV specifically, an earlier set of Finnish studies reported reassortment
-frequencies from 19.1% to 32% [3]. Measured on this dataset, the withdrawn classifier produced the
-inverse ranking:
+frequencies from 19.1% to 32% [3]. The withdrawn classifier produced the inverse ranking, measured
+on an earlier snapshot of this package (15,991 records, before the most recent NCBI re-download):
 
 | Species | n | flagged | literature |
 |---|---|---|---|
@@ -370,6 +374,13 @@ inverse ranking:
 | DOBV | 62 | 38.7% | frequent [5] |
 | PUUV | 416 | 7.7% | frequent, 19.1–32% [3] [5] |
 | TULV | 313 | 3.5% | frequent [5] |
+
+These counts are a frozen record of the specific run that revealed the classifier's failure mode,
+not a live measurement — the classifier itself no longer exists in this codebase to re-run, and
+resurrecting withdrawn logic just to refresh an illustrative table isn't worth the risk of
+reintroducing it. The general point the table makes (the classifier's ranking is the *inverse* of
+the literature's) is a property of the metric, not of the specific record count, and is not
+expected to change on a fresh run.
 
 Sweeping the withdrawn classifier's discordance threshold from 0.25 to 0.85 scaled every rate
 down. It never changed the ordering. The cause is intrinsic to the metric: cosine distance on
@@ -392,7 +403,7 @@ within one species or region (sympatric), and rarely between distantly related s
 
 The one reassortment-adjacent signal in this pipeline that is trustworthy on its own is
 `taxonomic_incongruence`: one isolate label whose segments NCBI assigned to more than one species
-(70 isolates in this package). This is a metadata observation, not an inference, and it does feed
+(34 isolates in this package). This is a metadata observation, not an inference, and it does feed
 the risk score. The pipeline computes it across groups, never within a group — the grouping key
 already contains the species, so a within-group check could never fire.
 
@@ -473,15 +484,15 @@ alignment-free proxy — they are not PED values, and `ortho_summary.json` resta
 
 | File | Rows × Cols | Contents |
 |---|---|---|
-| `ortho_accession_table.csv` | 15,991 × 55 | One row per accession: taxonomy ranks, segment, completeness, host, pathogenicity, host-jump status, QC flags |
+| `ortho_accession_table.csv` | 16,028 × 55 | One row per accession: taxonomy ranks, segment, completeness, host, pathogenicity, host-jump status, QC flags |
 | `ortho_species_table.csv` | 39 × 32 | One row per canonical ICTV species: merged taxids, legacy synonyms, risk profile, segment and host counts |
-| `ortho_isolate_table.csv` | 9,852 × 52 | Reconstructed isolates with S/M/L representatives, triplet status, concatenated protein, divergence diagnostics |
+| `ortho_isolate_table.csv` | 9,867 × 52 | Reconstructed isolates with S/M/L representatives, triplet status, concatenated protein, divergence diagnostics |
 | `ortho_host_table.csv` | 253 × 13 | One row per host taxon with risk prior and virus species carried |
-| `ortho_risk_table.csv` | 9,852 × 33 | Pathogenicity class, CFR band, citation, and an auditable additive `surveillance_priority_score` |
-| `ortho_ml_feature_matrix.csv` | 7,651 × 236 | Raw features + labels, with `group_id` and `year` for leakage-free CV |
+| `ortho_risk_table.csv` | 9,867 × 33 | Pathogenicity class, CFR band, citation, and an auditable additive `surveillance_priority_score` |
+| `ortho_ml_feature_matrix.csv` | 7,662 × 236 | Raw features + labels, with `group_id` and `year` for leakage-free CV |
 | `ortho_ml_sequence_table.csv` | 206 × 6 | One row per isolate with a coding-complete S+M+L triplet (lab-derived and vaccine-strain isolates excluded): species name, isolate name, raw S/M/L genomic sequences, CFR range |
 | `ortho_suppressed.csv` | 1,032 × 16 | Non-representative accessions with the reason |
-| `ortho_qc_report.csv` | 15,991 × 11 | Per-accession QC including failed transforms with traceback |
+| `ortho_qc_report.csv` | 16,028 × 11 | Per-accession QC including failed transforms with traceback |
 | `ortho_feature_scaling.json` | — | Per-feature mean/std, to be fitted **inside** your CV fold |
 | `ortho_summary.json` | — | Provenance, integrity results, counts, methods and stated limitations |
 | `ortho_reassortment_table.csv` *(Stage 2, `phylogeny.py`)* | one row per candidate isolate | Real per-segment tree diagnostics, RF distances, bootstrap-gated `reassortment_call` — join on `isolate_key` with `ortho_risk_table.csv`, which is always phylo-blind |
@@ -571,18 +582,18 @@ An isolate is usable if it has a concatenated S+M protein and `is_vaccine_strain
 
 The function `build_ml_sequence_rows` builds this table. Row filter (all three conditions, at the isolate level): `has_complete_triplet` (coding-complete S **and** M **and** L); **and not** `is_lab_derived`; **and not** `is_vaccine_strain`. This filter is stricter than `ortho_ml_feature_matrix.csv`'s filter, which keeps `is_lab_derived` isolates and only flags them. A raw sequence fed to a model as "wild-type" input is exactly the case a passage history would mislead — unlike a k-mer composition feature, where that risk is smaller. The pipeline also silently drops an isolate if its genomic FASTA sequence is missing for a segment despite that segment being coding-complete (logged as a count, not per-row).
 
-**How 15,991 accessions become 206 rows**, on this package:
+**How 16,028 accessions become 206 rows**, on this package:
 
 | # | Step | Function | Count | What's removed and why |
 |---|---|---|---|---|
-| 1 | Raw accessions | `iter_jsonl(data_report)` | 15,991 | — (starting point) |
-| 2 | Reconstructed into isolates | `build_isolate_records` | 9,852 | Accessions sharing an isolate/strain/biosample label are grouped into one S/M/L isolate (see [Isolate grouping](#isolate-grouping)) — this is a many→fewer collapse, not a filter |
-| 3 | Isolates with a full-complete S+M+L triplet | `has_complete_triplet` | 223 | −9,629: missing one or more segments outright, or a present segment isn't NCBI-`complete` + length-qualified (see [Completeness](#completeness)) |
+| 1 | Raw accessions | `iter_jsonl(data_report)` | 16,028 | — (starting point) |
+| 2 | Reconstructed into isolates | `build_isolate_records` | 9,867 | Accessions sharing an isolate/strain/biosample label are grouped into one S/M/L isolate (see [Isolate grouping](#isolate-grouping)) — this is a many→fewer collapse, not a filter |
+| 3 | Isolates with a full-complete S+M+L triplet | `has_complete_triplet` | 223 | −9,644: missing one or more segments outright, or a present segment isn't NCBI-`complete` + length-qualified (see [Completeness](#completeness)) |
 | 4 | Minus laboratory-host isolates | `is_lab_derived` | 206 | −17: host recorded as a laboratory host on at least one segment (`isLabHost`) |
 | 5 | Minus vaccine-strain isolates | `is_vaccine_strain` | 206 | −0 in this package (none of the 223 complete triplets are vaccine strains) |
 | 6 | Minus missing genomic FASTA sequence | `genomic_index` lookup | **206** | −0 in this package (every remaining isolate's S/M/L genomic sequence was present in `genomic.fna`) |
 
-Step 3 removes almost all of the 15,991 starting accessions — not the lab/vaccine filter in steps 4–5, which only removes 17 isolates on top. Most reconstructed isolates simply never had all three segments sequenced at all (see [Isolate grouping](#isolate-grouping): only 1,795 of 9,852 isolates have all three segments present at *any* completeness, before the coding-complete requirement even applies). Host species (human vs. reservoir animal) is never a filter at any step — see the row counts by `host_role` in the table itself for the actual mix.
+Step 3 removes almost all of the 16,028 starting accessions — not the lab/vaccine filter in steps 4–5, which only removes 17 isolates on top. Most reconstructed isolates simply never had all three segments sequenced at all (see [Isolate grouping](#isolate-grouping): only 1,806 of 9,867 isolates have all three segments present at *any* completeness, before the coding-complete requirement even applies). Host species (human vs. reservoir animal) is never a filter at any step — see the row counts by `host_role` in the table itself for the actual mix.
 
 - `species_name` — the isolate's canonical ICTV species (`isolate.species_name`, see [Taxonomy resolution](#taxonomy-resolution)). Never blank — every isolate in this table already went through species resolution before grouping. This field is also what disambiguates `isolate_name`, below.
 - `isolate_name` — `isolate.isolate`, falling back to `isolate.strain`, falling back to `isolate_key` if both are blank. This is the **submitter-provided label, written exactly as submitted** — it can be a bare number like `"3"` or `"136"` when that is literally what was submitted to NCBI (`isolate.name`/`source` in `data_report.jsonl`). It is not unique across species — two different species can each have an isolate named `"3"` — it is only unique in combination with `species_name`.
@@ -666,8 +677,12 @@ data, because segments from the same outbreak are near-identical to each other.
 
 - **No reassortment calls by default.** See [Reassortment](#reassortment) above; run Stage 2 for
   the real MAFFT + IQ-TREE analysis. Even then, Stage 2 only covers the three named candidate
-  groups with full S+M+L CDS available (1,464 of 15,991 accessions' worth of isolates in this
-  package) — not every isolate. Species below `--phylo-min-taxa` are reported but not analyzed.
+  groups with full S+M+L CDS available — not every isolate — and species below
+  `--phylo-min-taxa` are reported but not analyzed. *(The exact candidate-universe size on the
+  current 16,028-record package hasn't been re-measured with a real Stage 2 run since the most
+  recent NCBI re-download; the prior package's figure was 1,464 of 15,991 accessions' worth of
+  isolates. Treat that ratio as indicative, not as this package's exact current count, until
+  Stage 2 is re-run.)*
 - **Stage 2's calls are a single ML tree search per segment, bootstrap-gated, not a formal
   incongruence test** (for example, no SH-test or AU-test on constrained topologies). A
   `supported_reassortment_candidate` call means the rank pattern and bootstrap support are
@@ -677,12 +692,12 @@ data, because segments from the same outbreak are near-identical to each other.
   a DEmARC-style concatenated-PED value — it targets the reassortment question, not species
   re-demarcation.
 - **223 coding-complete triplets is a ceiling set by the data** (1,339 COMPLETE records total),
-  not by the pipeline. 1,795 groups have all three segments present at some completeness level.
-- **2,386 records are `unclassified Orthohantavirus` or genus-only** and carry no species-level
+  not by the pipeline. 1,806 groups have all three segments present at some completeness level.
+- **2,389 records are `unclassified Orthohantavirus` or genus-only** and carry no species-level
   risk label. The pipeline retains them; it does not discard them.
 - **CFR bands are literature ranges, not values computed from this data.** Sources conflict; the
   pipeline records both values where they do.
-- **1,719 records have no host**, and 3,703 have no collection date.
+- **1,728 records have no host**, and 3,703 have no collection date.
 - Grouping tiers 4 and 5 rarely fire, because the `strain` field is only populated from BioSample.
 - The pipeline resolves only the first BioSample accession in a record.
 

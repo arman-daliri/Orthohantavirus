@@ -6,19 +6,19 @@ MW881025.1,46F703D6,Orthohantavirus hantanense,3052480,,partial,307,,HV-RH2-9,,2
 MZ673539.1,80080316,Orthohantavirus puumalaense,3052493,S,partial,250,,272,,2019-09-26,Ukraine,Mus musculus,10090,t2|Orthohantavirus puumalaense|272,lab_host
 MZ673543.1,0D170399,Orthohantavirus puumalaense,3052493,S,partial,290,,334,,2019-09-29,Ukraine,Myodes glareolus,447135,t2|Orthohantavirus puumalaense|334,not_best_representative_for_group
 MZ868557.1,81D70516,Orthohantavirus hantanense,3052480,M,partial,352,,GAHu79/2021,,2021-01-07,China,Homo sapiens,9606,t2|Orthohantavirus hantanense|gahu79 2021,duplicate_sequence_of:MZ089562.1
-OF364387.1,37E802DF,Orthohantavirus hantanense,1980471,,partial,222,,,,,,,,acc|OF364387.1,segment_unresolved
-OF364388.1,387E03DF,Orthohantavirus hantanense,1980471,,partial,297,,,,,,,,acc|OF364388.1,segment_unresolved
-OF456706.1,49BF0E4D,Orthohantavirus hantanense,1980471,,partial,1005,,,,,,,,acc|OF456706.1,segment_unresolved
-OF456708.1,99F3036F,Orthohantavirus seoulense,1980490,,partial,237,,,,,,,,acc|OF456708.1,segment_unresolved
-OF456709.1,99F3036F,Orthohantavirus seoulense,1980490,,partial,237,,,,,,,,acc|OF456709.1,segment_unresolved
-OF456711.1,A648035F,Orthohantavirus hantanense,1980471,,partial,237,,,,,,,,acc|OF456711.1,segment_unresolved
-OF456712.1,A648035F,Orthohantavirus hantanense,1980471,,partial,237,,,,,,,,acc|OF456712.1,segment_unresolved
-OF456713.1,A648035F,Orthohantavirus hantanense,1980471,,partial,237,,,,,,,,acc|OF456713.1,segment_unresolved
-OF456715.1,11DC00BB,Orthohantavirus seoulense,1980490,,partial,45,,,,,,,,acc|OF456715.1,segment_unresolved
-OF456716.1,11DC00BB,Orthohantavirus seoulense,1980490,,partial,45,,,,,,,,acc|OF456716.1,segment_unresolved
-OF456718.1,10CA00BE,Orthohantavirus hantanense,1980471,,partial,45,,,,,,,,acc|OF456718.1,segment_unresolved
-OF456719.1,10CA00BE,Orthohantavirus hantanense,1980471,,partial,45,,,,,,,,acc|OF456719.1,segment_unresolved
-OF456720.1,10CA00BE,Orthohantavirus hantanense,1980471,,partial,45,,,,,,,,acc|OF456720.1,segment_unresolved
+OF364387.1,37E802DF,Orthohantavirus hantanense,3052480,,partial,222,,,,,,,,acc|OF364387.1,segment_unresolved
+OF364388.1,387E03DF,Orthohantavirus hantanense,3052480,,partial,297,,,,,,,,acc|OF364388.1,segment_unresolved
+OF456706.1,49BF0E4D,Orthohantavirus hantanense,3052480,,partial,1005,,,,,,,,acc|OF456706.1,segment_unresolved
+OF456708.1,99F3036F,Orthohantavirus seoulense,3052498,,partial,237,,,,,,,,acc|OF456708.1,segment_unresolved
+OF456709.1,99F3036F,Orthohantavirus seoulense,3052498,,partial,237,,,,,,,,acc|OF456709.1,segment_unresolved
+OF456711.1,A648035F,Orthohantavirus hantanense,3052480,,partial,237,,,,,,,,acc|OF456711.1,segment_unresolved
+OF456712.1,A648035F,Orthohantavirus hantanense,3052480,,partial,237,,,,,,,,acc|OF456712.1,segment_unresolved
+OF456713.1,A648035F,Orthohantavirus hantanense,3052480,,partial,237,,,,,,,,acc|OF456713.1,segment_unresolved
+OF456715.1,11DC00BB,Orthohantavirus seoulense,3052498,,partial,45,,,,,,,,acc|OF456715.1,segment_unresolved
+OF456716.1,11DC00BB,Orthohantavirus seoulense,3052498,,partial,45,,,,,,,,acc|OF456716.1,segment_unresolved
+OF456718.1,10CA00BE,Orthohantavirus hantanense,3052480,,partial,45,,,,,,,,acc|OF456718.1,segment_unresolved
+OF456719.1,10CA00BE,Orthohantavirus hantanense,3052480,,partial,45,,,,,,,,acc|OF456719.1,segment_unresolved
+OF456720.1,10CA00BE,Orthohantavirus hantanense,3052480,,partial,45,,,,,,,,acc|OF456720.1,segment_unresolved
 OK317966.1,51D607CF,Orthohantavirus tulaense,3052503,S,partial,540,,MarDSt05,,2016,Germany,Microtus arvalis,47230,t2|Orthohantavirus tulaense|mardst05,not_best_representative_for_group
 OK356661.1,E67B07B6,Orthohantavirus tulaense,3052503,S,partial,528,,MarCzKa04,,2016,Czech Republic,Microtus arvalis,47230,t2|Orthohantavirus tulaense|marczka04,not_best_representative_for_group
 OK356664.1,2F1F07B5,Orthohantavirus tulaense,3052503,S,partial,540,,MarDPf01,,2016,Germany,Microtus arvalis,47230,t2|Orthohantavirus tulaense|mardpf01,not_best_representative_for_group
@@ -468,18 +468,6 @@ Z48572.1,A3580F57,Orthohantavirus tulaense,3052503,M,partial,977,,Tula/Moravia/5
 Z49098.1,1306181C,Orthohantavirus prospectense,3052492,S,partial,1675,,PH-1,,,,,,t2|Orthohantavirus prospectense|ph 1,duplicate_sequence_of:NC_038938.1
 Z49915.1,85AA1B13,Orthohantavirus tulaense,3052503,S,partial,1831,,Tula/Moravia/5302Ma/94,,,,,,t2|Orthohantavirus tulaense|tula moravia 5302ma 94,duplicate_sequence_of:NC_005227.2
 Z66548.1,F3306470,Orthohantavirus puumalaense,3052493,L,partial,6550,,Sotkamo,,,,,,t2|Orthohantavirus puumalaense|sotkamo,duplicate_sequence_of:NC_005225.1
-KT893886.1,BCBE0491,Orthohantavirus hantanense,3052480,M,partial,305,,Aa14-172,,2014-09-23,South Korea,,,t2|Orthohantavirus hantanense|aa14 172,duplicate_sequence_of:KT893888.1
-KT893887.1,BCBE0491,Orthohantavirus hantanense,3052480,M,partial,305,,Aa14-184,,2014-09-23,South Korea,,,t2|Orthohantavirus hantanense|aa14 184,duplicate_sequence_of:KT893888.1
-KT893889.1,C135049A,Orthohantavirus hantanense,3052480,M,partial,305,,Aa14-266,,2014-11-04,South Korea,,,t2|Orthohantavirus hantanense|aa14 266,missing_host
-KT893890.1,BCA30494,Orthohantavirus hantanense,3052480,M,partial,305,,Aa14-272,,2014-11-04,South Korea,,,t2|Orthohantavirus hantanense|aa14 272,missing_host
-KT893891.1,B7E1048B,Orthohantavirus hantanense,3052480,M,partial,305,,Aa14-362,,2014-11-14,South Korea,,,t2|Orthohantavirus hantanense|aa14 362,missing_host
-KT893892.1,B7E1048B,Orthohantavirus hantanense,3052480,M,partial,305,,Aa14-368,,2014-11-14,South Korea,,,t2|Orthohantavirus hantanense|aa14 368,missing_host
-KT893893.1,B7E1048B,Orthohantavirus hantanense,3052480,M,partial,305,,Aa14-386,,2014-11-14,South Korea,,,t2|Orthohantavirus hantanense|aa14 386,missing_host
-KT893894.1,BF040493,Orthohantavirus hantanense,3052480,M,partial,305,,Aa14-404,,2014-11-21,South Korea,,,t2|Orthohantavirus hantanense|aa14 404,duplicate_sequence_of:KT893896.1
-KT893895.1,B8F8048A,Orthohantavirus hantanense,3052480,M,partial,305,,Aa14-423,,2014-11-21,South Korea,,,t2|Orthohantavirus hantanense|aa14 423,missing_host
-KT899701.1,0B6C1B83,Orthohantavirus fugongense,3052478,S,partial,1813,,FG10,,2012-08,China,Eothenomys eleusis,259053,t2|Orthohantavirus fugongense|fg10,duplicate_sequence_of:NC_034473.1
-KT899702.1,CD7F3862,Orthohantavirus fugongense,3052478,M,complete,3630,,FG10,,2012-08,China,Eothenomys eleusis,259053,t2|Orthohantavirus fugongense|fg10,duplicate_sequence_of:NC_034466.1
-KT899703.1,541A6474,Orthohantavirus fugongense,3052478,L,partial,6531,,FG10,,2012-08,China,Eothenomys eleusis,259053,t2|Orthohantavirus fugongense|fg10,duplicate_sequence_of:NC_034467.1
 KT935012.1,868936A0,Orthohantavirus hantanense,3052480,M,partial,3616,,Aa14-207,,2014-09-24,South Korea,,,t2|Orthohantavirus hantanense|aa14 207,duplicate_sequence_of:KT935011.1
 KT935046.1,EDA518F1,Orthohantavirus hantanense,3052480,S,partial,1695,,Aa14-207,,2014-09-24,South Korea,,,t2|Orthohantavirus hantanense|aa14 207,duplicate_sequence_of:KT935045.1
 KT983773.1,5B266531,Orthohantavirus chocloense,3052474,L,complete,6562,,588,,2000-03-06,Panama,Oligoryzomys fulvescens,218825,t2|Orthohantavirus chocloense|588,not_best_representative_for_group
@@ -595,17 +583,17 @@ MN639754.1,CAB51B7F,Orthohantavirus puumalaense,3052493,S,complete,1840,,Osnabru
 MN832782.1,2E6D6470,Orthohantavirus puumalaense,3052493,L,complete,6550,,Sotkamo,,,Germany,,,t2|Orthohantavirus puumalaense|sotkamo,missing_host;missing_collection_date
 MN832783.1,52563924,Orthohantavirus puumalaense,3052493,M,complete,3682,,Sotkamo,,,Germany,,,t2|Orthohantavirus puumalaense|sotkamo,missing_host;missing_collection_date
 MN832784.1,06421AA7,Orthohantavirus puumalaense,3052493,S,complete,1830,,Sotkamo,,,Germany,,,t2|Orthohantavirus puumalaense|sotkamo,missing_host;missing_collection_date
-MP898114.1,49BF0E4D,Orthohantavirus hantanense,1980471,,partial,1005,,,,,,,,acc|MP898114.1,segment_unresolved
-MP898121.1,99F3036F,Orthohantavirus seoulense,1980490,,partial,237,,,,,,,,acc|MP898121.1,segment_unresolved
-MP898122.1,99F3036F,Orthohantavirus seoulense,1980490,,partial,237,,,,,,,,acc|MP898122.1,segment_unresolved
-MP898124.1,A648035F,Orthohantavirus hantanense,1980471,,partial,237,,,,,,,,acc|MP898124.1,segment_unresolved
-MP898125.1,A648035F,Orthohantavirus hantanense,1980471,,partial,237,,,,,,,,acc|MP898125.1,segment_unresolved
-MP898126.1,A648035F,Orthohantavirus hantanense,1980471,,partial,237,,,,,,,,acc|MP898126.1,segment_unresolved
-MP898128.1,11DC00BB,Orthohantavirus seoulense,1980490,,partial,45,,,,,,,,acc|MP898128.1,segment_unresolved
-MP898129.1,11DC00BB,Orthohantavirus seoulense,1980490,,partial,45,,,,,,,,acc|MP898129.1,segment_unresolved
-MP898131.1,10CA00BE,Orthohantavirus hantanense,1980471,,partial,45,,,,,,,,acc|MP898131.1,segment_unresolved
-MP898132.1,10CA00BE,Orthohantavirus hantanense,1980471,,partial,45,,,,,,,,acc|MP898132.1,segment_unresolved
-MP898133.1,10CA00BE,Orthohantavirus hantanense,1980471,,partial,45,,,,,,,,acc|MP898133.1,segment_unresolved
+MP898114.1,49BF0E4D,Orthohantavirus hantanense,3052480,,partial,1005,,,,,,,,acc|MP898114.1,segment_unresolved
+MP898121.1,99F3036F,Orthohantavirus seoulense,3052498,,partial,237,,,,,,,,acc|MP898121.1,segment_unresolved
+MP898122.1,99F3036F,Orthohantavirus seoulense,3052498,,partial,237,,,,,,,,acc|MP898122.1,segment_unresolved
+MP898124.1,A648035F,Orthohantavirus hantanense,3052480,,partial,237,,,,,,,,acc|MP898124.1,segment_unresolved
+MP898125.1,A648035F,Orthohantavirus hantanense,3052480,,partial,237,,,,,,,,acc|MP898125.1,segment_unresolved
+MP898126.1,A648035F,Orthohantavirus hantanense,3052480,,partial,237,,,,,,,,acc|MP898126.1,segment_unresolved
+MP898128.1,11DC00BB,Orthohantavirus seoulense,3052498,,partial,45,,,,,,,,acc|MP898128.1,segment_unresolved
+MP898129.1,11DC00BB,Orthohantavirus seoulense,3052498,,partial,45,,,,,,,,acc|MP898129.1,segment_unresolved
+MP898131.1,10CA00BE,Orthohantavirus hantanense,3052480,,partial,45,,,,,,,,acc|MP898131.1,segment_unresolved
+MP898132.1,10CA00BE,Orthohantavirus hantanense,3052480,,partial,45,,,,,,,,acc|MP898132.1,segment_unresolved
+MP898133.1,10CA00BE,Orthohantavirus hantanense,3052480,,partial,45,,,,,,,,acc|MP898133.1,segment_unresolved
 MT123530.1,4EA506C2,Orthohantavirus seoulense,3052498,L,partial,411,,KS19_1354,,2019,Germany: Nordhorn,Rattus norvegicus,10116,t2|Orthohantavirus seoulense|ks19 1354,duplicate_sequence_of:OR047286.1
 MT123532.1,1BF30984,Orthohantavirus seoulense,3052498,S,partial,673,,KS19_1354,,2019,Germany: Nordhorn,Rattus norvegicus,10116,t2|Orthohantavirus seoulense|ks19 1354,not_best_representative_for_group
 MT125104.1,D93D05D1,Orthohantavirus seoulense,3052498,L,partial,352,,PREDICT_KHAR8042,,2018-06-27,Cambodia,Rattus argentiventer,83752,t2|Orthohantavirus seoulense|predict khar8042,not_best_representative_for_group
@@ -658,17 +646,17 @@ AY748309.1,A2C51892,Orthohantavirus hantanense,3052480,S,partial,1701,,Vero E6 C
 AY953444.1,DA5506D4,Orthohantavirus delgaditoense,3052476,M,partial,439,,Cano Delgadito,,,Venezuela,Sigmodon alstoni,134742,t2|Orthohantavirus delgaditoense|cano delgadito,lab_host;missing_collection_date
 AY953445.1,0BC806FD,Orthohantavirus mamorense,3431295,M,partial,439,,Rio Mamore,,,Bolivia,Oligoryzomys microtis,48008,t2|Orthohantavirus mamorense|rio mamore,lab_host;missing_collection_date
 AY961617.1,0720077E,Orthohantavirus dobravaense,3052477,L,partial,541,,SK/Aa,,,Slovakia,Apodemus agrarius,39030,t2|Orthohantavirus dobravaense|sk aa,lab_host;missing_collection_date
-DI075051.1,B70B048F,Orthohantavirus hantanense,1980471,,partial,314,,,,,,,,acc|DI075051.1,segment_unresolved
-DI161485.1,C31B038A,Orthohantavirus hantanense,1980471,,partial,249,,,,,,,,acc|DI161485.1,segment_unresolved
+DI075051.1,B70B048F,Orthohantavirus hantanense,3052480,,partial,314,,,,,,,,acc|DI075051.1,segment_unresolved
+DI161485.1,C31B038A,Orthohantavirus hantanense,3052480,,partial,249,,,,,,,,acc|DI161485.1,segment_unresolved
 DI162424.1,EEE603B2,Orthohantavirus andesense,1980456,,partial,258,,,,,,,,acc|DI162424.1,segment_unresolved
-DI162650.1,EEA203B9,Orthohantavirus puumalaense,1980486,,partial,258,,,,,,,,acc|DI162650.1,segment_unresolved
-DI162933.1,876B0343,Orthohantavirus seoulense,1980490,,partial,249,,,,,,,,acc|DI162933.1,segment_unresolved
-DI164119.1,AD6A035A,Orthohantavirus dobravaense,1980467,,partial,249,,,,,,,,acc|DI164119.1,segment_unresolved
-DL139692.1,C31B038A,Orthohantavirus hantanense,1980471,,partial,249,,,,,,,,acc|DL139692.1,segment_unresolved
-DL139693.1,EEA203B9,Orthohantavirus puumalaense,1980486,,partial,258,,,,,,,,acc|DL139693.1,segment_unresolved
-DL139694.1,876B0343,Orthohantavirus seoulense,1980490,,partial,249,,,,,,,,acc|DL139694.1,segment_unresolved
-DL139695.1,AD6A035A,Orthohantavirus dobravaense,1980467,,partial,249,,,,,,,,acc|DL139695.1,segment_unresolved
-DL139696.1,F7D703A7,Orthohantavirus sinnombreense,1980491,,partial,258,,,,,,,,acc|DL139696.1,segment_unresolved
+DI162650.1,EEA203B9,Orthohantavirus puumalaense,3052493,,partial,258,,,,,,,,acc|DI162650.1,segment_unresolved
+DI162933.1,876B0343,Orthohantavirus seoulense,3052498,,partial,249,,,,,,,,acc|DI162933.1,segment_unresolved
+DI164119.1,AD6A035A,Orthohantavirus dobravaense,3052477,,partial,249,,,,,,,,acc|DI164119.1,segment_unresolved
+DL139692.1,C31B038A,Orthohantavirus hantanense,3052480,,partial,249,,,,,,,,acc|DL139692.1,segment_unresolved
+DL139693.1,EEA203B9,Orthohantavirus puumalaense,3052493,,partial,258,,,,,,,,acc|DL139693.1,segment_unresolved
+DL139694.1,876B0343,Orthohantavirus seoulense,3052498,,partial,249,,,,,,,,acc|DL139694.1,segment_unresolved
+DL139695.1,AD6A035A,Orthohantavirus dobravaense,3052477,,partial,249,,,,,,,,acc|DL139695.1,segment_unresolved
+DL139696.1,F7D703A7,Orthohantavirus sinnombreense,3052499,,partial,258,,,,,,,,acc|DL139696.1,segment_unresolved
 DL139697.1,EEE603B2,Orthohantavirus andesense,1980456,,partial,258,,,,,,,,acc|DL139697.1,segment_unresolved
 DQ268650.1,57F80C56,Orthohantavirus sangassouense,3052496,S,partial,837,,SA14,,,Guinea,Hylomyscus simus,337584,t2|Orthohantavirus sangassouense|sa14,missing_collection_date
 DQ268651.1,D8000AAE,Orthohantavirus sangassouense,3052496,M,partial,694,,SA14,,,Guinea,Hylomyscus simus,337584,t2|Orthohantavirus sangassouense|sa14,missing_collection_date
@@ -753,16 +741,16 @@ GN350394.1,198200E8,Orthohantavirus andesense,1980456,,partial,60,,,,,,,,acc|GN3
 GN350395.1,1BB300F1,Orthohantavirus andesense,1980456,,partial,60,,,,,,,,acc|GN350395.1,segment_unresolved
 GN350396.1,1F3C0102,Orthohantavirus andesense,1980456,,partial,60,,,,,,,,acc|GN350396.1,segment_unresolved
 GN350397.1,1AFF00E0,Orthohantavirus andesense,1980456,,partial,60,,,,,,,,acc|GN350397.1,segment_unresolved
-GN351761.1,17EF00D6,Orthohantavirus hantanense,1980471,,partial,60,,,,,,,,acc|GN351761.1,segment_unresolved
-GN351762.1,1C8A00F4,Orthohantavirus hantanense,1980471,,partial,60,,,,,,,,acc|GN351762.1,segment_unresolved
-GN351763.1,206F0101,Orthohantavirus hantanense,1980471,,partial,60,,,,,,,,acc|GN351763.1,segment_unresolved
-GN351764.1,19F300D5,Orthohantavirus hantanense,1980471,,partial,60,,,,,,,,acc|GN351764.1,segment_unresolved
-GN351765.1,1B2C00F0,Orthohantavirus hantanense,1980471,,partial,60,,,,,,,,acc|GN351765.1,segment_unresolved
-GN351766.1,1C5300F2,Orthohantavirus hantanense,1980471,,partial,60,,,,,,,,acc|GN351766.1,segment_unresolved
-GN351767.1,1A7A00F1,Orthohantavirus hantanense,1980471,,partial,60,,,,,,,,acc|GN351767.1,segment_unresolved
-GN351768.1,19CF00EB,Orthohantavirus hantanense,1980471,,partial,60,,,,,,,,acc|GN351768.1,segment_unresolved
-GN351769.1,1DBB00EE,Orthohantavirus hantanense,1980471,,partial,60,,,,,,,,acc|GN351769.1,segment_unresolved
-GN351770.1,1E4500EE,Orthohantavirus hantanense,1980471,,partial,60,,,,,,,,acc|GN351770.1,segment_unresolved
+GN351761.1,17EF00D6,Orthohantavirus hantanense,3052480,,partial,60,,,,,,,,acc|GN351761.1,segment_unresolved
+GN351762.1,1C8A00F4,Orthohantavirus hantanense,3052480,,partial,60,,,,,,,,acc|GN351762.1,segment_unresolved
+GN351763.1,206F0101,Orthohantavirus hantanense,3052480,,partial,60,,,,,,,,acc|GN351763.1,segment_unresolved
+GN351764.1,19F300D5,Orthohantavirus hantanense,3052480,,partial,60,,,,,,,,acc|GN351764.1,segment_unresolved
+GN351765.1,1B2C00F0,Orthohantavirus hantanense,3052480,,partial,60,,,,,,,,acc|GN351765.1,segment_unresolved
+GN351766.1,1C5300F2,Orthohantavirus hantanense,3052480,,partial,60,,,,,,,,acc|GN351766.1,segment_unresolved
+GN351767.1,1A7A00F1,Orthohantavirus hantanense,3052480,,partial,60,,,,,,,,acc|GN351767.1,segment_unresolved
+GN351768.1,19CF00EB,Orthohantavirus hantanense,3052480,,partial,60,,,,,,,,acc|GN351768.1,segment_unresolved
+GN351769.1,1DBB00EE,Orthohantavirus hantanense,3052480,,partial,60,,,,,,,,acc|GN351769.1,segment_unresolved
+GN351770.1,1E4500EE,Orthohantavirus hantanense,3052480,,partial,60,,,,,,,,acc|GN351770.1,segment_unresolved
 GN351771.1,1AC000F5,Orthohantavirus hantanense,3052480,,partial,60,,,,,,,,acc|GN351771.1,segment_unresolved
 GN351772.1,15CA00D2,Orthohantavirus hantanense,3052480,,partial,60,,,,,,,,acc|GN351772.1,segment_unresolved
 GN351773.1,1D5F00ED,Orthohantavirus hantanense,3052480,,partial,60,,,,,,,,acc|GN351773.1,segment_unresolved
@@ -787,11 +775,11 @@ HQ655987.1,B27F0788,Orthohantavirus hantanense,3052480,S,partial,527,,HV004,,200
 HQ834695.1,9D3919C3,Orthohantavirus jejuense,3052481,S,partial,1754,,10-11,,2010-04-29,South Korea,Crocidura shantungensis,183721,t2|Orthohantavirus jejuense|10 11,duplicate_sequence_of:NC_034398.1
 HQ834696.1,F97E36B3,Orthohantavirus jejuense,3052481,M,partial,3570,,10-11,,2010-04-29,South Korea,Crocidura shantungensis,183721,t2|Orthohantavirus jejuense|10 11,duplicate_sequence_of:NC_034404.1
 HQ834697.1,65C663EC,Orthohantavirus jejuense,3052481,L,partial,6588,,10-11,,2010-04-29,South Korea,Crocidura shantungensis,183721,t2|Orthohantavirus jejuense|10 11,duplicate_sequence_of:NC_034399.1
-HV984409.1,C31B038A,Orthohantavirus hantanense,1980471,,partial,249,,,,,,,,acc|HV984409.1,segment_unresolved
-HV984410.1,EEA203B9,Orthohantavirus puumalaense,1980486,,partial,258,,,,,,,,acc|HV984410.1,segment_unresolved
-HV984411.1,876B0343,Orthohantavirus seoulense,1980490,,partial,249,,,,,,,,acc|HV984411.1,segment_unresolved
-HV984412.1,AD6A035A,Orthohantavirus dobravaense,1980467,,partial,249,,,,,,,,acc|HV984412.1,segment_unresolved
-HV984413.1,F7D703A7,Orthohantavirus sinnombreense,1980491,,partial,258,,,,,,,,acc|HV984413.1,segment_unresolved
+HV984409.1,C31B038A,Orthohantavirus hantanense,3052480,,partial,249,,,,,,,,acc|HV984409.1,segment_unresolved
+HV984410.1,EEA203B9,Orthohantavirus puumalaense,3052493,,partial,258,,,,,,,,acc|HV984410.1,segment_unresolved
+HV984411.1,876B0343,Orthohantavirus seoulense,3052498,,partial,249,,,,,,,,acc|HV984411.1,segment_unresolved
+HV984412.1,AD6A035A,Orthohantavirus dobravaense,3052477,,partial,249,,,,,,,,acc|HV984412.1,segment_unresolved
+HV984413.1,F7D703A7,Orthohantavirus sinnombreense,3052499,,partial,258,,,,,,,,acc|HV984413.1,segment_unresolved
 HV984414.1,EEE603B2,Orthohantavirus andesense,1980456,,partial,258,,,,,,,,acc|HV984414.1,segment_unresolved
 JF796022.1,F3DA18F6,Orthohantavirus dabieshanense,3052475,S,partial,1725,,Yongjia-Nc-58,,2008,China,Niviventer confucianus,248811,t2|Orthohantavirus dabieshanense|yongjia nc 58,duplicate_sequence_of:NC_038384.1
 JF796036.1,5AAF36E6,Orthohantavirus dabieshanense,3052475,M,partial,3623,,Yongjia-Nc-58,,2008,China,Niviventer confucianus,248811,t2|Orthohantavirus dabieshanense|yongjia nc 58,duplicate_sequence_of:NC_038383.1
@@ -898,6 +886,18 @@ KT719367.1,BB900E07,unclassified Orthohantavirus,1986491,S,partial,1005,,E90,,20
 KT719370.1,C5690E23,unclassified Orthohantavirus,1986491,S,partial,1005,,E99,,2007-04,"France: Mayotte Island, Indian Ocean",Rattus rattus,10117,t2|unclassified Orthohantavirus|e99,duplicate_sequence_of:KT719369.1
 KT779092.1,01DC0ED3,unclassified Orthohantavirus,1986491,M,partial,974,,MAYOV,,2007-04,"France: Mayotte island, Indian Ocean",Rattus rattus,10117,t2|unclassified Orthohantavirus|mayov,species_unclassified
 KT893882.1,AEA2047F,Orthohantavirus hantanense,3052480,M,partial,305,,Aa13-3,,2013-09-12,South Korea,,,t2|Orthohantavirus hantanense|aa13 3,duplicate_sequence_of:KT893875.1
+KT893886.1,BCBE0491,Orthohantavirus hantanense,3052480,M,partial,305,,Aa14-172,,2014-09-23,South Korea,,,t2|Orthohantavirus hantanense|aa14 172,duplicate_sequence_of:KT893880.1
+KT893887.1,BCBE0491,Orthohantavirus hantanense,3052480,M,partial,305,,Aa14-184,,2014-09-23,South Korea,,,t2|Orthohantavirus hantanense|aa14 184,duplicate_sequence_of:KT893880.1
+KT893889.1,C135049A,Orthohantavirus hantanense,3052480,M,partial,305,,Aa14-266,,2014-11-04,South Korea,,,t2|Orthohantavirus hantanense|aa14 266,missing_host
+KT893890.1,BCA30494,Orthohantavirus hantanense,3052480,M,partial,305,,Aa14-272,,2014-11-04,South Korea,,,t2|Orthohantavirus hantanense|aa14 272,missing_host
+KT893891.1,B7E1048B,Orthohantavirus hantanense,3052480,M,partial,305,,Aa14-362,,2014-11-14,South Korea,,,t2|Orthohantavirus hantanense|aa14 362,missing_host
+KT893892.1,B7E1048B,Orthohantavirus hantanense,3052480,M,partial,305,,Aa14-368,,2014-11-14,South Korea,,,t2|Orthohantavirus hantanense|aa14 368,missing_host
+KT893893.1,B7E1048B,Orthohantavirus hantanense,3052480,M,partial,305,,Aa14-386,,2014-11-14,South Korea,,,t2|Orthohantavirus hantanense|aa14 386,missing_host
+KT893894.1,BF040493,Orthohantavirus hantanense,3052480,M,partial,305,,Aa14-404,,2014-11-21,South Korea,,,t2|Orthohantavirus hantanense|aa14 404,duplicate_sequence_of:KT893896.1
+KT893895.1,B8F8048A,Orthohantavirus hantanense,3052480,M,partial,305,,Aa14-423,,2014-11-21,South Korea,,,t2|Orthohantavirus hantanense|aa14 423,missing_host
+KT899701.1,0B6C1B83,Orthohantavirus fugongense,3052478,S,partial,1813,,FG10,,2012-08,China,Eothenomys eleusis,259053,t2|Orthohantavirus fugongense|fg10,duplicate_sequence_of:NC_034473.1
+KT899702.1,CD7F3862,Orthohantavirus fugongense,3052478,M,complete,3630,,FG10,,2012-08,China,Eothenomys eleusis,259053,t2|Orthohantavirus fugongense|fg10,duplicate_sequence_of:NC_034466.1
+KT899703.1,541A6474,Orthohantavirus fugongense,3052478,L,partial,6531,,FG10,,2012-08,China,Eothenomys eleusis,259053,t2|Orthohantavirus fugongense|fg10,duplicate_sequence_of:NC_034467.1
 AB027055.1,9CC30479,Orthohantavirus hantanense,3052480,M,partial,300,,Chinese isolates,,,,,,t2|Orthohantavirus hantanense|chinese isolates,missing_host;missing_collection_date;missing_location
 AB027056.1,9CC30479,Orthohantavirus hantanense,3052480,M,partial,300,,Chinese isolates,,,,,,t2|Orthohantavirus hantanense|chinese isolates,missing_host;missing_collection_date;missing_location
 AB027057.1,97D10466,Orthohantavirus hantanense,3052480,M,partial,300,,Chinese isolates,,,,,,t2|Orthohantavirus hantanense|chinese isolates,missing_host;missing_collection_date;missing_location
