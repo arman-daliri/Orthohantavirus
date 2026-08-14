@@ -401,23 +401,28 @@ def _cached_reference_kmer_profile(protein: str) -> Dict[str, int]:
 
 def _kmer_identity_to_reference(protein: str, reference_profiles: List[Tuple[str, str]]) -> float:
     """1 - minimum cosine distance from `protein` to any reference isolate's protein for
-    this segment. Computes only the candidate's own row (not a full NxN pairwise
-    matrix), since only one comparison target (the candidate) is ever needed here.
+    this segment. Vectorized like nearest_species_by_kmer: one candidate-vs-all matrix,
+    one batch of dot products, instead of a fresh 2-row profiles_to_matrix +
+    cosine_distance_matrix call per reference isolate. The per-isolate loop this
+    replaced paid that full pairwise-matrix cost once per reference isolate (thousands
+    per segment), measured at several minutes per candidate against the real reference
+    set -- this pays it once, using the same _cached_reference_kmer_profile memoization
+    the loop already relied on.
     """
     if not protein or not reference_profiles:
         return 0.0
     candidate_profile = ah.kmer_profile(protein)
     if not candidate_profile:
         return 0.0
-    best_identity = 0.0
-    for _species, ref_protein in reference_profiles:
-        ref_profile = _cached_reference_kmer_profile(ref_protein)
-        matrix, _vocab = ah.profiles_to_matrix([candidate_profile, ref_profile])
-        distance = ah.cosine_distance_matrix(matrix)[0, 1]
-        identity = 1.0 - float(distance)
-        if identity > best_identity:
-            best_identity = identity
-    return best_identity
+    profiles = [candidate_profile] + [
+        _cached_reference_kmer_profile(ref_protein) for _species, ref_protein in reference_profiles]
+    matrix, _vocab = ah.profiles_to_matrix(profiles)
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    unit = matrix / norms
+    similarity = np.clip(unit[0] @ unit[1:].T, -1.0, 1.0)
+    distances = 1.0 - similarity
+    return float(max(0.0, 1.0 - distances.min()))
 
 
 def gate0_check(
