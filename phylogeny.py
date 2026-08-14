@@ -390,8 +390,9 @@ def group_candidates(
     for key, members in grouped.items():
         if len(members) < min_taxa:
             # Species-scope message text is unchanged from the pre-scope version (no
-            # "species:" prefix) so a species-only run's log output, and therefore
-            # ortho_pipeline.log, stays byte-identical to before this function existed.
+            # "species:" prefix) so a species-only run's log output stays byte-identical
+            # to before this function existed (this stage's own log, ortho_phylogeny.log,
+            # not all_hanta.py's ortho_pipeline.log -- they're separate files).
             label = key if scope == "species" else f"phylogroup {key}"
             exclusions[f"{label}: only {len(members)} candidate(s), need {min_taxa}"] += 1
             continue

@@ -93,11 +93,16 @@ python3 phylogeny.py --input . --output output
 | `--min-bootstrap-support` | `95.0` | Minimum ufboot support to call a topology conflict *supported* |
 | `--phylo-seed` | `42` | Fixed IQ-TREE random seed, for reproducible trees |
 | `--phylo-threads` | cores − 1 | Threads for `mafft` and `iqtree` |
+| `--phylo-scope` | `both` | `species`, `phylogroup`, or `both` — which comparator groupings to analyze (see the two `phylogenetics*/` output rows below) |
+| `--phylo-outgroup` | none | Accession or isolate to root phylogroup-scope trees on, via IQ-TREE's `-o` |
 
-`--cluster-threshold` and `--min-species-size` aren't cosmetic here: they feed
-`compute_segment_divergence`, which determines `divergence_candidate` tagging (one of the three
-criteria for which isolates Stage 2 analyzes) — pass the same values you ran Stage 1 with if you
-want Stage 1's and Stage 2's output tables to describe the same candidate set.
+`--min-species-size` isn't cosmetic here: it feeds `compute_segment_divergence`, which
+determines `divergence_candidate` tagging (one of the three criteria for which isolates Stage 2
+analyzes) — pass the same value you ran Stage 1 with if you want Stage 1's and Stage 2's output
+tables to describe the same candidate set. `--cluster-threshold` only feeds
+`assign_kmer_clusters` (setting `kmer_cluster_id`), which Stage 2 computes to mirror Stage 1's
+ingest state but never actually reads downstream — it has no effect on Stage 2's candidate
+selection or output.
 
 Requires `mafft` and `iqtree` (IQ-TREE 3.x; `iqtree2` builds work too, pass `--iqtree-bin`) plus
 Biopython and `dendropy`. Set up once with the pinned environment file rather than an ad hoc
