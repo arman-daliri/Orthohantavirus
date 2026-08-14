@@ -38,7 +38,7 @@ The pipeline verifies before doing any work, so you will know immediately either
 ## Step 2 — Run
 
 ```bash
-python3 all_hanta.py --input . --output output
+python3 01_all_hanta.py --input . --output output
 ```
 
 | Argument | Default | Purpose |
@@ -61,11 +61,17 @@ phylogenetics dependencies for a default run -- those only load if Stage 2 is ru
 The pipeline is three independent scripts, each runnable any time after the raw NCBI package
 exists (none requires another to have already run):
 
-| Stage | Script | Needs | Produces |
+| Stage | Run | Needs | Produces |
 |---|---|---|---|
-| 1 | `all_hanta.py` | `pandas`/`pyarrow`/`numpy` only | The core tables above, including `ortho_ml_sequence_table.csv` |
-| 2 | `phylogeny.py` | `mafft`/`iqtree` on PATH, Biopython, `dendropy` | `ortho_reassortment_table.csv`, `phylogenetics/<species>/<segment>/`, `phylogenetics_phylogroup/<phylogroup>/<segment>/` |
-| 3 | `reassortment_detector.py` | `mafft`/`iqtree` on PATH, Biopython, `dendropy` | Score a new, not-yet-published candidate genome against the 5-gate framework |
+| 1 | `python3 01_all_hanta.py` | `pandas`/`pyarrow`/`numpy` only | The core tables above, including `ortho_ml_sequence_table.csv` |
+| 2 | `python3 02_phylogeny.py` | `mafft`/`iqtree` on PATH, Biopython, `dendropy` | `ortho_reassortment_table.csv`, `phylogenetics/<species>/<segment>/`, `phylogenetics_phylogroup/<phylogroup>/<segment>/` |
+| 3 | `python3 03_reassortment_detector.py` | `mafft`/`iqtree` on PATH, Biopython, `dendropy` | Score a new, not-yet-published candidate genome against the 5-gate framework |
+
+`01_all_hanta.py`/`02_phylogeny.py`/`03_reassortment_detector.py` are thin numbered wrappers —
+run these so the file listing sorts in run order. Each just calls the correspondingly-named
+module (`all_hanta.py`, `phylogeny.py`, `reassortment_detector.py`), which you can still invoke
+directly by its bare name if you prefer; the wrappers exist purely for `ls` ordering, not as a
+separate implementation.
 
 `ortho_risk_table.csv` (Stage 1) is always phylo-blind. Combine it with Stage 2's evidence by
 joining `ortho_reassortment_table.csv` on `isolate_key` — there's no automatic joining
@@ -75,7 +81,7 @@ split-design.md` §4 for why).
 ### Stage 2: `phylogeny.py` (MAFFT + IQ-TREE reassortment analysis)
 
 ```bash
-python3 phylogeny.py --input . --output output
+python3 02_phylogeny.py --input . --output output
 ```
 
 | Argument | Default | Purpose |
