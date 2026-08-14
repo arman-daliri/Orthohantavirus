@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
-"""Regression tests for the reassortment-classifier, ML-matrix and risk-score extensions
-(Tasks 1-5).
+"""Regression tests for all_hanta.py (Stage 1) functionality that remains in this file
+after the phylogenetics code moved to phylogeny.py and its tests to test_phylogeny.py.
 
-stdlib unittest, not pytest -- this repo has no test dependency installed and the house
-style keeps non-phylogenetics imports at the top level, so a test file that needs no new
-dependency to run is worth more than one that's marginally terser. Run with:
+stdlib unittest, not pytest -- this repo has no test dependency installed. Run with:
 
     python3 -m unittest test_all_hanta -v
 
-Covers the rank-metric backward-compatibility guarantee and the classify_reassortment_call
-outcomes exercised ad hoc during review (Task 1); species-vs-phylogroup grouping and the
---phylo-scope orchestration (Task 2); scope-dependent admission of unclassified isolates
-by observed host order (Task 3); the effort_* surveillance-intensity covariates added to
-build_ml_tables (Task 4); and the reassortment_call -> surveillance_priority wiring,
-including cross-scope call reduction (Task 5) -- so none of it silently regresses on the
-next edit. The Task 1 tests fake Bio.Phylo tree objects directly (minimal find_clades /
-common_ancestor / confidence interface). The Task 2 end-to-end test fakes mafft and iqtree
-themselves as tiny throwaway scripts, since neither binary is installed in this
-environment -- it exercises real Bio.Phylo/dendropy parsing of their (structurally valid,
-not phylogenetically meaningful) output, skipped automatically if those two packages
-aren't importable.
+Three test classes, all fake-free (no faked Bio.Phylo/mafft/iqtree -- that lives in
+test_phylogeny.py now):
+
+- SegmentRankMetricsBackwardCompatTest: phylogeny.py's _segment_rank_metrics must reduce
+  to all_hanta.py's own _sl_m_rank_metrics's exact values for the (M offset, S/L
+  separation) pair it replaces -- not just a similar pattern.
+- SpeciesEffortStatsTest: _species_effort_stats's effort_* covariates are computed per
+  species from ALL accessions/isolates (not just the ML-usable subset), and count
+  distinct years/countries correctly.
+- SurveillancePriorityReassortmentTermTest: only surveillance_priority's
+  'supported_reassortment_candidate' phylo_call may contribute priority_reassortment_term
+  -- 'weak_signal_low_bootstrap_support' and 'no_conflict' must not.
 """
 
 import unittest
@@ -28,6 +26,7 @@ import numpy as np
 
 import all_hanta as ah
 import phylogeny as ph
+
 
 class SegmentRankMetricsBackwardCompatTest(unittest.TestCase):
     """_segment_rank_metrics must reduce to _sl_m_rank_metrics's exact values for the
@@ -54,6 +53,8 @@ class SegmentRankMetricsBackwardCompatTest(unittest.TestCase):
             new = ph._segment_rank_metrics(position, span, i, {"S": s_nn, "M": m_nn, "L": l_nn})
             self.assertAlmostEqual(old_sl, new["tree_sl_rank_separation"], places=12)
             self.assertAlmostEqual(old_m, new["tree_m_rank_offset"], places=12)
+
+
 def _make_isolate(key: str, species: str, s_acc: str, m_acc: str, l_acc: str,
                   species_status: str = "classified", host_order: str = "Rodentia") -> "ah.IsolateRecord":
     """Minimal but fully-populated IsolateRecord for phylogenetics-stage tests -- only the
@@ -78,6 +79,8 @@ def _make_isolate(key: str, species: str, s_acc: str, m_acc: str, l_acc: str,
         kmer_cluster_id="", s_protein_accessions=[], m_protein_accessions=[],
         l_protein_accessions=[], all_accessions=[s_acc, m_acc, l_acc], warnings=[],
     )
+
+
 def _make_accession(accession: str, species: str, country: str, year: str) -> "ah.AccessionRecord":
     """Minimal but fully-populated AccessionRecord for _species_effort_stats tests."""
     return ah.AccessionRecord(
@@ -94,6 +97,8 @@ def _make_accession(accession: str, species: str, country: str, year: str) -> "a
         group_key="", grouping_tier="", group_confidence=1.0, is_refseq=False,
         source_database="GenBank", warning_flags=[],
     )
+
+
 class SpeciesEffortStatsTest(unittest.TestCase):
     """Task 4: effort_* covariates are computed per species from ALL accessions/isolates
     (not just the ML-usable subset), and count distinct years/countries correctly, so
@@ -135,6 +140,8 @@ class SpeciesEffortStatsTest(unittest.TestCase):
         self.assertEqual(phv["effort_first_year"], "")
         self.assertEqual(phv["effort_years_since_first"], 0)
         self.assertEqual(phv["effort_n_isolates"], 0)  # no isolate records for this species
+
+
 class SurveillancePriorityReassortmentTermTest(unittest.TestCase):
     """Only 'supported_reassortment_candidate' may contribute priority_reassortment_term.
     'weak_signal_low_bootstrap_support' must not -- the whole point of the bootstrap gate

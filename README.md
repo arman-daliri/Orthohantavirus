@@ -38,7 +38,7 @@ The pipeline verifies before doing any work, so you will know immediately either
 ## Step 2 — Run
 
 ```bash
-python all_hanta.py --input . --output output
+python3 all_hanta.py --input . --output output
 ```
 
 | Argument | Default | Purpose |
@@ -64,11 +64,11 @@ exists (none requires another to have already run):
 | Stage | Script | Needs | Produces |
 |---|---|---|---|
 | 1 | `all_hanta.py` | `pandas`/`pyarrow`/`numpy` only | The core tables above, including `ortho_ml_sequence_table.csv` |
-| 2 | `phylogeny.py` | `mafft`/`iqtree` on PATH, Biopython, `dendropy` | `ortho_reassortment_table.csv`, `phylogenetics/<species>/<segment>/` |
+| 2 | `phylogeny.py` | `mafft`/`iqtree` on PATH, Biopython, `dendropy` | `ortho_reassortment_table.csv`, `phylogenetics/<species>/<segment>/`, `phylogenetics_phylogroup/<phylogroup>/<segment>/` |
 | 3 | `reassortment_detector.py` | `mafft`/`iqtree` on PATH, Biopython, `dendropy` | Score a new, not-yet-published candidate genome against the 5-gate framework |
 
 `ortho_risk_table.csv` (Stage 1) is always phylo-blind. Combine it with Stage 2's evidence by
-joining `ortho_reassortment_table.csv` on `isolate_key` — there's no automatic recombination
+joining `ortho_reassortment_table.csv` on `isolate_key` — there's no automatic joining
 between the two scripts by design (see `docs/superpowers/specs/2026-08-13-three-stage-pipeline-
 split-design.md` §4 for why).
 
@@ -80,6 +80,12 @@ python3 phylogeny.py --input . --output output
 
 | Argument | Default | Purpose |
 |---|---|---|
+| `--input` | `.` | Package root containing `all_hanta/ncbi_dataset/data` |
+| `--output` | `<input>/output` | Output directory |
+| `--allow-checksum-mismatch` | off | Proceed despite failed integrity check (mismatch still recorded) |
+| `--cluster-threshold` | `0.02` | Cosine k-mer distance for within-species single-linkage clustering |
+| `--min-species-size` | `8` | Minimum assessable isolates before divergence diagnostics (and `divergence_candidate` tagging) are computed |
+| `--verbose` | off | Debug logging |
 | `--mafft-bin` | PATH lookup | Path to `mafft` |
 | `--iqtree-bin` | PATH lookup | Path to `iqtree` |
 | `--phylo-min-taxa` | `4` | Minimum candidate isolates in a species before building segment trees |
@@ -87,6 +93,11 @@ python3 phylogeny.py --input . --output output
 | `--min-bootstrap-support` | `95.0` | Minimum ufboot support to call a topology conflict *supported* |
 | `--phylo-seed` | `42` | Fixed IQ-TREE random seed, for reproducible trees |
 | `--phylo-threads` | cores − 1 | Threads for `mafft` and `iqtree` |
+
+`--cluster-threshold` and `--min-species-size` aren't cosmetic here: they feed
+`compute_segment_divergence`, which determines `divergence_candidate` tagging (one of the three
+criteria for which isolates Stage 2 analyzes) — pass the same values you ran Stage 1 with if you
+want Stage 1's and Stage 2's output tables to describe the same candidate set.
 
 Requires `mafft` and `iqtree` (IQ-TREE 3.x; `iqtree2` builds work too, pass `--iqtree-bin`) plus
 Biopython and `dendropy`. Set up once with the pinned environment file rather than an ad hoc
@@ -409,7 +420,8 @@ maximum-likelihood inference. These clusters are an alignment-free proxy and are
 | `ortho_feature_scaling.json` | — | Per-feature mean/std, to be fitted **inside** your CV fold |
 | `ortho_summary.json` | — | Provenance, integrity results, counts, methods and stated limitations |
 | `ortho_reassortment_table.csv` *(Stage 2, `phylogeny.py`)* | one row per candidate isolate | Real per-segment tree diagnostics, RF distances, bootstrap-gated `reassortment_call` — join on `isolate_key` with `ortho_risk_table.csv`, which is always phylo-blind |
-| `phylogenetics/<species>/<segment>/` *(Stage 2, `phylogeny.py`)* | — | MAFFT alignment + IQ-TREE outputs per species/segment, for inspection or reuse |
+| `phylogenetics/<species>/<segment>/` *(Stage 2, `phylogeny.py`)* | — | MAFFT alignment + IQ-TREE outputs per species/segment, for inspection or reuse (`--phylo-scope=species`) |
+| `phylogenetics_phylogroup/<phylogroup>/<segment>/` *(Stage 2, `phylogeny.py`)* | — | Same, grouped by reservoir-host phylogroup instead of species, spanning every species that shares one (`--phylo-scope=phylogroup`) |
 
 All tables are plain CSV (UTF-8, LF line endings). `species_taxid`, `observed_taxid`, `host_taxid`
 and `year` are all-digit strings by design (they are identifiers, not quantities, and some rows

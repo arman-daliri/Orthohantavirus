@@ -192,10 +192,11 @@ mock), so nothing there references the `ah.`/`ph.` split by string path.
 
 **Automated verification, not manual review:** after the move, a one-time check asserts none of
 the 26 moved names remain accessible as `all_hanta.<name>` and all 26 are accessible as
-`phylogeny.<name>`. Combined with the full existing suite passing (currently 96 tests, unchanged
-count expected — this is a move, not new coverage), a missed import-surface fix cannot pass
-silently: every moved symbol is exercised by a real (unmocked) code path already in the suite, so
-a stale `ah.X` reference fails immediately with `AttributeError` the first time that test runs.
+`phylogeny.<name>`. Combined with the full existing suite passing (94 tests — down from the
+pre-split 96, since `BuildRiskRowsPhyloIntegrationTest`'s two test methods were deleted rather
+than moved, per the paragraph above), a missed import-surface fix cannot pass silently: every
+moved symbol is exercised by a real (unmocked) code path already in the suite, so a stale `ah.X`
+reference fails immediately with `AttributeError` the first time that test runs.
 
 ## 7. README changes
 

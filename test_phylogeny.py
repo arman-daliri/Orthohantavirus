@@ -46,6 +46,8 @@ class FakeTree:
 
     def common_ancestor(self, clades):
         return FakeConfidence(self._support)
+
+
 class ClassifyReassortmentCallTest(unittest.TestCase):
     """The generalized classifier must find an L-discordant (or S-discordant) pattern
     that the old M-only version structurally could not -- this is Task 1's headline
@@ -142,6 +144,8 @@ class BootstrapSupportRootFallbackTest(unittest.TestCase):
         tree = Bio.Phylo.read(StringIO("(A:1,B:1,C:1);"), "newick")
         support, source = ph.bootstrap_support_for_pair(tree, "A", "B")
         self.assertEqual((support, source), (0.0, "unsupported_root"))
+
+
 def _make_isolate(key: str, species: str, s_acc: str, m_acc: str, l_acc: str,
                   species_status: str = "classified", host_order: str = "Rodentia") -> "ah.IsolateRecord":
     """Minimal but fully-populated IsolateRecord for phylogenetics-stage tests -- only the
@@ -166,6 +170,8 @@ def _make_isolate(key: str, species: str, s_acc: str, m_acc: str, l_acc: str,
         kmer_cluster_id="", s_protein_accessions=[], m_protein_accessions=[],
         l_protein_accessions=[], all_accessions=[s_acc, m_acc, l_acc], warnings=[],
     )
+
+
 def _make_candidates(species_list, n_per_species=5, seed=1):
     rng = random.Random(seed)
     bases = "ACGT"
@@ -182,6 +188,8 @@ def _make_candidates(species_list, n_per_species=5, seed=1):
             sequences = {"S": rand_seq(150), "M": rand_seq(150), "L": rand_seq(150)}
             candidates.append(ph.PhyloCandidate(isolate=isolate, tags=["complete_triplet"], sequences=sequences))
     return candidates
+
+
 def _cds_index_for(s_acc, m_acc, l_acc, seq_len=150):
     """Minimal cds_index entries that select_primary_cds resolves to S/M/L via
     classify_protein_role: 'nucleocapsid' -> N (S), 'glyco' -> GPC (M), 'polymerase' ->
@@ -198,6 +206,8 @@ def _cds_index_for(s_acc, m_acc, l_acc, seq_len=150):
         ah.accession_base(m_acc): [("glycoprotein precursor", rand_seq(seq_len))],
         ah.accession_base(l_acc): [("RNA polymerase", rand_seq(seq_len))],
     }
+
+
 class CollectPhyloCandidatesScopeTest(unittest.TestCase):
     """Task 3: unclassified isolates are excluded at scope='species' (unchanged) but
     admitted at scope='phylogroup' when observed host order resolves a phylogroup whose
@@ -259,6 +269,8 @@ class CollectPhyloCandidatesScopeTest(unittest.TestCase):
         self.assertEqual(len(species_cands), 1)
         self.assertEqual(len(phylo_cands), 1)
         self.assertEqual(ph._assignment_basis(phylo_cands[0], "phylogroup"), "curated_reservoir")
+
+
 class GroupCandidatesTest(unittest.TestCase):
     """group_candidates(scope='species') must be a drop-in replacement for the old
     group_candidates_by_species, and scope='phylogroup' must pool candidates that share a
@@ -409,6 +421,8 @@ with open(f"{prefix}.treefile", "w") as f:
         self.assertIn("not a member of group Orthohantavirus dobravaense", messages)
         # hantanense's tree DOES contain it -- no such message for that group.
         self.assertNotIn("not a member of group Orthohantavirus hantanense", messages)
+
+
 class PhyloCallByIsolateTest(unittest.TestCase):
     """_phylo_call_by_isolate reduces an isolate's rows (up to one per --phylo-scope) to
     the single most informative call -- a species-scope 'no_conflict' must never mask a

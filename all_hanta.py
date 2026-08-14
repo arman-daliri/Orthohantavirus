@@ -493,8 +493,8 @@ SURVEILLANCE_WEIGHTS = {
     # (1.5, a metadata FACT) and above complete_triplet (1.0), since bootstrap-supported
     # tree-topology evidence is a real inference but a noisier one than a fact NCBI itself
     # recorded. Only contributes for reassortment_call == 'supported_reassortment_candidate'
-    # -- see surveillance_priority. Re-tune once enough --phylogenetics runs exist to know
-    # how often this term actually fires.
+    # -- see surveillance_priority. Re-tune once enough Stage 2 (phylogeny.py) runs exist to
+    # know how often this term actually fires.
     "supported_reassortment": 1.5,
 }
 
@@ -2186,14 +2186,14 @@ def surveillance_priority(
       version weighted them as reassortment evidence; that classifier failed validation
       against the literature and feeding it into a risk score would have propagated an
       artefact of sample size into a ranking meant to guide surveillance.
-    - `phylo_call`, the bootstrap-gated tree-topology call from --phylogenetics
-      (classify_reassortment_call), is a different kind of evidence -- real per-segment
+    - `phylo_call`, the bootstrap-gated tree-topology call from Stage 2 (`phylogeny.py`)'s
+      classify_reassortment_call, is a different kind of evidence -- real per-segment
       alignments and maximum-likelihood trees, gated on ultrafast-bootstrap support
       specifically so an unsupported pattern is never reported as a finding. That
       reasoning doesn't disqualify it the way it disqualified the k-mer diagnostics; it's
       the reason to trust it. Only 'supported_reassortment_candidate' contributes --
       never 'weak_signal_low_bootstrap_support' or 'no_conflict', and never at all when
-      --phylogenetics wasn't run (phylo_call is None, the default).
+      Stage 2 wasn't run (phylo_call is None, the default).
 
     taxonomic_incongruence -- a metadata fact, not an inference -- has always contributed
     and still does, independent of either kind of reassortment evidence above.
@@ -2467,7 +2467,7 @@ def build_risk_rows(
             "reassortment_status": profile.reassortment_status if profile else "not_assessable",
             "taxonomic_incongruence": int(isolate.taxonomic_incongruence),
             "cross_species_partners": ";".join(isolate.cross_species_partners),
-            # "" (not None) when --phylogenetics wasn't run or didn't reach this isolate --
+            # "" (not None) when Stage 2 (phylogeny.py) wasn't run or didn't reach this isolate --
             # matches the string-typed convention every other column in this table uses;
             # surveillance_priority is the one place None vs "not analyzed" is worth
             # distinguishing (see ortho_reassortment_table.csv), not this summary table.
@@ -2592,7 +2592,7 @@ def build_ml_tables(
 
     is_lab_derived is now FLAGGED, not filtered. An earlier version excluded every
     is_lab_derived isolate from this matrix, on the same "not a naturally occurring
-    sample" reasoning --phylogenetics still uses. But NCBI's isLabHost field marks the
+    sample" reasoning Stage 2 (phylogeny.py) still uses. But NCBI's isLabHost field marks the
     immediate recorded host, not sequence provenance: of 164 is_lab_derived isolates, 21
     have host_taxid 9606 -- these are lab-acquired/occupational human infections in
     exactly the highest-CFR species (HTNV, ANDV, PUUV, DOBV) -- and most of the rest are
@@ -2605,7 +2605,7 @@ def build_ml_tables(
     signal; excluding it removes the baseline). is_vaccine_strain isolates remain
     excluded: a vaccine strain is deliberately attenuated, so labelling its sequence with
     its parent species' wild-type pathogenicity class would inject a real, not
-    hypothetical, false signal. --phylogenetics is unaffected by this: it keeps excluding
+    hypothetical, false signal. Stage 2 (phylogeny.py) is unaffected by this: it keeps excluding
     both is_lab_derived and is_vaccine_strain, because a passage/attenuation history is a
     tree-topology risk (branch-length distortion) regardless of whether the sequence
     itself is informative for a similarity/classification feature.
@@ -3156,11 +3156,13 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
     # --phylogenetics wasn't passed, which was already the common case.
     write_csv("ortho_risk_table.csv", build_risk_rows(isolates, divergence_by_key))
 
-    # Written once, here, after every output that might exist -- including the optional
-    # reassortment table and the risk table above -- is already on disk, so it always
-    # covers exactly what's present in `out`. Run `sha256sum -c ortho_output_checksums.txt`
-    # from the output directory to confirm nothing was truncated or altered afterward (by
-    # an interrupted write, a bad copy, git-lfs mishandling, etc).
+    # Written once, here, after every output this file (Stage 1) produces -- including the
+    # risk table above -- is already on disk, so it always covers exactly what's present
+    # in `out` from THIS script's run. It does not cover ortho_reassortment_table.csv --
+    # that's Stage 2's (phylogeny.py) output, written independently by a separate run and
+    # never touching this manifest. Run `sha256sum -c ortho_output_checksums.txt` from the
+    # output directory to confirm nothing was truncated or altered afterward (by an
+    # interrupted write, a bad copy, git-lfs mishandling, etc).
     write_output_checksums(out / "ortho_output_checksums.txt", output_digests)
 
     logging.info("Done. %s accessions -> %s species -> %s isolates (%s complete triplets)",

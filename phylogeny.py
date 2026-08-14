@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-import re
 import shutil
 import subprocess
 from collections import Counter, defaultdict
@@ -31,12 +30,23 @@ import numpy as np
 import all_hanta as ah
 
 
+# Host-order fallback for isolates ah.PHYLOGROUP can't place -- species not yet formally
+# named or classified (species_status != 'classified'), which have no curated reservoir
+# to look up. Only usable where a WHOLE taxonomic order maps to one phylogroup: every
+# Eulipotyphla genus in ah.GENUS_PHYLOGROUP is soricomorpha_borne, so an unclassified
+# isolate observed in any shrew or mole is unambiguous even without a species-level
+# identification. Chiroptera is included for the same reason, even though no curated
+# ah.SPECIES_RISK reservoir is bat-borne -- this fallback is the only route into
+# chiroptera_borne. Rodentia is deliberately absent: it spans Murinae, Arvicolinae and
+# Sigmodontinae (three different phylogroups) all at once, so the order alone can't
+# pick one -- see _phylogroup_for_isolate, below.
 HOST_ORDER_PHYLOGROUP_FALLBACK = {
     "Eulipotyphla": "soricomorpha_borne",
     "Soricomorpha": "soricomorpha_borne",
     "Insectivora": "soricomorpha_borne",
     "Chiroptera": "chiroptera_borne",
 }
+
 
 @dataclass
 class PhyloCandidate:
@@ -52,6 +62,7 @@ class PhyloCandidate:
     isolate: "ah.IsolateRecord"
     tags: List[str]
     sequences: Dict[str, str]
+
 
 def _segment_rank_metrics(
     position: Dict[str, Any], span: int, index: int, nn: Dict[str, int],
@@ -97,8 +108,8 @@ def _segment_rank_metrics(
 # Rigorous phylogenetic reassortment analysis (tree-based MAFFT + IQ-TREE stage)
 # --------------------------------------------------------------------------------------
 #
-# Everything above (assign_kmer_clusters, compute_segment_divergence) is alignment-free
-# and deliberately NOT a reassortment call -- see compute_segment_divergence's docstring
+# all_hanta.py's k-mer diagnostics (assign_kmer_clusters, compute_segment_divergence) are
+# alignment-free and deliberately NOT a reassortment call -- see compute_segment_divergence's docstring
 # for the validation failure that got that classifier withdrawn. This section is the
 # real thing it pointed to: per-segment CDS-nucleotide alignments (MAFFT) and
 # maximum-likelihood trees with ultrafast bootstrap support (IQ-TREE), compared for
@@ -1005,7 +1016,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
     paths = ah.resolve_inputs(Path(args.input), output=Path(args.output) if args.output else None)
-    ah.configure_logging(paths.log_file, verbose=args.verbose)
+    ah.configure_logging(paths.output_dir / "ortho_phylogeny.log", verbose=args.verbose)
     logging.info("Orthohantavirus phylogenetics stage (Stage 2)")
     logging.info("Package: %s", paths.data_dir)
     logging.info("Output : %s", paths.output_dir)
