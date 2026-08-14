@@ -2,9 +2,10 @@
 
 `all_hanta.py` — version 2.0.0
 
-A reproducible pipeline that ingests an NCBI Datasets **Orthohantavirus** package and produces
-accession-, isolate-, species- and host-level tables, pathogenicity labels, per-segment divergence
-diagnostics, and ML-ready feature matrices for host-association and risk-classification work.
+This pipeline reads an NCBI Datasets **Orthohantavirus** package. It produces tables at the
+accession, isolate, species and host level. It produces pathogenicity labels, per-segment
+divergence diagnostics, and ML-ready feature matrices for host-association and risk-classification
+work.
 
 ---
 
@@ -20,20 +21,22 @@ unzip all_hanta.zip -d all_hanta
 
 ## Step 1 — Stop git from corrupting the package
 
-**Do this before anything else.** The package ships an `md5sum.txt` containing checksums of the
-exact bytes NCBI published. On Windows, `git config core.autocrlf=true` rewrites LF to CRLF on
-checkout for anything git considers text, which changes those bytes, breaks every checksum, and
-makes results differ between Linux and Windows checkouts.
+**Do this before anything else.** The package ships a file named `md5sum.txt`. This file lists
+checksums for the exact bytes NCBI published. On Windows, the git setting `core.autocrlf=true`
+rewrites line endings (LF to CRLF) on checkout for any file git treats as text. This rewrite
+changes those bytes. A changed byte breaks its checksum. Results then differ between a Linux
+checkout and a Windows checkout of the same package.
 
-The repo's `.gitattributes` marks the package binary to prevent this. If your working copy was
-already mangled, repair it once:
+The repo's `.gitattributes` file marks the package as binary, so git does not rewrite it. If your
+working copy was already changed this way, repair it once:
 
 ```bash
 rm -f all_hanta/ncbi_dataset/data/* all_hanta/md5sum.txt all_hanta/README.md
 git checkout -- all_hanta/
 ```
 
-The pipeline verifies before doing any work, so you will know immediately either way.
+The pipeline checks file integrity before it does any other work. You will know immediately if
+your checkout has a problem.
 
 ## Step 2 — Run
 
@@ -45,21 +48,23 @@ python3 all_hanta.py --input . --output output
 |---|---|---|
 | `--input` | `.` | Package root containing `all_hanta/ncbi_dataset/data` |
 | `--output` | `<input>/output` | Output directory |
-| `--allow-checksum-mismatch` | off | Proceed despite failed integrity check (mismatch still recorded) |
+| `--allow-checksum-mismatch` | **off** — the pipeline aborts on a failed integrity check | Pass this flag to make the pipeline continue anyway; it still records the mismatch in `ortho_summary.json` |
 | `--cluster-threshold` | `0.02` | Cosine k-mer distance for within-species single-linkage clustering |
 | `--max-features` | `200` | Number of top-variance k-mer features in the ML matrix |
 | `--min-species-size` | `8` | Minimum assessable isolates before divergence diagnostics are computed |
 | `--verbose` | off | Debug logging |
 
-The transform is GIL-bound and runs serially; a full run takes ~16s on the 15,991-record package.
+The transform is GIL-bound and runs serially. A full run takes about 16 seconds on the
+15,991-record package.
 
-Requires Python 3.11+ (uses `datetime.UTC`) with `pandas`, `pyarrow`, `numpy`. No alignment or
-phylogenetics dependencies for a default run -- those only load if Stage 2 is run (see below).
+This step needs Python 3.11 or newer (it uses `datetime.UTC`) plus `pandas`, `pyarrow`, and
+`numpy`. It does not need alignment or phylogenetics packages — those load only if Stage 2 runs
+(see below).
 
 ## Pipeline stages
 
-The pipeline is three independent scripts, each runnable any time after the raw NCBI package
-exists (none requires another to have already run):
+The pipeline is three independent scripts. You can run each one at any time after the raw NCBI
+package exists. No stage requires another stage to have already run:
 
 | Stage | Script | Needs | Produces |
 |---|---|---|---|
@@ -67,10 +72,10 @@ exists (none requires another to have already run):
 | 2 | `phylogeny.py` | `mafft`/`iqtree` on PATH, Biopython, `dendropy` | `ortho_reassortment_table.csv`, `phylogenetics/<species>/<segment>/`, `phylogenetics_phylogroup/<phylogroup>/<segment>/` |
 | 3 | `reassortment_detector.py` | `mafft`/`iqtree` on PATH, Biopython, `dendropy` | Score a new, not-yet-published candidate genome against the 5-gate framework |
 
-`ortho_risk_table.csv` (Stage 1) is always phylo-blind. Combine it with Stage 2's evidence by
-joining `ortho_reassortment_table.csv` on `isolate_key` — there's no automatic joining
-between the two scripts by design (see `docs/superpowers/specs/2026-08-13-three-stage-pipeline-
-split-design.md` §4 for why).
+`ortho_risk_table.csv` (Stage 1) is always phylo-blind: it never changes based on whether Stage 2
+ran. To combine the two, join `ortho_reassortment_table.csv` on `isolate_key`. The two scripts do
+not join automatically. This is a design choice — see
+`docs/superpowers/specs/2026-08-13-three-stage-pipeline-split-design.md` §4 for the reasoning.
 
 ### Stage 2: `phylogeny.py` (MAFFT + IQ-TREE reassortment analysis)
 
@@ -82,7 +87,7 @@ python3 phylogeny.py --input . --output output
 |---|---|---|
 | `--input` | `.` | Package root containing `all_hanta/ncbi_dataset/data` |
 | `--output` | `<input>/output` | Output directory |
-| `--allow-checksum-mismatch` | off | Proceed despite failed integrity check (mismatch still recorded) |
+| `--allow-checksum-mismatch` | **off** — the pipeline aborts on a failed integrity check | Pass this flag to make the pipeline continue anyway; it still records the mismatch in `ortho_summary.json` |
 | `--cluster-threshold` | `0.02` | Cosine k-mer distance for within-species single-linkage clustering |
 | `--min-species-size` | `8` | Minimum assessable isolates before divergence diagnostics (and `divergence_candidate` tagging) are computed |
 | `--verbose` | off | Debug logging |
@@ -96,53 +101,54 @@ python3 phylogeny.py --input . --output output
 | `--phylo-scope` | `both` | `species`, `phylogroup`, or `both` — which comparator groupings to analyze (see the two `phylogenetics*/` output rows below) |
 | `--phylo-outgroup` | none | Accession or isolate to root phylogroup-scope trees on, via IQ-TREE's `-o` |
 
-`--min-species-size` isn't cosmetic here: it feeds `compute_segment_divergence`, which
-determines `divergence_candidate` tagging (one of the three criteria for which isolates Stage 2
-analyzes) — pass the same value you ran Stage 1 with if you want Stage 1's and Stage 2's output
-tables to describe the same candidate set. `--cluster-threshold` only feeds
-`assign_kmer_clusters` (setting `kmer_cluster_id`), which Stage 2 computes to mirror Stage 1's
-ingest state but never actually reads downstream — it has no effect on Stage 2's candidate
-selection or output.
+`--min-species-size` changes Stage 2's output: it feeds `compute_segment_divergence`, which sets
+`divergence_candidate` tagging (one of the three reasons an isolate gets analyzed). Use the same
+value you used for Stage 1 if you want the two output tables to describe the same candidate set.
+`--cluster-threshold` only feeds `assign_kmer_clusters` (which sets `kmer_cluster_id`). Stage 2
+computes this value to match Stage 1's internal state, but never reads it again. Changing
+`--cluster-threshold` has no effect on Stage 2's candidate selection or output.
 
-Requires `mafft` and `iqtree` (IQ-TREE 3.x; `iqtree2` builds work too, pass `--iqtree-bin`) plus
-Biopython and `dendropy`. Set up once with the pinned environment file rather than an ad hoc
-`conda create`:
+Stage 2 needs `mafft` and `iqtree` (IQ-TREE 3.x; `iqtree2` builds also work — pass
+`--iqtree-bin`), plus Biopython and `dendropy`. Set these up once with the pinned environment
+file, not an ad hoc `conda create`:
 
 ```bash
 conda config --set channel_priority strict
 conda env create -f environment.yml
 ```
 
-Channel order matters here, not just as style: `-c bioconda -c conda-forge` (bioconda first)
-resolves Biopython from bioconda's own channel, whose newest build is `1.70` and drags in a
-`Python 3.6` / `numpy 1.12` toolchain to satisfy it -- silently, with no error. `environment.yml`
-lists `conda-forge` first and `bioconda` second (the order bioconda's own docs recommend) so
-Biopython, pandas, numpy and pyarrow resolve from conda-forge's current builds, while `mafft` and
-`iqtree` -- which only exist in bioconda -- still resolve there. `mafft`/`iqtree` are pinned to
-exact versions (`7.525` / `3.1.3`); the Python-side packages are floors, not patches, since exact
-patch availability on conda-forge isn't something this repo can assert.
+Channel order matters here, not just as style. The command `-c bioconda -c conda-forge` (bioconda
+first) resolves Biopython from bioconda's own channel. Bioconda's newest Biopython build there is
+version `1.70`, and it pulls in a `Python 3.6` / `numpy 1.12` toolchain to satisfy it — silently,
+with no error message. `environment.yml` lists `conda-forge` first and `bioconda` second (the
+order bioconda's own documentation recommends). With that order, Biopython, pandas, numpy, and
+pyarrow resolve from conda-forge's current builds. `mafft` and `iqtree` — which exist only in
+bioconda — still resolve there. `mafft` and `iqtree` are pinned to exact versions (`7.525` and
+`3.1.3`). The Python-side packages use minimum versions, not exact patches, because this repo
+cannot promise which exact patch conda-forge has available at install time.
 
-Then either `conda activate hanta_phylo` before running this script, or leave your normal
-environment active and pass `--mafft-bin`/`--iqtree-bin` pointing at that env's `bin/`. **Don't
-just prepend that env's `bin/` to `PATH`** without activating fully -- an unpinned env resolved
-this way has been observed to install a Python 3.6 interpreter as `python3`, which would shadow
-the one actually running this script.
+After setup, either run `conda activate hanta_phylo` before running this script, or keep your
+normal environment active and pass `--mafft-bin`/`--iqtree-bin` pointing at that env's `bin/`.
+**Do not just add that env's `bin/` to the front of `PATH`** without activating it fully. An
+unpinned env set up this way has been observed to install a Python 3.6 interpreter as `python3`,
+which then shadows the interpreter meant to run this script.
 
-Runtime is dominated by IQ-TREE's ModelFinder + ultrafast bootstrap and scales with both the
-number of candidate isolates per species and CDS length (L segments are the slowest, ~6.4 kb).
-A handful of taxa finishes in seconds; species with hundreds of qualifying isolates (PUUV, TULV,
-HTNV, SEOV in this package) can take much longer. There is no built-in subsampling -- every
-qualifying isolate is analyzed.
+Runtime depends mostly on IQ-TREE's ModelFinder step and its ultrafast bootstrap step. It also
+scales with the number of candidate isolates per species and with CDS length (L segments are the
+slowest to align, about 6.4 kb). A species with a handful of taxa finishes in seconds. A species
+with hundreds of qualifying isolates (PUUV, TULV, HTNV, SEOV in this package) can take much
+longer. There is no built-in subsampling — the pipeline analyzes every qualifying isolate.
 
 ---
 
 ## Reproducibility model
 
-Integrity is established against NCBI's own published checksums, never against digests this
-script invents.
+The pipeline checks file integrity against NCBI's own published checksums. It never checks
+against digests the script invents itself.
 
-**File level.** `md5sum.txt` is parsed and every shipped file verified. On mismatch the pipeline
-also tests the CRLF-normalized form purely to *diagnose* the cause, then aborts:
+**File level.** The pipeline parses `md5sum.txt` and verifies every file it lists. On a mismatch,
+the pipeline also tests the CRLF-normalized form of the file, purely to *diagnose* the cause. It
+then aborts:
 
 ```
 CHECKSUM MISMATCH data_report.jsonl
@@ -151,47 +157,50 @@ CHECKSUM MISMATCH data_report.jsonl
     diagnosis      : on-disk bytes are CRLF but NCBI published the LF form ...
 ```
 
-**Content level.** `nucleotide.sequenceHash` (CRC32, emitted per record by NCBI) is used for
-sequence identity and de-duplication. It is independent of line endings and platform, so it
-behaves identically everywhere even on a mangled checkout. NCBI strips leading zeros from these
-values — observed widths in this package are 5–8 characters — so they are **zero-padded to 8**
-before any comparison. They also expose 3,393 exact resubmissions (12,598 distinct hashes over
-15,991 records) that would otherwise inflate group sizes.
+**Content level.** The pipeline uses `nucleotide.sequenceHash` (a CRC32 value NCBI emits per
+record) for sequence identity and de-duplication. This hash does not depend on line endings or
+platform, so it gives the same result everywhere, even on a checkout with mangled line endings.
+NCBI strips leading zeros from these values — this package's observed widths are 5 to 8
+characters — so the pipeline zero-pads them to 8 characters before any comparison. This package
+also has 3,393 exact resubmissions (12,598 distinct hashes over 15,991 records); without
+de-duplication these would inflate group sizes.
 
-`hashlib` is still used, but only to hash the pipeline's own outputs and configuration.
+The pipeline still uses `hashlib`, but only to hash its own outputs and configuration.
 
 Runs are deterministic: two consecutive runs produce byte-identical table contents, and
-`ortho_summary.json` contains no absolute paths.
+`ortho_summary.json` never contains an absolute path.
 
 ---
 
 ## Taxonomy resolution
 
-The organism-level `virus.taxId` is **not** usable as a species key. In this package it takes
-**553 distinct values**, mixing strain-level taxa (`Hantaan virus Lee` 11601, `Four Corners
-hantavirus` 31621) with legacy/current taxid pairs for the same species (`Puumala orthohantavirus`
-1980486 vs `Orthohantavirus puumalaense` 3052493).
+The organism-level `virus.taxId` field is **not** usable as a species key. In this package it
+takes **553 distinct values**. Some of those values are strain-level taxa, not species (`Hantaan
+virus Lee` = 11601, `Four Corners hantavirus` = 31621). Some are legacy/current taxid pairs for
+the same species (`Puumala orthohantavirus` = 1980486 and `Orthohantavirus puumalaense` = 3052493
+name the same species under two different IDs).
 
-The node immediately below genus *Orthohantavirus* (taxId 1980442) in `virus.lineage` **is** the
-ICTV species. Canonicalising on its binomial name merges the legacy/current pairs, collapsing
-553 organism values to **38 species** plus `unclassified Orthohantavirus` (2,339 records).
+The `virus.lineage` field has a node immediately below genus *Orthohantavirus* (taxId 1980442).
+That node **is** the ICTV species [1]. Canonicalizing on this node's binomial name merges the
+legacy/current ID pairs. Doing this on the whole package collapses 553 organism values to **38
+species**, plus one `unclassified Orthohantavirus` bucket covering 2,339 records.
 
-The remaining `virus.lineage` nodes supply every higher rank for free, giving the full grouping
-hierarchy that terminates naturally at the top:
+The rest of `virus.lineage` supplies every higher taxonomic rank for free. This gives the full
+grouping hierarchy, which ends naturally at the top:
 
 ```
 accession → isolate → species → subfamily Mammantavirinae → family Hantaviridae
           → order Elliovirales → class Bunyaviricetes → phylum Negarnaviricota
 ```
 
-Records that are unclassified or genus-only are retained with `species_status` set accordingly —
-never silently merged into a named species.
+The pipeline keeps records that are unclassified or genus-only. It sets `species_status`
+accordingly on these records. It never merges them silently into a named species.
 
 ## Isolate grouping
 
-BioSample is present on only **87 of 15,991** records (0.54%), so a BioSample-first cascade
-almost never fires. `isolate.name` is present on 15,491 records (96.9%) and is the field
-submitters actually use to tie an isolate's S, M and L segments together.
+BioSample is present on only **87 of 15,991** records (0.54%). A BioSample-first grouping cascade
+would almost never fire. `isolate.name` is present on 15,491 records (96.9%). This is the field
+submitters actually use to tie one isolate's S, M, and L segments together.
 
 | Tier | Key | Confidence |
 |---|---|---|
@@ -202,15 +211,15 @@ submitters actually use to tie an isolate's S, M and L segments together.
 | 5 | species + strain + location | 0.65 |
 | — | accession only | 0.10 |
 
-Result on this package: **1,795 groups with all three S, M and L segments present**, and 223
-where all three are coding-complete. The coding-complete count is bounded by the data — only
-1,339 of 15,991 records are `COMPLETE` at all — not by the grouping.
+On this package, this grouping produces **1,795 groups with all three of S, M, and L present**,
+and 223 groups where all three are coding-complete. The data sets the coding-complete count's
+ceiling — only 1,339 of 15,991 records are `COMPLETE` at all — the grouping logic does not.
 
 ## Segment resolution
 
-The `segment` field is dirtier than a three-value check assumes. Values observed here include
-`Partial L`, `S segment`, `M-segment`, `M; medium`, `small (S)`, `G1`, `G2`, `ANONYMOUS`, `s`
-and `N`, plus 3,558 records with no `segment` field at all. Evidence is applied in order:
+The `segment` field is dirtier than a simple three-value check assumes. Observed values include
+`Partial L`, `S segment`, `M-segment`, `M; medium`, `small (S)`, `G1`, `G2`, `ANONYMOUS`, `s`, and
+`N`. 3,558 records have no `segment` field at all. The pipeline applies evidence in this order:
 
 | `segment_source` | Basis | Confidence | Count |
 |---|---|---|---|
@@ -220,23 +229,25 @@ and `N`, plus 3,558 records with no `segment` field at all. Evidence is applied 
 | `length_heuristic` | falls in exactly one ICTV size band | 0.40 | 129 |
 | `unresolved` | — | 0.00 | 210 |
 
-Unresolved segments drop from 405 to 210.
+This evidence ordering drops the count of unresolved segments from 405 to 210.
 
 ## Completeness
 
-NCBI's structured `completeness` is present on 100% of records and is authoritative
-(PARTIAL 14,652 / COMPLETE 1,339). Length is used only to qualify a COMPLETE call as
-coding-complete, never to override NCBI. ICTV segment sizes: S 1.2–2.1 kb, M 3.4–3.8 kb,
-L 6.5–6.6 kb. The pipeline applies S and M as stated and widens L to 6.3–6.8 kb, because
-submitted L segments sit just outside the ICTV figure at both ends; see the note on
+NCBI's structured `completeness` field is present on 100% of records and is authoritative
+(PARTIAL: 14,652; COMPLETE: 1,339). The pipeline uses sequence length only to qualify a COMPLETE
+call as coding-complete. It never uses length to override NCBI's own call. ICTV's published
+segment sizes are: S 1.2–2.1 kb, M 3.4–3.8 kb, L 6.5–6.6 kb [1]. The pipeline applies the S and M
+ranges as published. It widens the L range to 6.3–6.8 kb, because submitted L segments in this
+package sit just outside the published range at both ends — see the note on
 `SEGMENT_LENGTH_RANGE` in `all_hanta.py`.
 
-Length anomalies are flagged only where they contradict those ranges: partial sequences are
-*expected* to be short. This drops length warnings from 5,856 to 9.
+The pipeline flags a length anomaly only when a sequence contradicts these ranges — a partial
+sequence is *expected* to be short, so a short partial sequence is not an anomaly. This rule drops
+the count of length warnings from 5,856 to 9.
 
 ## Host classification
 
-Host role is derived from `host.lineage` rank, not substring matching:
+The pipeline derives host role from the `host.lineage` rank. It does not use substring matching:
 
 | Observed | Count | Role |
 |---|---|---|
@@ -246,166 +257,215 @@ Host role is derived from `host.lineage` rank, not substring matching:
 | Chiroptera | 83 | `reservoir_bat` |
 | `isLabHost` true | 338 | `laboratory_host` |
 
-`isLabHost`, `labHost` and `isVaccineStrain` are authoritative NCBI fields and are used directly.
+`isLabHost`, `labHost`, and `isVaccineStrain` are authoritative NCBI fields. The pipeline uses
+them directly.
 
-**Lab-derived isolates are flagged, not filtered, in the ML matrix.** `isLabHost` marks the
-immediate recorded host, not sequence contamination: of 338 lab-host records (164 isolates), 21
-isolates have `host_taxid` `9606` — lab-acquired/occupational human infections concentrated in the
-highest-CFR species (HTNV, ANDV, PUUV, DOBV) — and most of the rest are samples from
-colony-maintained reservoir animals, not culture-adapted sequences. Blanket-excluding them from a
-pathogenicity-prediction task discarded real positive evidence of human/reservoir infection; a
-study comparing human-derived and reservoir Orthohantavirus sequences for zoonotic-risk assessment
-found the human sequences are themselves the spillover-risk baseline, not noise to remove
-(<https://microbiomejournal.biomedcentral.com/articles/10.1186/s40168-025-02059-0>).
-`ortho_ml_feature_matrix.csv` carries an `is_lab_derived` column so a model can be trained
-with or without them and compared, rather than losing the isolates outright.
+**The ML matrix flags lab-derived isolates. It does not filter them out.** `isLabHost` marks the
+immediate recorded host, not sequence contamination. Of 338 lab-host records (164 isolates), 21
+isolates have `host_taxid` 9606 (human) — these are lab-acquired or occupational human infections,
+concentrated in the highest-CFR species (HTNV, ANDV, PUUV, DOBV). Most of the rest are samples
+from colony-maintained reservoir animals, not culture-adapted sequences. Excluding all of them
+from a pathogenicity-prediction task would discard real positive evidence of human or reservoir
+infection. `ortho_ml_feature_matrix.csv` carries an `is_lab_derived` column, so you can train a
+model with or without them and compare results, instead of losing the isolates outright.
 
-**Vaccine strains remain excluded from the ML matrix.** A vaccine strain is deliberately
-attenuated, so labelling its sequence with its parent species' wild-type pathogenicity class would
-inject a real signal error, not a hypothetical one — unlike `isLabHost`, this is a case where
-exclusion is the correct default.
+**The ML matrix still excludes vaccine strains.** A vaccine strain is deliberately attenuated. If
+its sequence carried its parent species' wild-type pathogenicity label, that would inject a real
+labeling error, not a hypothetical one. This is the one case, unlike `isLabHost`, where exclusion
+is the correct default.
 
-**Stage 2 (`phylogeny.py`) is unaffected by this and keeps excluding both lab-derived and vaccine-strain
-isolates** — a passage/attenuation history is a tree-topology risk (branch-length distortion)
-regardless of whether the sequence is informative as an ML feature.
+**Stage 2 (`phylogeny.py`) is not affected by this rule.** It keeps excluding both lab-derived and
+vaccine-strain isolates, because a passage or attenuation history distorts branch length in a
+tree, regardless of whether the sequence is a useful ML feature.
 
-**Host jumps.** Each record's host order is compared against its species' expected reservoir
-order. 33 records are pathogenic viruses recovered outside their reservoir order — SEOV in
-Chinese shrews and bats, ANDV-clade sequences in Brazilian bats. These are documented
-host-sharing observations, not data errors, and are surfaced as
-`host_jump_status = host_order_mismatch` and weighted in the risk score.
+**Host jumps.** The pipeline compares each record's host order against its species' expected
+reservoir order. 33 records are pathogenic viruses recovered outside their reservoir order — SEOV
+in Chinese shrews and bats, ANDV-clade sequences in Brazilian bats. These are documented
+host-sharing observations, not data errors. The pipeline surfaces them as
+`host_jump_status = host_order_mismatch` and weights them in the risk score.
 
 ## Pathogenicity labels
 
-`SPECIES_RISK` covers 38 species. Every entry carries its source URL. Species **absent** from the
-table are labelled `unknown` — never silently "non-pathogenic".
+`SPECIES_RISK` covers 38 species. Every entry carries its source URL. The pipeline labels a
+species **absent** from this table as `unknown` — it never silently labels an uncurated species
+"non-pathogenic".
 
-CFR estimates genuinely conflict between sources, so the reported range is stored verbatim
-alongside an ordinal band for modelling. Do not collapse them to a point estimate.
-
-| Class | Species | CFR band |
+| Class | Species | Notes |
 |---|---|---|
-| `pathogenic_hcps` | ANDV, SNV, CHOV, LANV, RIOMV, BAYV, BCCV | up to `high_gt_30pct` |
-| `pathogenic_hfrs` | HTNV, DOBV, SEOV, PUUV | `low_lt_1pct` – `moderate_1_15pct` |
-| `rare_or_opportunistic` | TULV | `low_lt_1pct` |
-| `suspected` | THAIV, SANGV | `unknown` |
-| `no_known_human_disease` | shrew-, mole- and bat-borne species | `none_known` |
-| `unknown` | anything not curated | `unknown` |
+| `pathogenic_hcps` | ANDV, SNV, CHOV, LANV, RIOMV, BAYV, BCCV | Causes hantavirus cardiopulmonary syndrome (HCPS); see [CFR](#case-fatality-rate-cfr) for rates |
+| `pathogenic_hfrs` | HTNV, DOBV, SEOV, PUUV | Causes hemorrhagic fever with renal syndrome (HFRS); see [CFR](#case-fatality-rate-cfr) for rates |
+| `rare_or_opportunistic` | TULV | Rare, mild human case reports |
+| `suspected` | THAIV, SANGV | Not yet confirmed pathogenic |
+| `no_known_human_disease` | shrew-, mole- and bat-borne species | See below |
+| `unknown` | anything not curated | — |
 
-HTNV is reported as both ~1% and 5–15% depending on source; both appear in `cfr_reported_range`.
-ANDV is the only orthohantavirus with documented person-to-person transmission. TULV is held out
-of `pathogenic_hfrs` deliberately — lumping its handful of mild case reports with HTNV/DOBV would
-put 2,123 records into the same class as the viruses that actually drive HFRS mortality.
+TULV is held out of `pathogenic_hfrs` deliberately. Lumping its handful of mild case reports in
+with HTNV and DOBV would put 2,123 records in the same class as the species that drive most HFRS
+deaths.
 
-**Curation audit.** Curated reservoirs are checked against the modal observed host order on every
-run. Six of the original 38 entries disagreed with the package's own host annotations at the order
-level (asikkalaense, fugongense, lankaense, luxiense, sagercreekense, tigrayense) and were
-corrected against the data. The audit runs every invocation so this class of error cannot silently
-return.
+No shrew-, mole-, or bat-borne orthohantavirus has a confirmed human disease association [2].
+Some serological surveys have found antibody evidence of past exposure in humans (for example, to
+the shrew-borne Imjin virus), but this is evidence of exposure, not of documented illness — the
+two are not the same claim, and this pipeline does not conflate them.
+
+**Curation audit.** Every run checks curated reservoirs against the modal observed host order in
+the package's own data. Six of the original 38 entries disagreed with the package's own host
+annotations at the order level (asikkalaense, fugongense, lankaense, luxiense, sagercreekense,
+tigrayense). The pipeline corrected these six against the data. The audit runs on every
+invocation, so this class of error cannot silently come back.
+
+## Case fatality rate (CFR)
+
+**The pipeline does not calculate CFR from any data.** There is no formula and no computation
+here, unlike [Phylogeny](#phylogeny)'s real MAFFT/IQ-TREE analysis or the k-mer measurement in
+[Reassortment](#reassortment). CFR is a **curated literature lookup**: for each of the 38 named
+species in `SPECIES_RISK` (`all_hanta.py`), a person read the published literature and recorded a
+CFR figure and an ordinal band by hand. A species absent from this table is labelled `unknown` —
+never silently assumed to be non-pathogenic, and never assigned a computed value.
+
+CFR estimates genuinely conflict between published sources. The pipeline stores the reported range
+as text, verbatim, alongside a separate ordinal band used for modelling. Do not collapse the range
+to one point estimate — a real range is more honest than a false-precision average.
+
+| Species | Reported CFR | Band |
+|---|---|---|
+| ANDV | approximately 40% [2] | `high_gt_30pct` |
+| SNV | 30–50% [2] | `high_gt_30pct` |
+| HTNV | conflicting sources: approximately 1% [2], or 5–15% in other reviews — the pipeline stores both figures as text and bands on the higher, more conservative one | `moderate_1_15pct` |
+| DOBV | 0–15%, genotype-dependent (Dobrava genotype more severe; Kurkino/Saaremaa genotypes milder) | `moderate_1_15pct` |
+| CHOV | 12–15% | `moderate_1_15pct` |
+| LANV | 12–15% | `moderate_1_15pct` |
+| SEOV | under 1% [2] | `low_lt_1pct` |
+| PUUV | 0.1–0.4% [2] | `low_lt_1pct` |
+| TULV | under 1%, rare and mostly mild cases [2] | `low_lt_1pct` |
+| RIOMV, BAYV, BCCV | human cases documented, but no CFR figure is established in the literature | `unknown` |
+| THAIV, SANGV | serological evidence of past human infection only — no confirmed clinical case, so no CFR applies | `unknown` |
+
+**The DOBV, CHOV, and LANV figures above do not carry a `[2]` citation number.** The pipeline's own
+source code stores them without an individually-verified reference for this project — carrying that
+gap here rather than attaching a citation number that would overstate how confident this specific
+figure is. Treat these three CFR figures as needing independent confirmation before you rely on them.
+
+ANDV is the only orthohantavirus with confirmed person-to-person transmission [2]. Even for ANDV,
+person-to-person spread accounts for a small share of total cases and needs close, prolonged
+contact — it is not the typical transmission route [2].
 
 ## Reassortment
 
-**By default, this pipeline does not call reassortment.** A classifier that did was built and
-then withdrawn after it failed validation against the literature. What follows is that
-withdrawal, and the rigorous replacement that now exists as an opt-in stage.
+**By default, this pipeline does not call reassortment.** An earlier version of this pipeline had
+a classifier that did call it. The team withdrew that classifier after it failed validation
+against the literature. This section explains that withdrawal and points to the rigorous
+replacement.
 
-The literature reports reassortment as frequent in PUUV (19.1–32% in Finnish studies), SNV, DOBV
-and TULV, and absent or sparse in ANDV. Measured on this dataset, the classifier produced the
+Reassortment frequency varies by species, not by genus. One survey across 553 orthohantavirus
+genomes and seven species found reassortment absent in ANDV, and frequent in DOBV, SNV, SEOV,
+PUUV, and TULV [5]. For PUUV specifically, an earlier set of Finnish studies reported reassortment
+frequencies from 19.1% to 32% [3]. Measured on this dataset, the withdrawn classifier produced the
 inverse ranking:
 
 | Species | n | flagged | literature |
 |---|---|---|---|
-| ANDV | 68 | 72.1% | absent or sparse |
+| ANDV | 68 | 72.1% | absent or sparse [5] |
 | CHOV | 8 | 100.0% | not reported |
-| DOBV | 62 | 38.7% | frequent |
-| PUUV | 416 | 7.7% | frequent (19.1–32%) |
-| TULV | 313 | 3.5% | frequent |
+| DOBV | 62 | 38.7% | frequent [5] |
+| PUUV | 416 | 7.7% | frequent, 19.1–32% [3] [5] |
+| TULV | 313 | 3.5% | frequent [5] |
 
-Sweeping the discordance threshold from 0.25 to 0.85 scaled all rates down without ever changing
-the ordering. The cause is intrinsic to the metric: cosine distance on 3-mer amino-acid
-composition tracks within-species sequence diversity and sample size, not tree topology. Species
-represented by many near-identical outbreak sequences get stable neighbour orderings and few
-flags; species represented by a handful of divergent, scattered sequences get noisy orderings and
-many flags. CHOV at 100% with n=8 is the clearest symptom.
+Sweeping the withdrawn classifier's discordance threshold from 0.25 to 0.85 scaled every rate
+down. It never changed the ordering. The cause is intrinsic to the metric: cosine distance on
+3-mer amino-acid composition tracks within-species sequence diversity and sample size, not tree
+topology. A species represented by many near-identical outbreak sequences gets a stable neighbour
+ordering and few flags. A species represented by a handful of divergent, scattered sequences gets
+a noisy ordering and many flags. CHOV, flagged at 100% on only 8 sequences, is the clearest
+symptom of this.
 
-The k-mer diagnostic is retained as an informational signal (`reassortment_status`,
-`sl_rank_separation`, `m_rank_offset`, still emitted in `ortho_isolate_table.csv` and
-`ortho_risk_table.csv`); only the standalone `ortho_segment_divergence.csv` file was dropped,
-since it duplicated data already in those two tables. Stage 2 replaces the *call* (a real
-reassortment verdict), not the underlying measurement. **To detect reassortment properly**, build
-per-segment alignments (MAFFT) and trees (IQ-TREE) and test topological incongruence between the
-S, M and L trees. The constraints worth testing against: M-segment exchange dominates, S and L
-cosegregate from the same parent, and events occur within a reservoir host species or between
-sympatric lineages.
+The pipeline still emits the underlying k-mer measurement as an informational signal
+(`reassortment_status`, `sl_rank_separation`, `m_rank_offset`, in `ortho_isolate_table.csv` and
+`ortho_risk_table.csv`). Only the standalone `ortho_segment_divergence.csv` file was dropped,
+because it duplicated data already in those two tables. Stage 2 (see [Phylogeny](#phylogeny)
+below) replaces the *call* — a real reassortment verdict — not this underlying measurement.
 
-The one trustworthy reassortment-adjacent signal here is `taxonomic_incongruence`: one isolate
-label whose segments NCBI assigned to more than one species (70 isolates). That is metadata, not
-inference, and it does feed the risk score. It is computed across groups, not within — the
-grouping key contains the species, so a within-group check can never fire.
+The reassortment pattern most reported in the literature is M-segment exchange: the M segment
+moves between lineages more often than S or L, and the S and L segments tend to stay together,
+from the same parent [3]. Reassortment is reported mostly between closely related strains
+within one species or region (sympatric), and rarely between distantly related species [3].
 
-### Stage 2 in detail: the rigorous reassortment detection
+The one reassortment-adjacent signal in this pipeline that is trustworthy on its own is
+`taxonomic_incongruence`: one isolate label whose segments NCBI assigned to more than one species
+(70 isolates in this package). This is a metadata observation, not an inference, and it does feed
+the risk score. The pipeline computes it across groups, never within a group — the grouping key
+already contains the species, so a within-group check could never fire.
 
-Stage 2 (`phylogeny.py`) runs the real thing this section always pointed to: per-segment CDS
-nucleotide alignments (MAFFT) and maximum-likelihood trees with ultrafast bootstrap support
-(IQ-TREE 3.x), compared for topological incongruence between S, M and L. See the argument table
-above for setup and the runtime caveat.
+## Phylogeny
 
-**Candidate selection.** Three groups, unioned (each is independently a reason an isolate matters
-for the reassortment/pathogenicity goal), then intersected with a hard requirement — CDS
-available for all of S, M and L, since a topology comparison needs every isolate placed in all
-three trees:
+Stage 2 (`phylogeny.py`) runs the rigorous replacement the Reassortment section above points to:
+real per-segment CDS nucleotide alignments (MAFFT) and maximum-likelihood trees with ultrafast
+bootstrap support (IQ-TREE 3.x), compared for topological incongruence between the S, M, and L
+trees. See the [Stage 2 argument table](#stage-2-phylogenypy-mafft-iq-tree-reassortment-analysis)
+above for setup and the runtime note.
 
-- **human-affecting-or-likely** — `pathogenicity_class` in `{pathogenic_hcps, pathogenic_hfrs,
-  rare_or_opportunistic, suspected}`, OR a not-yet-curated species observed directly in a human
-  host in this package (`host_role == spillover_host_human`) — the "likely" half a static curated
-  table alone cannot express.
+**Candidate selection.** The pipeline selects isolates from three groups, unioned together (each
+group is independently a reason an isolate matters for the reassortment/pathogenicity goal), then
+intersected with one hard requirement: CDS must be available for all of S, M, and L, since a
+topology comparison needs every isolate placed in all three trees.
+
+- **human-affecting-or-likely** — `pathogenicity_class` is one of `pathogenic_hcps`,
+  `pathogenic_hfrs`, `rare_or_opportunistic`, `suspected`; or the isolate is from a
+  not-yet-curated species observed directly in a human host in this package
+  (`host_role == spillover_host_human`) — this second case covers a species the static curated
+  table cannot yet express.
 - **divergence candidates** — isolates the k-mer diagnostic already flagged
   `requires_phylogenetic_confirmation`.
-- **complete triplets** — `has_complete_triplet`.
+- **complete triplets** — isolates where `has_complete_triplet` is true.
 
-Lab-derived, vaccine-strain, and `unclassified`/genus-only isolates are excluded — the latter
-because pooling them under `species_name` would build a tree across genuinely unrelated lineages
-that only share a placeholder label.
+The pipeline excludes lab-derived, vaccine-strain, and `unclassified`/genus-only isolates from
+this selection. It excludes the last group because pooling isolates under a shared placeholder
+`species_name` would build one tree across genuinely unrelated lineages that share nothing but
+that placeholder label.
 
-**Per species** (≥ `--phylo-min-taxa`, sorted for determinism): CDS nucleotide sequences per
-segment are extracted via `select_primary_cds` (role-matched from `cds.fna`, longest-wins among
-matches — correctly prefers a combined G1+G2 precursor CDS over either half when both are
-annotated), aligned with `mafft --auto`, and a tree is built with `iqtree -m MFP -B <bootstrap>
---seqtype DNA --seed <fixed>` (model selection + ultrafast bootstrap; DNA type is asserted, not
-auto-detected, because heavily-N'd partial CDS can otherwise confuse the heuristic). Tip labels
-are synthetic (`I0000`, `I0001`, ...) rather than `isolate_key` directly, to avoid any risk of
-Newick-incompatible characters corrupting a tree.
+**Per species** (at least `--phylo-min-taxa` isolates, sorted for a deterministic order): the
+pipeline extracts CDS nucleotide sequences per segment with `select_primary_cds` (role-matched
+from `cds.fna`; when more than one CDS matches a role, the longest one wins — this correctly
+prefers a combined G1+G2 precursor CDS over either half alone, when both are annotated). It aligns
+these with `mafft --auto`, then builds a tree with
+`iqtree -m MFP -B <bootstrap> --seqtype DNA --seed <fixed>` (this combines model selection with
+ultrafast bootstrap; the pipeline asserts the DNA sequence type rather than letting IQ-TREE
+auto-detect it, because a heavily-N'd partial CDS can otherwise confuse that detection). Tip
+labels are synthetic (`I0000`, `I0001`, and so on) rather than the real `isolate_key`, to remove
+any risk that a Newick-incompatible character in a real label corrupts the tree file.
 
-**Per isolate**, from the three real trees: patristic (branch-length) nearest-neighbour and
-rank-separation diagnostics — the *same* statistical shape as `sl_rank_separation`/
-`m_rank_offset` above, now computed from real phylogenetic distance instead of k-mer composition
-distance, which is the actual fix for the failure mode documented earlier in this section. A
-candidate is only called `supported_reassortment_candidate` if the rank pattern matches the
-literature's M-segment-exchange signature (S and L agree; M's neighbour differs) **and** the
-relevant M-tree clade clears `--min-bootstrap-support` (default 95) — anything below that is
-`weak_signal_low_bootstrap_support`, not a finding.
+**Per isolate**, from the three real trees: the pipeline computes patristic (branch-length)
+nearest-neighbour and rank-separation diagnostics. These have the *same* statistical shape as
+`sl_rank_separation`/`m_rank_offset` above, but now computed from real phylogenetic distance
+instead of k-mer composition distance — this is the actual fix for the failure mode the
+Reassortment section documents. The pipeline calls a candidate `supported_reassortment_candidate`
+only if two conditions both hold: the rank pattern matches the literature's M-segment-exchange
+signature (S and L agree with each other; M's neighbour differs) [3], **and** the relevant
+M-tree clade clears `--min-bootstrap-support` (default 95). Anything below that bootstrap
+threshold is `weak_signal_low_bootstrap_support`, not a finding.
 
-**Per species**, Robinson-Foulds distance (via `dendropy`) between each pair of segment trees on
-the shared taxon set — an overall measure of how much the three trees disagree, independent of
-any single isolate's placement.
+**Per species**, the pipeline computes Robinson-Foulds distance (via `dendropy`) between each pair
+of segment trees, on their shared taxon set. This is an overall measure of how much the three
+trees disagree, independent of any single isolate's placement.
 
 **Nothing is silently dropped.** Every candidate isolate appears exactly once in
-`ortho_reassortment_table.csv`, `phylo_status` one of `analyzed` / `failed` (with the specific
-MAFFT/IQ-TREE error) / `species_below_min_taxa` — a species/segment failure never aborts the run,
-it just marks that species' isolates `failed` and moves on, the same per-unit error isolation
-`transform_one_record` uses for accessions. Alignments and trees are written under
-`<output>/phylogenetics/<species>/<segment>/` for inspection or reuse.
+`ortho_reassortment_table.csv`, with `phylo_status` set to one of `analyzed`, `failed` (with the
+specific MAFFT/IQ-TREE error recorded), or `species_below_min_taxa`. A species or segment failure
+never aborts the run — it marks that species' isolates `failed` and the run continues, the same
+per-unit error isolation `transform_one_record` uses for individual accessions. The pipeline
+writes alignments and trees under `<output>/phylogenetics/<species>/<segment>/`, so you can
+inspect or reuse them.
 
 ## Species clustering
 
-Within-species single-linkage clustering on cosine distance over 3-mer profiles of the
-concatenated N+GPC proteins. Columns are named `kmer_cluster_id` and `kmer_distance_threshold`,
-deliberately **not** `ped_*`.
+The pipeline runs within-species single-linkage clustering on cosine distance, over 3-mer profiles
+of the concatenated N+GPC proteins. The output columns are named `kmer_cluster_id` and
+`kmer_distance_threshold` — deliberately not `ped_*`, for the reason below.
 
-The ICTV species criterion for Hantaviridae is DEmARC with a pairwise evolutionary distance cutoff
-of **0.1** under the WAG substitution model, which requires multiple sequence alignment and
-maximum-likelihood inference. These clusters are an alignment-free proxy and are not PED values.
-`ortho_summary.json` restates this.
+The ICTV species criterion for Hantaviridae is DEmARC, using a pairwise evolutionary distance
+(PED) cutoff of **0.1** under the WAG substitution model. This calculation needs a multiple
+sequence alignment and maximum-likelihood inference [4]. The pipeline's clusters are an
+alignment-free proxy — they are not PED values, and `ortho_summary.json` restates this.
 
 ---
 
@@ -428,17 +488,17 @@ maximum-likelihood inference. These clusters are an alignment-free proxy and are
 | `phylogenetics/<species>/<segment>/` *(Stage 2, `phylogeny.py`)* | — | MAFFT alignment + IQ-TREE outputs per species/segment, for inspection or reuse (`--phylo-scope=species`) |
 | `phylogenetics_phylogroup/<phylogroup>/<segment>/` *(Stage 2, `phylogeny.py`)* | — | Same, grouped by reservoir-host phylogroup instead of species, spanning every species that shares one (`--phylo-scope=phylogroup`) |
 
-All tables are plain CSV (UTF-8, LF line endings). `species_taxid`, `observed_taxid`, `host_taxid`
-and `year` are all-digit strings by design (they are identifiers, not quantities, and some rows
-leave them blank) — a bare `pd.read_csv(...)` will infer them as numeric and either error on the
-blank rows or silently turn them into floats. Read these columns with `dtype=str` if you need them
-back as they were written.
+All tables are plain CSV (UTF-8, LF line endings). The columns `species_taxid`, `observed_taxid`,
+`host_taxid`, and `year` are all-digit strings by design — they are identifiers, not quantities,
+and some rows leave them blank. A bare `pd.read_csv(...)` will read them as numbers and either
+error on the blank rows or silently turn them into floats. Read these columns with `dtype=str` if
+you need them back exactly as written.
 
 ### Column reference
 
-Every column in every table, grouped by file. `int()`-coded booleans (`is_lab_derived`,
-`has_complete_triplet`, etc.) are `0`/`1`; `;`-joined columns (`sra_accessions`,
-`protein_accessions`, `warning_flags`, etc.) hold zero or more values in one cell.
+Every column in every table, grouped by file. Columns coded with `int()` (`is_lab_derived`,
+`has_complete_triplet`, and similar) hold `0` or `1`. Columns joined with `;` (`sra_accessions`,
+`protein_accessions`, `warning_flags`, and similar) hold zero or more values in one cell.
 
 <details>
 <summary><code>ortho_accession_table.csv</code> — one row per GenBank accession</summary>
@@ -459,7 +519,7 @@ Every column in every table, grouped by file. `int()`-coded booleans (`is_lab_de
 <details>
 <summary><code>ortho_species_table.csv</code> — one row per canonical ICTV species (rollup)</summary>
 
-`species_name`/`species_status`; `observed_taxids`/`canonical_taxids` (every raw taxid that canonicalized to this species); `legacy_synonyms` (superseded organism labels merged in); `subfamily`/`family`/`order`; every key from `species_risk_profile` (`virus_abbrev`, `disease_syndrome`, `cfr_band`, `cfr_band_label`, `cfr_reported_range`, `reservoir_host`, `endemic_region`, `pathogenicity_class`, `risk_citation`, `reservoir_order` — see [Pathogenicity labels](#pathogenicity-labels)); `reported_reassortment` (literature summary, informational only, not computed); `accession_count`/`isolate_count`/`complete_triplet_count`; `s_count`/`m_count`/`l_count`; `distinct_hosts`/`top_host`; `human_derived_count`; `distinct_countries`/`top_country`; `year_min`/`year_max`.
+`species_name`/`species_status`; `observed_taxids`/`canonical_taxids` (every raw taxid that canonicalized to this species); `legacy_synonyms` (superseded organism labels merged in); `subfamily`/`family`/`order`; every key from `species_risk_profile` (`virus_abbrev`, `disease_syndrome`, `cfr_band`, `cfr_band_label`, `cfr_reported_range`, `reservoir_host`, `endemic_region`, `pathogenicity_class`, `risk_citation`, `reservoir_order` — see [Pathogenicity labels](#pathogenicity-labels) and [Case fatality rate (CFR)](#case-fatality-rate-cfr)); `reported_reassortment` (literature summary, informational only, not computed); `accession_count`/`isolate_count`/`complete_triplet_count`; `s_count`/`m_count`/`l_count`; `distinct_hosts`/`top_host`; `human_derived_count`; `distinct_countries`/`top_country`; `year_min`/`year_max`.
 </details>
 
 <details>
@@ -483,7 +543,7 @@ Every column in every table, grouped by file. `int()`-coded booleans (`is_lab_de
 <details>
 <summary><code>ortho_risk_table.csv</code> — one row per isolate, surveillance triage ranking (sorted by score, descending)</summary>
 
-**Risk profile** — `isolate_key`/`species_name`/`virus_abbrev`/`pathogenicity_class`/`disease_syndrome`; `cfr_band`/`cfr_band_label`/`cfr_reported_range` (see [Pathogenicity labels](#pathogenicity-labels)); `reservoir_host`/`endemic_region`/`risk_citation`.
+**Risk profile** — `isolate_key`/`species_name`/`virus_abbrev`/`pathogenicity_class`/`disease_syndrome`; `cfr_band`/`cfr_band_label`/`cfr_reported_range` (see [Case fatality rate (CFR)](#case-fatality-rate-cfr)); `reservoir_host`/`endemic_region`/`risk_citation`.
 
 **This isolate** — `host_role`/`host_order`/`expected_reservoir_order`/`host_jump_status`/`observed_host`; `country`/`year`; `triplet_status`/`has_complete_triplet`/`has_nss_orf`; `reassortment_status` (k-mer diagnostic, informational); `taxonomic_incongruence`/`cross_species_partners`; `phylo_reassortment_call` (from Stage 2, empty string if that stage wasn't run or didn't reach this isolate).
 
@@ -493,7 +553,7 @@ Every column in every table, grouped by file. `int()`-coded booleans (`is_lab_de
 <details>
 <summary><code>ortho_ml_feature_matrix.csv</code> — one row per ML-usable isolate (k-mer feature matrix + labels)</summary>
 
-Usable = has a concatenated S+M protein and is not `is_vaccine_strain` (`is_lab_derived` isolates are *kept*, flagged — see [Host classification](#host-classification)).
+An isolate is usable if it has a concatenated S+M protein and `is_vaccine_strain` is false. The pipeline keeps `is_lab_derived` isolates in this table, flagged — see [Host classification](#host-classification).
 
 **Identity / grouping** — `isolate_key`, `group_id` (= `species_name`, split your CV on this), `kmer_cluster_id`, `year`, `species_name`/`species_taxid`, `host_name`/`host_taxid`/`host_order`/`host_role`, `country`.
 
@@ -509,7 +569,7 @@ Usable = has a concatenated S+M protein and is not `is_vaccine_strain` (`is_lab_
 <details>
 <summary><code>ortho_ml_sequence_table.csv</code> — one row per qualifying isolate, raw S/M/L sequences for sequence-based ML</summary>
 
-Built by `build_ml_sequence_rows`. Row filter (all three, isolate-level): `has_complete_triplet` (coding-complete S **and** M **and** L), **and not** `is_lab_derived`, **and not** `is_vaccine_strain` — stricter than `ortho_ml_feature_matrix.csv`, which keeps `is_lab_derived` isolates flagged rather than filtered; a raw sequence fed to a model as "wild-type" input is exactly the case passage history would mislead, unlike a k-mer composition feature. An isolate is also silently dropped if its genomic FASTA sequence is missing for a segment despite being coding-complete (logged as a count, not per-row).
+The function `build_ml_sequence_rows` builds this table. Row filter (all three conditions, at the isolate level): `has_complete_triplet` (coding-complete S **and** M **and** L); **and not** `is_lab_derived`; **and not** `is_vaccine_strain`. This filter is stricter than `ortho_ml_feature_matrix.csv`'s filter, which keeps `is_lab_derived` isolates and only flags them. A raw sequence fed to a model as "wild-type" input is exactly the case a passage history would mislead — unlike a k-mer composition feature, where that risk is smaller. The pipeline also silently drops an isolate if its genomic FASTA sequence is missing for a segment despite that segment being coding-complete (logged as a count, not per-row).
 
 **How 15,991 accessions become 206 rows**, on this package:
 
@@ -522,12 +582,12 @@ Built by `build_ml_sequence_rows`. Row filter (all three, isolate-level): `has_c
 | 5 | Minus vaccine-strain isolates | `is_vaccine_strain` | 206 | −0 in this package (none of the 223 complete triplets are vaccine strains) |
 | 6 | Minus missing genomic FASTA sequence | `genomic_index` lookup | **206** | −0 in this package (every remaining isolate's S/M/L genomic sequence was present in `genomic.fna`) |
 
-Step 3 is where almost all of the reduction happens — **not** the lab/vaccine filter (steps 4–5), which only removes 17 isolates on top. Most reconstructed isolates simply never had all three segments sequenced at all (see [Isolate grouping](#isolate-grouping): only 1,795 of 9,852 isolates have all three segments present at *any* completeness, before the coding-complete requirement even applies). Host *species* (human vs. reservoir animal) is never a filter at any step — see the row counts by `host_role` in the table itself for the actual mix.
+Step 3 removes almost all of the 15,991 starting accessions — not the lab/vaccine filter in steps 4–5, which only removes 17 isolates on top. Most reconstructed isolates simply never had all three segments sequenced at all (see [Isolate grouping](#isolate-grouping): only 1,795 of 9,852 isolates have all three segments present at *any* completeness, before the coding-complete requirement even applies). Host species (human vs. reservoir animal) is never a filter at any step — see the row counts by `host_role` in the table itself for the actual mix.
 
-- `species_name` — the isolate's canonical ICTV species (`isolate.species_name`, see [Taxonomy resolution](#taxonomy-resolution)). Never blank — every isolate in this table came through species resolution before grouping. This is also what disambiguates `isolate_name`, see below.
-- `isolate_name` — `isolate.isolate`, falling back to `isolate.strain`, falling back to `isolate_key` if both are blank. Note this is the **submitter-provided label verbatim** — it can be a bare number like `"3"` or `"136"` when that's literally what was submitted to NCBI (`isolate.name`/`source` in `data_report.jsonl`); it is not unique across species (two different species can each have an isolate named `"3"`), only unique in combination with `species_name`.
-- `s_sequence`/`m_sequence`/`l_sequence` — full genomic segment sequence (not the CDS-only sequence Stage 2 uses), straight from the genomic FASTA, keyed by `s_accession`/`m_accession`/`l_accession`.
-- `cfr_reported_range` — `species_risk_profile(species_name)["cfr_reported_range"]`, the literature CFR range string (e.g. `"0.1-0.4%"`), verbatim, not the ordinal `cfr_band`.
+- `species_name` — the isolate's canonical ICTV species (`isolate.species_name`, see [Taxonomy resolution](#taxonomy-resolution)). Never blank — every isolate in this table already went through species resolution before grouping. This field is also what disambiguates `isolate_name`, below.
+- `isolate_name` — `isolate.isolate`, falling back to `isolate.strain`, falling back to `isolate_key` if both are blank. This is the **submitter-provided label, written exactly as submitted** — it can be a bare number like `"3"` or `"136"` when that is literally what was submitted to NCBI (`isolate.name`/`source` in `data_report.jsonl`). It is not unique across species — two different species can each have an isolate named `"3"` — it is only unique in combination with `species_name`.
+- `s_sequence`/`m_sequence`/`l_sequence` — the full genomic segment sequence (not the CDS-only sequence Stage 2 uses), taken directly from the genomic FASTA, keyed by `s_accession`/`m_accession`/`l_accession`.
+- `cfr_reported_range` — `species_risk_profile(species_name)["cfr_reported_range"]`, the literature CFR range string (for example, `"0.1-0.4%"`), written exactly as stored, not the ordinal `cfr_band`.
 </details>
 
 <details>
@@ -557,13 +617,13 @@ Top-level sections: `pipeline_version`/`generated_at_utc`/`dataset_catalog_api_v
 <details>
 <summary><code>ortho_reassortment_table.csv</code> — Stage 2 only, one row per candidate isolate per requested scope</summary>
 
-Every field is always present (even for a not-yet-analyzed or failed row) so the table has one stable, joinable schema — see `_phylo_row`'s docstring. Full methodology in [Stage 2 in detail](#stage-2-in-detail-the-rigorous-reassortment-detection).
+Every field is always present, even for a not-yet-analyzed or failed row, so the table keeps one stable, joinable schema — see `_phylo_row`'s docstring. Full methodology in [Phylogeny](#phylogeny).
 
 **Identity / selection** — `isolate_key`/`species_name` (the isolate's true species, never the phylogroup label); `candidate_tags` (why it was selected: `human_affecting_or_likely` / `divergence_candidate` / `complete_triplet`, can be more than one); `analysis_scope` (`species` or `phylogroup` — a candidate can appear once per scope under `--phylo-scope=both`, the default); `phylogroup_assignment_basis` (`curated_reservoir` or `observed_host_order`, only meaningful at `analysis_scope == phylogroup`).
 
 **Tree status** — `n_taxa_in_species_tree` (taxa in *this row's* tree, despite the name — imprecise for phylogroup-scope rows on purpose, see the code comment); `phylo_status` (`analyzed` / `failed` / `species_below_min_taxa`); `phylo_error`.
 
-**Per-isolate tree diagnostics** (real phylogenetic distance, the same statistical shape as the k-mer diagnostics but the actual fix for their failure mode) — `tree_s_nearest_isolate`/`tree_m_nearest_isolate`/`tree_l_nearest_isolate`; `tree_s_distance`/`tree_m_distance`/`tree_l_distance` (patristic/branch-length); `tree_s_rank_offset`/`tree_m_rank_offset`/`tree_l_rank_offset`; `tree_sm_rank_separation`/`tree_sl_rank_separation`/`tree_ml_rank_separation`; `discordant_segment`; `matches_canonical_m_exchange` (S and L agree, M's neighbour differs — the literature's M-exchange signature).
+**Per-isolate tree diagnostics** (real phylogenetic distance — same statistical shape as the k-mer diagnostics, but the actual fix for their failure mode) — `tree_s_nearest_isolate`/`tree_m_nearest_isolate`/`tree_l_nearest_isolate`; `tree_s_distance`/`tree_m_distance`/`tree_l_distance` (patristic/branch-length); `tree_s_rank_offset`/`tree_m_rank_offset`/`tree_l_rank_offset`; `tree_sm_rank_separation`/`tree_sl_rank_separation`/`tree_ml_rank_separation`; `discordant_segment`; `matches_canonical_m_exchange` (S and L agree, M's neighbour differs — the literature's M-exchange signature [3]).
 
 **Bootstrap gate & call** — `m_clade_bootstrap_support`/`discordant_clade_bootstrap_support` (`None`, not `0.0`, when no discordant clade exists to measure — a real 0% support must stay distinguishable from "not applicable"); `bootstrap_support_source` (`mrca` / `nearest_supported_ancestor` / `unsupported_root`, empty for not-yet-analyzed/`no_conflict` rows); `reassortment_call` (`not_analyzed` / `no_conflict` / `weak_signal_low_bootstrap_support` / `supported_reassortment_candidate` — **only** the last one contributes to `priority_reassortment_term` in `ortho_risk_table.csv`).
 
@@ -572,8 +632,8 @@ Every field is always present (even for a not-yet-analyzed or failed row) so the
 
 ### Risk score
 
-`surveillance_priority_score` is a transparent sum, with every term emitted as its own column so
-it can be audited or re-weighted:
+`surveillance_priority_score` is a transparent sum. Each term is emitted as its own column, so
+you can audit or re-weight it:
 
 | Term | Weight |
 |---|---|
@@ -584,56 +644,66 @@ it can be audited or re-weighted:
 | `priority_triplet_term` | 1.0 if coding-complete triplet |
 | `priority_nss_term` | 0.5 if an NSs ORF is annotated |
 
-This is a triage aid for surveillance, not a validated epidemiological risk model. No term derives
-from the k-mer divergence diagnostics — weighting a withdrawn classifier would have propagated an
-artefact of sample size into a ranking meant to guide surveillance. `reassortment_call` from
-Stage 2 is likewise **not yet wired into this score** — it lives in a separate,
-opt-in output table so the default risk table's schema and values stay unchanged whether or not
-Stage 2 was run. Join on `isolate_key` to combine them for your own weighting.
+This score is a triage aid for surveillance. It is not a validated epidemiological risk model. No
+term derives from the k-mer divergence diagnostics — weighting a withdrawn classifier would have
+put an artefact of sample size into a ranking meant to guide surveillance. `reassortment_call`
+from Stage 2 is likewise **not yet wired into this score** — it lives in a separate, opt-in output
+table, so the default risk table's schema and values stay the same whether or not Stage 2 ran.
+Join on `isolate_key` to combine them under your own weighting.
 
 ### Using the ML tables
 
-Features are emitted **raw**. Fit scaling inside your cross-validation fold using
-`ortho_feature_scaling.json`; the statistics there were computed on the full table and must not be
-applied before splitting. Feature selection is unsupervised (top-variance k-mers).
+The pipeline emits features **raw**. Fit scaling inside your own cross-validation fold, using
+`ortho_feature_scaling.json` — the statistics in that file were computed on the full table, and
+you must not apply them before splitting. Feature selection is unsupervised (top-variance k-mers).
 
 **Split by `group_id` (species) or by `year`.** A random split badly overstates accuracy on this
-data, because segments from the same outbreak are near-identical.
+data, because segments from the same outbreak are near-identical to each other.
 
 ---
 
 ## Known limitations
 
-- **No reassortment calls by default.** See above; run Stage 2 for the real
-  MAFFT + IQ-TREE analysis. Even then, it only covers the three named candidate groups with full
-  S+M+L CDS available (1,464 of 15,991 accessions' worth of isolates in this package) — not every
-  isolate, and species below `--phylo-min-taxa` are reported but not analyzed.
-- **Stage 2 (`phylogeny.py`) calls are a single ML tree search per segment, bootstrap-gated, not a formal
-  incongruence test** (e.g. no SH-test/AU-test on constrained topologies). `supported_reassortment_
-  candidate` means the rank pattern and bootstrap support are consistent with reassortment, not a
-  statistically tested certainty.
-- **k-mer distances are not PED.** The ICTV 0.1 cutoff needs aligned sequences and ML inference —
-  Stage 2 builds real per-segment ML trees but does not compute a DEmARC-style
-  concatenated-PED value; it is aimed at the reassortment question, not species re-demarcation.
-- **223 coding-complete triplets** is a ceiling set by the data (1,339 COMPLETE records total),
-  not by the pipeline. 1,795 groups have all three segments present at some completeness.
+- **No reassortment calls by default.** See [Reassortment](#reassortment) above; run Stage 2 for
+  the real MAFFT + IQ-TREE analysis. Even then, Stage 2 only covers the three named candidate
+  groups with full S+M+L CDS available (1,464 of 15,991 accessions' worth of isolates in this
+  package) — not every isolate. Species below `--phylo-min-taxa` are reported but not analyzed.
+- **Stage 2's calls are a single ML tree search per segment, bootstrap-gated, not a formal
+  incongruence test** (for example, no SH-test or AU-test on constrained topologies). A
+  `supported_reassortment_candidate` call means the rank pattern and bootstrap support are
+  consistent with reassortment — it is not a statistically tested certainty.
+- **The k-mer distances are not PED.** The ICTV 0.1 cutoff needs aligned sequences and
+  maximum-likelihood inference. Stage 2 builds real per-segment ML trees, but it does not compute
+  a DEmARC-style concatenated-PED value — it targets the reassortment question, not species
+  re-demarcation.
+- **223 coding-complete triplets is a ceiling set by the data** (1,339 COMPLETE records total),
+  not by the pipeline. 1,795 groups have all three segments present at some completeness level.
 - **2,386 records are `unclassified Orthohantavirus` or genus-only** and carry no species-level
-  risk label. They are retained, not discarded.
-- **CFR bands are literature ranges, not computed from this data.** Sources conflict; both values
-  are recorded where they do.
-- **1,719 records have no host** and 3,703 have no collection date.
-- Grouping tiers 4 and 5 rarely fire, because `strain` is only populated from BioSample.
-- Only the first BioSample accession in a record is resolved.
+  risk label. The pipeline retains them; it does not discard them.
+- **CFR bands are literature ranges, not values computed from this data.** Sources conflict; the
+  pipeline records both values where they do.
+- **1,719 records have no host**, and 3,703 have no collection date.
+- Grouping tiers 4 and 5 rarely fire, because the `strain` field is only populated from BioSample.
+- The pipeline resolves only the first BioSample accession in a record.
 
 ## Citations
 
-- ICTV *Hantaviridae* / *Orthohantavirus* — species demarcation, segment sizes:
-  <https://ictv.global/report/chapter/hantaviridae/hantaviridae/mammantavirinae/orthohantavirus>
-- Zoonotic Hantaviridae with global public health significance — pathogenicity, CFR, reservoirs:
-  <https://pmc.ncbi.nlm.nih.gov/articles/PMC10459939/>
-- Reassortment events in the evolution of hantaviruses — frequencies, segment constraints:
-  <https://pmc.ncbi.nlm.nih.gov/articles/PMC6153690/>
-- ECDC factsheet on orthohantavirus infections:
-  <https://www.ecdc.europa.eu/en/infectious-disease-topics/hantavirus-infection/factsheet-orthohantavirus-infections>
-- NCBI Datasets virus data report schema:
-  <https://www.ncbi.nlm.nih.gov/datasets/docs/v2/reference-docs/data-reports/virus/>
+1. ICTV. Genus: *Orthohantavirus*. International Committee on Taxonomy of Viruses.
+   <https://ictv.global/report/chapter/hantaviridae/hantaviridae/mammantavirinae/orthohantavirus>
+2. Chen R-X, Gong H-Y, Wang X, Sun M-H, Ji Y-F, Tan S-M, Chen J-M, Shao J-W, Liao M (2023).
+   Zoonotic *Hantaviridae* with Global Public Health Significance. *Viruses* 15(8):1705.
+   DOI: [10.3390/v15081705](https://doi.org/10.3390/v15081705)
+3. Klempa B (2018). Reassortment events in the evolution of hantaviruses. *Virus Genes*
+   54(5):638–646. DOI: [10.1007/s11262-018-1590-z](https://doi.org/10.1007/s11262-018-1590-z)
+4. Laenen L, Vergote V, Calisher CH, Klempa B, Klingström J, Kuhn JH, Maes P (2019). *Hantaviridae*:
+   Current Classification and Future Perspectives. *Viruses* 11(9):788.
+   DOI: [10.3390/v11090788](https://doi.org/10.3390/v11090788)
+5. Rivero R, Simons D, Damodaran L, Karegi I, Gurev S, Becker DJ, Warren DL, Müller NF, Rasmussen DA,
+   Seifert SN (2026). Molecular and ecological determinants of effective reassortment in
+   orthohantaviruses. *bioRxiv* preprint.
+   DOI: [10.64898/2026.06.10.731004](https://doi.org/10.64898/2026.06.10.731004)
+6. European Centre for Disease Prevention and Control. Hantavirus infections factsheet.
+   <https://www.ecdc.europa.eu/en/infectious-disease-topics/hantavirus-infection/factsheet-orthohantavirus-infections>
+7. NCBI. Datasets virus data report schema (technical reference for the input package this
+   pipeline reads, not a biological claim).
+   <https://www.ncbi.nlm.nih.gov/datasets/docs/v2/reference-docs/data-reports/virus/>
