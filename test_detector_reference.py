@@ -2,7 +2,7 @@
 import unittest
 
 import all_hanta as ah
-import detector_reference as dr
+import reassortment_detector as dr
 
 
 def _make_isolate(key, species, s_protein, m_protein, l_protein):

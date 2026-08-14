@@ -6,9 +6,9 @@ import unittest
 from pathlib import Path
 
 import all_hanta as ah
-import detector_gates as dg
-import detector_reference as dr
-import reassortment_reference_data as rd
+import reassortment_detector as dg
+import reassortment_detector as dr
+import reassortment_detector as rd
 
 
 class LongestOrfProteinTest(unittest.TestCase):

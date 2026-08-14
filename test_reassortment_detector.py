@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import detector_gates as dg
-import detector_reference as dr
+import reassortment_detector as dg
+import reassortment_detector as dr
 import reassortment_detector as rdet
 
 

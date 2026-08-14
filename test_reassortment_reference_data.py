@@ -1,6 +1,6 @@
 # test_reassortment_reference_data.py
 import unittest
-import reassortment_reference_data as rd
+import reassortment_detector as rd
 
 
 class StructuralAnchorDataTest(unittest.TestCase):
