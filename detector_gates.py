@@ -8,6 +8,7 @@ framework this implements.
 import argparse
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -126,6 +127,16 @@ class Gate0Result:
     best_kmer_identity: float = 0.0
 
 
+@lru_cache(maxsize=None)
+def _cached_reference_kmer_profile(protein: str) -> Dict[str, int]:
+    """Memoized ah.kmer_profile for REFERENCE proteins only -- the reference set is
+    identical across every candidate scored in one run (unlike the candidate's own
+    protein, which changes every call and gains nothing from caching). Safe to cache a
+    shared dict here: profiles_to_matrix only reads its inputs, never mutates them.
+    """
+    return ah.kmer_profile(protein)
+
+
 def _kmer_identity_to_reference(protein: str, reference_profiles: List[Tuple[str, str]]) -> float:
     """1 - minimum cosine distance from `protein` to any reference isolate's protein for
     this segment. Computes only the candidate's own row (not a full NxN pairwise
@@ -138,7 +149,7 @@ def _kmer_identity_to_reference(protein: str, reference_profiles: List[Tuple[str
         return 0.0
     best_identity = 0.0
     for _species, ref_protein in reference_profiles:
-        ref_profile = ah.kmer_profile(ref_protein)
+        ref_profile = _cached_reference_kmer_profile(ref_protein)
         matrix, _vocab = ah.profiles_to_matrix([candidate_profile, ref_profile])
         distance = ah.cosine_distance_matrix(matrix)[0, 1]
         identity = 1.0 - float(distance)

@@ -7,6 +7,7 @@ session -- see docs/superpowers/specs/2026-08-12-reassortment-detector-design.md
 that found PUUV's own accession does NOT match Tscherne et al. 2025's literal integers.
 """
 
+from functools import lru_cache
 from typing import Any, Dict, FrozenSet, Tuple
 
 from Bio.Align import PairwiseAligner, substitution_matrices
@@ -131,12 +132,23 @@ _ALIGNER.open_gap_score = -10
 _ALIGNER.extend_gap_score = -0.5
 
 
+@lru_cache(maxsize=None)
+def _cached_aligned_pair(reference_sequence: str, candidate_protein: str) -> Tuple[str, str]:
+    """Memoized global alignment of one (reference_sequence, candidate_protein) pair,
+    returning just the two aligned strings. Callers checking several residue positions
+    for the same pair (gate2_track_a checks up to 5 positions per species, gate2_track_b
+    checks one per marker) previously re-ran this full alignment once per position --
+    the alignment itself doesn't depend on which position is being looked up.
+    """
+    alignment = _ALIGNER.align(reference_sequence, candidate_protein)[0]
+    return str(alignment[0]), str(alignment[1])
+
+
 def find_aligned_residue(
     candidate_protein: str, reference_sequence: str, reference_position_1based: int,
 ) -> Tuple[str, bool]:
-    """Globally align candidate_protein to reference_sequence and map
-    reference_position_1based (1-based, into reference_sequence) to the aligned residue
-    in candidate_protein.
+    """Map reference_position_1based (1-based, into reference_sequence) to the aligned
+    residue in candidate_protein, via a global alignment of the two sequences.
 
     Returns (residue, aligned) -- residue is '' and aligned is False if the reference
     position falls on a gap in the candidate, or either sequence is too short/empty to
@@ -147,8 +159,7 @@ def find_aligned_residue(
     if not (1 <= reference_position_1based <= len(reference_sequence)):
         return "", False
 
-    alignment = _ALIGNER.align(reference_sequence, candidate_protein)[0]
-    ref_aligned, cand_aligned = alignment[0], alignment[1]
+    ref_aligned, cand_aligned = _cached_aligned_pair(reference_sequence, candidate_protein)
 
     ref_index = 0  # 0-based index into reference_sequence, i.e. reference_position_1based - 1
     for ref_char, cand_char in zip(ref_aligned, cand_aligned):
