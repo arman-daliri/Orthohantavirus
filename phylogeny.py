@@ -690,6 +690,22 @@ def _resolve_outgroup_label(label_map: Dict[str, "PhyloCandidate"], outgroup: st
     return None
 
 
+def normalized_rf(raw_rf: int, n_taxa: int) -> float:
+    """raw_rf as a fraction of the maximum possible Robinson-Foulds distance for n_taxa,
+    clamped to at most 1.0.
+
+    2*(n-3) is the maximum RF distance between two STRICTLY BIFURCATING unrooted trees
+    on n taxa. IQ-TREE can emit a multifurcating tree on ties/polytomies -- a real,
+    non-error output on some data, not a crash -- and the raw RF distance between a
+    multifurcating tree and a fully-resolved one can then exceed this bound. Clamped
+    here rather than left to silently read as "more disagreement than two trees can
+    possibly have"; the raw, un-normalized species_rf_*_vs_* column still carries the
+    true value regardless.
+    """
+    max_rf = 2 * (n_taxa - 3) if n_taxa > 3 else 1
+    return min(1.0, raw_rf / max_rf) if max_rf else 0.0
+
+
 def _analyze_group(
     group_key: str, scope: str, members: Sequence[PhyloCandidate], group_dir_root: Path, output_dir: Path,
     args: argparse.Namespace, mafft_bin: str, iqtree_bin: str,
@@ -755,12 +771,11 @@ def _analyze_group(
         }
         for dtree in dendro_trees.values():
             dtree.encode_bipartitions()
-        max_rf = 2 * (len(labels) - 3) if len(labels) > 3 else 1
         rf: Dict[str, Any] = {}
         for a, b in (("s", "m"), ("m", "l"), ("s", "l")):
             raw = treecompare.symmetric_difference(dendro_trees[a.upper()], dendro_trees[b.upper()])
             rf[f"species_rf_{a}_vs_{b}"] = raw
-            rf[f"species_rf_{a}_vs_{b}_normalized"] = raw / max_rf if max_rf else 0.0
+            rf[f"species_rf_{a}_vs_{b}_normalized"] = normalized_rf(raw, len(labels))
 
         rows: List[Dict[str, Any]] = []
         for label, candidate in label_map.items():

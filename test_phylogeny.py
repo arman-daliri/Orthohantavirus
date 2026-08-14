@@ -112,6 +112,27 @@ class ClassifyReassortmentCallTest(unittest.TestCase):
         self.assertEqual(discordant_clade_bootstrap_support, 99.0)
 
 
+class NormalizedRfTest(unittest.TestCase):
+    """2*(n-3) is only the max RF distance for strictly bifurcating trees; IQ-TREE can
+    emit multifurcating trees on real (non-error) polytomous data, so the raw RF
+    distance can exceed that bound. normalized_rf must clamp to 1.0 in that case rather
+    than silently returning a ratio above 1.0.
+    """
+
+    def test_typical_case_within_bound(self):
+        self.assertAlmostEqual(ph.normalized_rf(2, 8), 0.2)
+
+    def test_exactly_at_the_bifurcating_maximum(self):
+        self.assertEqual(ph.normalized_rf(10, 8), 1.0)  # max_rf = 2*(8-3) = 10
+
+    def test_raw_rf_exceeding_bifurcating_maximum_is_clamped_not_left_above_one(self):
+        self.assertEqual(ph.normalized_rf(14, 8), 1.0)  # would be 1.4 unclamped
+
+    def test_small_n_below_bifurcating_formula_uses_floor_of_one(self):
+        self.assertEqual(ph.normalized_rf(0, 3), 0.0)
+        self.assertEqual(ph.normalized_rf(1, 3), 1.0)
+
+
 @unittest.skipUnless(_HAVE_PHYLO_DEPS, "biopython not installed")
 class BootstrapSupportRootFallbackTest(unittest.TestCase):
     """Task 6 fix 1: when a pair's MRCA is the tree's root (unsupported by construction --
