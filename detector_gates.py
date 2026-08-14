@@ -599,9 +599,18 @@ def gate4_check(
         phylo_outgroup=None, bootstrap=bootstrap, min_bootstrap_support=min_bootstrap_support,
         phylo_seed=phylo_seed, phylo_threads=phylo_threads,
     )
+    # build_comparator_members unions isolates from every implicated species, not one --
+    # so this is a "species" tree only when exactly one species is implicated. With two
+    # or more, it's the same multi-species situation phylogeny.py's own docstrings call
+    # "phylogroup" scope (group_key names a group, not any one member's real species;
+    # see _analyze_group's docstring and group_candidates's). Mislabeling a multi-species
+    # tree "species" would mean a downstream reader of analysis_scope=='species' wrongly
+    # assumes every member shares one species, when the "+"-joined group_key already
+    # signals otherwise.
+    scope = "species" if len(implicated_species) == 1 else "phylogroup"
     group_dir_root = output_dir / "candidate_phylogenetics" / candidate.candidate_id
     rows = ph._analyze_group(
-        "+".join(sorted(implicated_species)), "species", members, group_dir_root, output_dir,
+        "+".join(sorted(implicated_species)), scope, members, group_dir_root, output_dir,
         args, mafft_bin, iqtree_bin,
     )
     candidate_row = next(r for r in rows if r["isolate_key"] == candidate_isolate.isolate_key)
