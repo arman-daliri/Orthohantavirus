@@ -160,12 +160,23 @@ SEGMENT_PRIMARY_PRODUCT = {"S": "N", "M": "GPC", "L": "RdRp"}
 # --------------------------------------------------------------------------------------
 # Pathogenicity reference table
 # --------------------------------------------------------------------------------------
-# Every entry carries its source. Species absent from this table are labelled "unknown"
-# and are NEVER silently treated as non-pathogenic.
+# Every entry is a hand-curated literature lookup, not a computed value -- there is no
+# formula for CFR anywhere in this pipeline. Species absent from this table are labelled
+# "unknown" and are NEVER silently treated as non-pathogenic.
 #
 # CFR figures genuinely conflict between sources (HTNV is reported both as ~1% and as
 # 5-15%), so the reported range is stored verbatim alongside an ordinal band used for
 # modelling. Do not collapse these to a point estimate.
+#
+# "citation" is CIT_ZOONOTIC (Chen et al. 2023, 10.3390/v15081705) for every entry. That
+# paper is verified to individually support the CFR/transmission figures for the
+# well-studied HFRS/HCPS-causing species below (HTNV, DOBV, SEOV, PUUV, ANDV, SNV, TULV).
+# It is NOT individually verified for every entry that cites it -- DOBV's genotype
+# breakdown, CHOV/LANV's 12-15% figure, and every "no confirmed human disease" entry for
+# the shrew/mole-borne species are curator judgment calls based on the absence of case
+# reports in the literature, not a specific study of that exact virus. Treat this table's
+# "citation" field as "the general reference this classification scheme follows", not as
+# "this paper individually studied this species" for every one of the 38 rows.
 
 CIT_ZOONOTIC = "https://pmc.ncbi.nlm.nih.gov/articles/PMC10459939/"
 CIT_ECDC = "https://www.ecdc.europa.eu/en/infectious-disease-topics/hantavirus-infection/factsheet-orthohantavirus-infections"
@@ -251,31 +262,31 @@ SPECIES_RISK: Dict[str, Dict[str, Any]] = {
         "region": "China", "citation": CIT_ZOONOTIC},
     "Orthohantavirus jejuense": {
         "abbrev": "JJUV", "syndrome": "none_known", "cfr_band": 0,
-        "cfr_reported": "shrew-borne; regarded as non-pathogenic", "reservoir": "Crocidura shantungensis",
+        "cfr_reported": "shrew-borne; no confirmed human disease", "reservoir": "Crocidura shantungensis",
         "region": "South Korea", "citation": CIT_ZOONOTIC},
     "Orthohantavirus caobangense": {
         "abbrev": "CBNV", "syndrome": "none_known", "cfr_band": 0,
-        "cfr_reported": "shrew-borne; regarded as non-pathogenic", "reservoir": "Anourosorex squamipes",
+        "cfr_reported": "shrew-borne; no confirmed human disease", "reservoir": "Anourosorex squamipes",
         "region": "Vietnam, China", "citation": CIT_ZOONOTIC},
     "Orthohantavirus brugesense": {
         "abbrev": "BRGV", "syndrome": "none_known", "cfr_band": 0,
-        "cfr_reported": "mole-borne; regarded as non-pathogenic", "reservoir": "Talpa europaea",
+        "cfr_reported": "mole-borne; no confirmed human disease", "reservoir": "Talpa europaea",
         "region": "Europe", "citation": CIT_ZOONOTIC},
     "Orthohantavirus asamaense": {
         "abbrev": "ASAV", "syndrome": "none_known", "cfr_band": 0,
-        "cfr_reported": "mole-borne; regarded as non-pathogenic", "reservoir": "Urotrichus talpoides",
+        "cfr_reported": "mole-borne; no confirmed human disease", "reservoir": "Urotrichus talpoides",
         "region": "Japan", "citation": CIT_ZOONOTIC},
     "Orthohantavirus rockportense": {
         "abbrev": "RKPV", "syndrome": "none_known", "cfr_band": 0,
-        "cfr_reported": "mole-borne; regarded as non-pathogenic", "reservoir": "Scalopus aquaticus",
+        "cfr_reported": "mole-borne; no confirmed human disease", "reservoir": "Scalopus aquaticus",
         "region": "USA", "citation": CIT_ZOONOTIC},
     "Orthohantavirus artybashense": {
         "abbrev": "ARTV", "syndrome": "none_known", "cfr_band": 0,
-        "cfr_reported": "shrew-borne; regarded as non-pathogenic", "reservoir": "Sorex spp.",
+        "cfr_reported": "shrew-borne; no confirmed human disease", "reservoir": "Sorex spp.",
         "region": "Russia", "citation": CIT_ZOONOTIC},
     "Orthohantavirus kenkemeense": {
         "abbrev": "KKMV", "syndrome": "none_known", "cfr_band": 0,
-        "cfr_reported": "shrew-borne; regarded as non-pathogenic", "reservoir": "Sorex roboratus",
+        "cfr_reported": "shrew-borne; no confirmed human disease", "reservoir": "Sorex roboratus",
         "region": "Russia", "citation": CIT_ZOONOTIC},
     "Orthohantavirus luxiense": {
         "abbrev": "LUXV", "syndrome": "none_known", "cfr_band": 0,
@@ -319,7 +330,7 @@ SPECIES_RISK: Dict[str, Dict[str, Any]] = {
         "reservoir": "Sigmodon hispidus", "region": "USA", "citation": CIT_ZOONOTIC},
     "Orthohantavirus boweense": {
         "abbrev": "BOWV", "syndrome": "none_known", "cfr_band": 0,
-        "cfr_reported": "shrew-borne; regarded as non-pathogenic", "reservoir": "Crocidura spp.",
+        "cfr_reported": "shrew-borne; no confirmed human disease", "reservoir": "Crocidura spp.",
         "region": "Africa", "citation": CIT_ZOONOTIC},
     "Orthohantavirus tigrayense": {
         "abbrev": "TIGV", "syndrome": "none_known", "cfr_band": 0,
@@ -327,7 +338,7 @@ SPECIES_RISK: Dict[str, Dict[str, Any]] = {
         "region": "Ethiopia", "citation": CIT_ZOONOTIC},
     "Orthohantavirus wufangense": {
         "abbrev": "WFSV", "syndrome": "none_known", "cfr_band": 0,
-        "cfr_reported": "shrew-borne; regarded as non-pathogenic", "reservoir": "Soriculus spp.",
+        "cfr_reported": "shrew-borne; no confirmed human disease", "reservoir": "Soriculus spp.",
         "region": "China", "citation": CIT_ZOONOTIC},
 }
 
@@ -439,10 +450,12 @@ PHYLOGROUP: Dict[str, str] = {
 }
 
 # Single source of truth for the mammalian orders this dataset contains: the host role
-# each implies, and the baseline human-risk prior. Shrew (Eulipotyphla), mole and bat
-# borne hantaviruses are regarded as non-pathogenic to humans (PMC10459939).
-# 'Soricomorpha' and 'Insectivora' are superseded names for Eulipotyphla that still
-# appear in older NCBI lineages.
+# each implies, and the baseline human-risk prior. No shrew (Eulipotyphla), mole or bat
+# borne orthohantavirus has a confirmed human disease association (Chen et al. 2023,
+# 10.3390/v15081705). That is an absence-of-evidence statement, not a "proven safe"
+# claim -- see SPECIES_RISK's header comment for what this pipeline does and does not
+# assert about these species. 'Soricomorpha' and 'Insectivora' are superseded names for
+# Eulipotyphla that still appear in older NCBI lineages.
 HOST_ORDER_ROLE = {
     "Rodentia": "reservoir_rodent",
     "Eulipotyphla": "reservoir_shrew_mole",
