@@ -2415,33 +2415,6 @@ def build_isolate_rows(isolates: Sequence[IsolateRecord],
     return rows
 
 
-def build_segment_divergence_rows(profiles: Sequence[SegmentDivergenceProfile]) -> List[Dict[str, Any]]:
-    return [{
-        "isolate_key": profile.isolate_key,
-        "species_name": profile.species_name,
-        "assessable": int(profile.assessable),
-        "not_assessable_reason": profile.reason,
-        "reassortment_status": profile.reassortment_status,
-        "taxonomic_incongruence": int(profile.taxonomic_incongruence),
-        "sl_rank_separation": profile.sl_rank_separation,
-        "m_rank_offset": profile.m_rank_offset,
-        "s_nearest_neighbour": profile.s_neighbour,
-        "m_nearest_neighbour": profile.m_neighbour,
-        "l_nearest_neighbour": profile.l_neighbour,
-        "s_kmer_distance": profile.s_distance,
-        "m_kmer_distance": profile.m_distance,
-        "l_kmer_distance": profile.l_distance,
-        "reported_species_prior": profile.reported_species_prior,
-        "distance_metric": "cosine distance on 3-mer amino-acid profiles (alignment-free; NOT ICTV PED)",
-        "interpretation_warning": "These are divergence diagnostics, NOT reassortment calls. "
-                                 "A classifier built on them failed validation against the "
-                                 "literature (inverted PUUV vs ANDV ranking) because the metric "
-                                 "tracks within-species diversity and sample size rather than "
-                                 "tree topology. Confirm any candidate with aligned per-segment "
-                                 "phylogenies (MAFFT + IQ-TREE) before drawing conclusions.",
-    } for profile in profiles]
-
-
 def build_risk_rows(
     isolates: Sequence[IsolateRecord],
     divergence: Dict[str, SegmentDivergenceProfile],
@@ -2720,36 +2693,6 @@ def build_ml_tables(
         ),
     }
     return rows, scaling
-
-
-def build_ml_segment_rows(accessions: Sequence[AccessionRecord]) -> List[Dict[str, Any]]:
-    rows = []
-    for record in accessions:
-        if record.segment not in {"S", "M", "L"}:
-            continue
-        risk = species_risk_profile(record.species_name)
-        rows.append({
-            "accession": record.accession,
-            "sequence_hash": record.sequence_hash,
-            "segment": record.segment,
-            "segment_source": record.segment_source,
-            "species_name": record.species_name,
-            "species_taxid": record.species_taxid,
-            "pathogenicity_class": risk["pathogenicity_class"],
-            "cfr_band": risk["cfr_band"],
-            "host_name": record.host_name,
-            "host_taxid": record.host_taxid,
-            "host_order": record.host_order,
-            "host_role": record.host_role,
-            "country": record.country,
-            "year": record.year,
-            "nt_length": record.nt_length,
-            "completeness": record.completeness,
-            "is_coding_complete": int(record.is_coding_complete),
-            "is_lab_host": int(record.is_lab_host),
-            "group_key": record.group_key,
-        })
-    return rows
 
 
 def build_ml_sequence_rows(isolates: Sequence[IsolateRecord],

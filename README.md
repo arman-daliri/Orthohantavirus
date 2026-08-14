@@ -588,6 +588,12 @@ An isolate is usable if it has a concatenated S+M protein and `is_vaccine_strain
 **Features** — `kmer_<3-mer>` × up to `--max-features` (default 200) columns: raw counts of the top-variance amino-acid 3-mers over the concatenated S+M protein, unscaled (see `ortho_feature_scaling.json` and [Using the ML tables](#using-the-ml-tables)).
 </details>
 
+A third table, a per-segment (rather than per-isolate) view previously named `ortho_ml_segments.csv`,
+was removed for a different reason than `ortho_segment_divergence.csv` above: it was a column
+subset of `ortho_accession_table.csv` (same fields, narrower row set) and fully derivable from it.
+Its row-building function, `build_ml_segment_rows`, has since been deleted from the code — the
+codebase carried it as dead code for one development cycle before removal.
+
 <details>
 <summary><code>ortho_ml_sequence_table.csv</code> — one row per qualifying isolate, raw S/M/L sequences for sequence-based ML</summary>
 
