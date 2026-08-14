@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
+
 import all_hanta as ah
 import phylogeny as ph
 import reassortment_reference_data as rd
@@ -248,16 +250,24 @@ def nearest_species_by_kmer(
     single close outlier isolate is still found, matching how compute_segment_divergence
     already works in all_hanta.py.
 
-    Builds one candidate-vs-all matrix (not the full NxN pairwise matrix
-    cosine_distance_matrix would build if handed all reference isolates together) --
-    the candidate is always row 0.
+    Computes only the candidate-vs-all row of distances directly (O(N) dot products),
+    not the full NxN pairwise matrix ah.cosine_distance_matrix builds -- that function
+    always computes unit @ unit.T internally regardless of which rows the caller
+    actually reads afterward, so calling it here and slicing row 0 would still pay the
+    full O(N^2) cost up front. Confirmed by direct measurement against the real
+    reference set (thousands of profiles per segment): the O(N^2) call took several
+    seconds per invocation where this takes a fraction of that.
     """
     if not candidate_protein or not reference_profiles:
         return []
     profiles = [ah.kmer_profile(candidate_protein)] + [
         ah.kmer_profile(protein) for _species, protein in reference_profiles]
     matrix, _vocab = ah.profiles_to_matrix(profiles)
-    distances = ah.cosine_distance_matrix(matrix)[0, 1:]
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    unit = matrix / norms
+    similarity = np.clip(unit[0] @ unit[1:].T, -1.0, 1.0)
+    distances = 1.0 - similarity
 
     best_per_species: Dict[str, float] = {}
     for (species, _protein), distance in zip(reference_profiles, distances.tolist()):
