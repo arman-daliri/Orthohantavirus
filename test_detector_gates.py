@@ -465,6 +465,22 @@ with open(f"{prefix}.treefile", "w") as f:
         self.assertIn(result.reassortment_call, {"no_conflict", "supported_reassortment_candidate",
                                                   "weak_signal_low_bootstrap_support"})
 
+    def test_missing_cds_for_one_segment_fails_without_running_mafft(self):
+        # candidate_cds always has all three keys (reassortment_detector.py builds it as
+        # a dict literal with S/M/L always present) -- the guard must check for an empty
+        # VALUE, not key membership, or a genuinely missing CDS silently reaches mafft
+        # with an empty-sequence FASTA record instead of failing with this diagnostic.
+        candidate = dg.CandidateInput(candidate_id="CAND1", s_genomic="", m_genomic="", l_genomic="")
+        candidate_cds = {"S": "ACGT" * 40, "M": "", "L": "AATT" * 40}
+        result = dg.gate4_check(
+            candidate, candidate_cds, ["SpA"], self.reference, self.output_dir,
+            str(self.mafft_bin), str(self.iqtree_bin), phylo_min_taxa=4, bootstrap=10,
+            min_bootstrap_support=95.0, phylo_seed=42, phylo_threads=1,
+        )
+        self.assertEqual(result.phylo_status, "failed")
+        self.assertEqual(result.reassortment_call, "not_analyzed")
+        self.assertIn("missing CDS", result.detail.get("error", ""))
+
     def test_insufficient_comparators_short_circuits_without_running_mafft(self):
         candidate = dg.CandidateInput(candidate_id="CAND1", s_genomic="", m_genomic="", l_genomic="")
         candidate_cds = {"S": "ACGT" * 40, "M": "TGCA" * 40, "L": "AATT" * 40}

@@ -585,7 +585,7 @@ def gate4_check(
     if status:
         return Gate4Result(phylo_status=status, reassortment_call="not_analyzed")
 
-    if len(set(candidate_cds) & {"S", "M", "L"}) < 3:
+    if any(not candidate_cds.get(segment) for segment in ("S", "M", "L")):
         return Gate4Result(phylo_status="failed", reassortment_call="not_analyzed",
                            detail={"error": "candidate is missing CDS for one or more segments"})
 
@@ -638,6 +638,13 @@ def combine_verdict(
         return "divergent_novel_candidate"
     if gate1.pattern == "undetectable_by_design":
         return "undetectable_by_design"
+    # gate1.pattern == "too_divergent" is deliberately NOT gated here. It has no verdict
+    # of its own in the spec's rubric (section 10, a closed 10-verdict list) -- unlike
+    # undetectable_by_design, which does. This matches the same principle the spec uses
+    # to retire dead_end_non_viable: a gate's finding can ride as an annotation column
+    # (gate1_pattern, already in the output row) without holding hard-verdict veto
+    # power. A too_divergent candidate still gets scored through Gates 3/4 normally;
+    # filter on the gate1_pattern column yourself if you want to exclude these.
     if gate4.phylo_status == "insufficient_comparators":
         return "insufficient_comparators"
     if gate3.status == "no_ecological_route":
