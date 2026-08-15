@@ -1,0 +1,295 @@
+IQ-TREE version 3.1.3 for Linux x86 64-bit built Jul 26 2026
+Developed by Bui Quang Minh, Thomas Wong, Nhan Ly-Trong, Huaiyan Ren
+Contributed by Lam-Tung Nguyen, Dominik Schrempf, Chris Bielow,
+Olga Chernomor, Michael Woodhams, Diep Thi Hoang, Heiko Schmidt
+
+Host:    fedora (AVX512, FMA3, 11 GB RAM)
+Command: /home/victorfrankestein/.conda/envs/hanta_phylo/bin/iqtree -s /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_andesense/S/aligned.fasta --seqtype DNA -m MFP -B 1000 -T 3 --seed 42 --prefix /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_andesense/S/tree --quiet --redo
+Seed:    42 (Using SPRNG - Scalable Parallel Random Number Generator)
+Time:    Fri Aug 14 23:47:41 2026
+Kernel:  AVX+FMA - 3 threads (4 CPU cores detected)
+
+Reading alignment file /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_andesense/S/aligned.fasta ... Fasta format detected
+Reading fasta file: done in 0.00167108 secs using 76.66% CPU
+Alignment most likely contains DNA/RNA sequences
+Constructing alignment: done in 0.00201392 secs using 44.39% CPU
+Alignment has 69 sequences with 1287 columns, 382 distinct patterns
+333 parsimony-informative, 65 singleton sites, 889 constant sites
+       Gap/Ambiguity  Composition  p-value
+Analyzing sequences: done in 0.00218701 secs using 80.52% CPU
+   1  I0000    0.00%    passed     97.40%
+   2  I0001    0.00%    passed     97.40%
+   3  I0002   17.02%    passed     81.75%
+   4  I0003    0.00%    passed     98.75%
+   5  I0004    0.00%    passed     98.34%
+   6  I0005    0.00%    passed     97.33%
+   7  I0006    0.00%    passed     99.06%
+   8  I0007    0.00%    passed     98.34%
+   9  I0008    0.00%    passed     98.72%
+  10  I0009    0.00%    passed     98.72%
+  11  I0010    0.00%    passed     99.81%
+  12  I0011    0.00%    passed     97.39%
+  13  I0012    0.00%    passed     99.96%
+  14  I0013    0.00%    passed     99.96%
+  15  I0014    0.00%    passed     99.96%
+  16  I0015    0.00%    passed     98.97%
+  17  I0016    0.00%    passed     99.88%
+  18  I0017    0.00%    passed     98.21%
+  19  I0018    0.00%    passed     94.87%
+  20  I0019    0.00%    passed     99.04%
+  21  I0020    0.00%    passed     99.93%
+  22  I0021    0.00%    passed     99.98%
+  23  I0022    0.00%    passed     99.28%
+  24  I0023    4.20%    passed     89.86%
+  25  I0024    0.00%    passed     99.01%
+  26  I0025    0.00%    passed     98.97%
+  27  I0026    0.00%    passed     99.72%
+  28  I0027    0.00%    passed     99.51%
+  29  I0028    0.00%    passed     99.72%
+  30  I0029    0.00%    passed     98.15%
+  31  I0030    0.00%    passed     99.31%
+  32  I0031    0.00%    passed     99.23%
+  33  I0032    0.00%    passed     98.27%
+  34  I0033    0.00%    passed     99.61%
+  35  I0034    0.00%    passed     99.69%
+  36  I0035    0.00%    passed     99.69%
+  37  I0036    0.00%    passed     99.69%
+  38  I0037    0.00%    passed     99.69%
+  39  I0038    0.00%    passed     99.69%
+  40  I0039    0.00%    passed     99.69%
+  41  I0040    0.00%    passed     99.69%
+  42  I0041    0.00%    passed     99.69%
+  43  I0042    0.00%    passed     99.69%
+  44  I0043    0.00%    passed     99.69%
+  45  I0044    0.00%    passed     99.69%
+  46  I0045    0.00%    passed     99.69%
+  47  I0046    0.00%    passed     99.69%
+  48  I0047    0.00%    passed     99.69%
+  49  I0048    0.00%    passed     99.69%
+  50  I0049    0.00%    passed     99.69%
+  51  I0050    0.00%    passed     99.69%
+  52  I0051    0.00%    passed     99.69%
+  53  I0052    0.00%    passed     99.69%
+  54  I0053    0.00%    passed     99.69%
+  55  I0054    0.00%    passed     99.69%
+  56  I0055    0.00%    passed     99.69%
+  57  I0056    0.00%    passed     99.69%
+  58  I0057    0.00%    passed     99.69%
+  59  I0058    0.00%    passed     99.30%
+  60  I0059    0.00%    passed     99.69%
+  61  I0060    0.00%    passed     99.69%
+  62  I0061    0.00%    passed     96.21%
+  63  I0062    5.91%    passed     93.62%
+  64  I0063    0.00%    passed     96.49%
+  65  I0064    0.00%    passed     99.66%
+  66  I0065    0.00%    passed     99.66%
+  67  I0066    0.00%    passed     98.21%
+  68  I0067    0.00%    passed     99.76%
+  69  I0068    0.00%    passed     87.28%
+****  TOTAL    0.39%  0 sequences failed composition chi2 test (p-value<5%; df=3)
+NOTE: I0001 is identical to I0000 but kept for subsequent analysis
+NOTE: I0007 is identical to I0004 but kept for subsequent analysis
+NOTE: I0009 is identical to I0008 but kept for subsequent analysis
+NOTE: I0013 is identical to I0012 but kept for subsequent analysis
+NOTE: I0025 is identical to I0015 but kept for subsequent analysis
+NOTE: I0035 is identical to I0034 but kept for subsequent analysis
+NOTE: I0065 is identical to I0064 but kept for subsequent analysis
+Checking for duplicate sequences: done in 0.00112104 secs using 101.5% CPU
+Identifying sites to remove: done in 0.000638008 secs using 15.52% CPU
+NOTE: 25 identical sequences (see below) will be ignored for subsequent analysis
+NOTE: I0014 (identical to I0012) is ignored but added at the end
+NOTE: I0036 (identical to I0034) is ignored but added at the end
+NOTE: I0037 (identical to I0034) is ignored but added at the end
+NOTE: I0038 (identical to I0034) is ignored but added at the end
+NOTE: I0039 (identical to I0034) is ignored but added at the end
+NOTE: I0040 (identical to I0034) is ignored but added at the end
+NOTE: I0041 (identical to I0034) is ignored but added at the end
+NOTE: I0042 (identical to I0034) is ignored but added at the end
+NOTE: I0043 (identical to I0034) is ignored but added at the end
+NOTE: I0044 (identical to I0034) is ignored but added at the end
+NOTE: I0045 (identical to I0034) is ignored but added at the end
+NOTE: I0046 (identical to I0034) is ignored but added at the end
+NOTE: I0047 (identical to I0034) is ignored but added at the end
+NOTE: I0048 (identical to I0034) is ignored but added at the end
+NOTE: I0049 (identical to I0034) is ignored but added at the end
+NOTE: I0050 (identical to I0034) is ignored but added at the end
+NOTE: I0051 (identical to I0034) is ignored but added at the end
+NOTE: I0052 (identical to I0034) is ignored but added at the end
+NOTE: I0053 (identical to I0034) is ignored but added at the end
+NOTE: I0054 (identical to I0034) is ignored but added at the end
+NOTE: I0055 (identical to I0034) is ignored but added at the end
+NOTE: I0056 (identical to I0034) is ignored but added at the end
+NOTE: I0057 (identical to I0034) is ignored but added at the end
+NOTE: I0059 (identical to I0034) is ignored but added at the end
+NOTE: I0060 (identical to I0034) is ignored but added at the end
+Alignment was printed to /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_andesense/S/tree.uniqueseq.phy
+
+For your convenience alignment with unique sequences printed to /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_andesense/S/tree.uniqueseq.phy
+
+
+Create initial parsimony tree by phylogenetic likelihood library (PLL)... 0.003 seconds
+Perform fast likelihood tree search using GTR+I+G model...
+Estimate model parameters (epsilon = 5.000)
+Perform nearest neighbor interchange...
+Estimate model parameters (epsilon = 1.000)
+1. Initial log-likelihood: -6127.475
+Optimal log-likelihood: -6127.372
+Rate parameters:  A-C: 2.43972  A-G: 13.69536  A-T: 3.13982  C-G: 0.25321  C-T: 26.28788  G-T: 1.00000
+Base frequencies:  A: 0.312  C: 0.212  G: 0.235  T: 0.241
+Proportion of invariable sites: 0.339
+Gamma shape alpha: 0.308
+Parameters optimization took 1 rounds (0.084 sec)
+Time for fast ML tree search: 0.524 seconds
+
+NOTE: ModelFinder requires 7 MB RAM!
+ModelFinder will test up to 968 DNA models (sample size: 1287 epsilon: 0.100) ...
+ No. Model         -LnL         df  AIC          AICc         BIC
+Akaike Information Criterion:           GTR+F+G4
+Corrected Akaike Information Criterion: TIM2+F+G4
+Bayesian Information Criterion:         TIM2+F+G4
+Best-fit model: TIM2+F+G4 chosen according to BIC
+
+All model information printed to /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_andesense/S/tree.model.gz
+CPU time for ModelFinder: 21.153 seconds (0h:0m:21s)
+Wall-clock time for ModelFinder: 11.474 seconds (0h:0m:11s)
+Generating 1000 samples for ultrafast bootstrap (seed: 42)...
+
+NOTE: 3 MB RAM (0 GB) is required!
+Estimate model parameters (epsilon = 0.100)
+1. Initial log-likelihood: -6127.057
+2. Current log-likelihood: -6126.931
+Optimal log-likelihood: -6126.904
+Rate parameters:  A-C: 4.46335  A-G: 22.04419  A-T: 4.46335  C-G: 1.00000  C-T: 37.75330  G-T: 1.00000
+Base frequencies:  A: 0.312  C: 0.212  G: 0.235  T: 0.241
+Gamma shape alpha: 0.146
+Parameters optimization took 2 rounds (0.111 sec)
+Wrote distance file to... 
+Computing ML distances based on estimated model parameters...
+Calculating distance matrix: done in 0.00468087 secs using 287.3% CPU
+Computing ML distances took 0.010577 sec (of wall-clock time) 0.019911 sec (of CPU time)
+Setting up auxiliary I and S matrices: done in 0.00233006 secs using 119.3% CPU
+Constructing RapidNJ tree: done in 0.119514 secs using 92.08% CPU
+Computing RapidNJ tree took 0.121976 sec (of wall-clock time) 0.113061 sec (of CPU time)
+Log-likelihood of RapidNJ tree: -6159.084
+--------------------------------------------------------------------
+|             INITIALIZING CANDIDATE TREE SET                      |
+--------------------------------------------------------------------
+Generating 98 parsimony trees... 0.482 second
+Computing log-likelihood of 98 initial trees ... 0.557 seconds
+Current best score: -6126.904
+
+Do NNI search on 20 best initial trees
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 1: -6126.903
+UPDATE BEST LOG-LIKELIHOOD: -6126.902
+UPDATE BEST LOG-LIKELIHOOD: -6126.902
+UPDATE BEST LOG-LIKELIHOOD: -6126.901
+Iteration 10 / LogL: -6126.903 / Time: 0h:0m:16s
+Iteration 20 / LogL: -6126.902 / Time: 0h:0m:19s
+Finish initializing candidate tree set (1)
+Current best tree score: -6126.901 / CPU time: 7.786
+Number of iterations: 20
+--------------------------------------------------------------------
+|               OPTIMIZING CANDIDATE TREE SET                      |
+--------------------------------------------------------------------
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 21: -6126.046
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 22: -6125.920
+Iteration 30 / LogL: -6170.046 / Time: 0h:0m:22s (0h:0m:36s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 36: -6125.201
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 37: -6125.159
+Iteration 40 / LogL: -6140.251 / Time: 0h:0m:26s (0h:0m:37s left)
+UPDATE BEST LOG-LIKELIHOOD: -6125.156
+Iteration 50 / LogL: -6125.951 / Time: 0h:0m:28s (0h:0m:29s left)
+Log-likelihood cutoff on original alignment: -6150.392
+UPDATE BEST LOG-LIKELIHOOD: -6125.153
+Iteration 60 / LogL: -6125.153 / Time: 0h:0m:31s (0h:0m:26s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 61: -6125.134
+Iteration 70 / LogL: -6125.671 / Time: 0h:0m:34s (0h:0m:30s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 80: -6124.228
+Iteration 80 / LogL: -6124.228 / Time: 0h:0m:37s (0h:0m:33s left)
+Iteration 90 / LogL: -6130.471 / Time: 0h:0m:40s (0h:0m:29s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 94: -6123.090
+UPDATE BEST LOG-LIKELIHOOD: -6123.081
+Iteration 100 / LogL: -6158.678 / Time: 0h:0m:44s (0h:0m:31s left)
+Log-likelihood cutoff on original alignment: -6150.785
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.968
+NOTE: UFBoot does not converge, continue at least 100 more iterations
+Iteration 110 / LogL: -6162.731 / Time: 0h:0m:45s (0h:0m:28s left)
+UPDATE BEST LOG-LIKELIHOOD: -6123.080
+Iteration 120 / LogL: -6124.252 / Time: 0h:0m:49s (0h:0m:25s left)
+UPDATE BEST LOG-LIKELIHOOD: -6123.080
+UPDATE BEST LOG-LIKELIHOOD: -6123.076
+Iteration 130 / LogL: -6123.076 / Time: 0h:0m:51s (0h:0m:21s left)
+Iteration 140 / LogL: -6129.202 / Time: 0h:0m:56s (0h:0m:19s left)
+Iteration 150 / LogL: -6123.114 / Time: 0h:1m:0s (0h:0m:16s left)
+Log-likelihood cutoff on original alignment: -6150.825
+Iteration 160 / LogL: -6123.078 / Time: 0h:1m:5s (0h:0m:13s left)
+Iteration 170 / LogL: -6124.006 / Time: 0h:1m:8s (0h:0m:10s left)
+Iteration 180 / LogL: -6123.076 / Time: 0h:1m:11s (0h:0m:6s left)
+Iteration 190 / LogL: -6123.078 / Time: 0h:1m:17s (0h:0m:3s left)
+Iteration 200 / LogL: -6161.043 / Time: 0h:1m:20s (0h:0m:0s left)
+Log-likelihood cutoff on original alignment: -6150.785
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.983
+NOTE: UFBoot does not converge, continue at least 100 more iterations
+Iteration 210 / LogL: -6123.988 / Time: 0h:1m:24s (0h:0m:31s left)
+Iteration 220 / LogL: -6132.682 / Time: 0h:1m:28s (0h:0m:28s left)
+Iteration 230 / LogL: -6126.988 / Time: 0h:1m:33s (0h:0m:25s left)
+Iteration 240 / LogL: -6134.378 / Time: 0h:1m:36s (0h:0m:21s left)
+Iteration 250 / LogL: -6123.094 / Time: 0h:1m:39s (0h:0m:17s left)
+Log-likelihood cutoff on original alignment: -6151.720
+Iteration 260 / LogL: -6123.523 / Time: 0h:1m:44s (0h:0m:14s left)
+Iteration 270 / LogL: -6126.992 / Time: 0h:1m:47s (0h:0m:10s left)
+Iteration 280 / LogL: -6127.002 / Time: 0h:1m:51s (0h:0m:7s left)
+Iteration 290 / LogL: -6148.197 / Time: 0h:1m:54s (0h:0m:3s left)
+Iteration 300 / LogL: -6123.081 / Time: 0h:1m:58s (0h:0m:0s left)
+Log-likelihood cutoff on original alignment: -6151.350
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.997
+TREE SEARCH COMPLETED AFTER 300 ITERATIONS / Time: 0h:1m:58s
+
+--------------------------------------------------------------------
+|                    FINALIZING TREE SEARCH                        |
+--------------------------------------------------------------------
+Performs final model parameters optimization
+Estimate model parameters (epsilon = 0.010)
+1. Initial log-likelihood: -6123.076
+Optimal log-likelihood: -6123.076
+Rate parameters:  A-C: 4.74726  A-G: 23.06803  A-T: 4.74726  C-G: 1.00000  C-T: 41.35628  G-T: 1.00000
+Base frequencies:  A: 0.312  C: 0.212  G: 0.235  T: 0.241
+Gamma shape alpha: 0.146
+Parameters optimization took 1 rounds (0.047 sec)
+BEST SCORE FOUND : -6123.076
+Creating bootstrap support values...
+Split supports printed to NEXUS file /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_andesense/S/tree.splits.nex
+Total tree length: 1.391
+
+Total number of iterations: 300
+CPU time used for tree search: 171.679 sec (0h:2m:51s)
+Wall-clock time used for tree search: 106.504 sec (0h:1m:46s)
+Total CPU time used: 193.554 sec (0h:3m:13s)
+Total wall-clock time used: 118.501 sec (0h:1m:58s)
+
+Computing bootstrap consensus tree...
+Reading input file /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_andesense/S/tree.splits.nex...
+44 taxa and 300 splits.
+Consensus tree written to /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_andesense/S/tree.contree
+Reading input trees file /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_andesense/S/tree.contree
+Log-likelihood of consensus tree: -6123.115
+
+Analysis results written to: 
+  IQ-TREE report:                /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_andesense/S/tree.iqtree
+  Maximum-likelihood tree:       /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_andesense/S/tree.treefile
+  Likelihood distances:          /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_andesense/S/tree.mldist
+
+Ultrafast bootstrap approximation results written to:
+  Split support values:          /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_andesense/S/tree.splits.nex
+  Consensus tree:                /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_andesense/S/tree.contree
+  Screen log file:               /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_andesense/S/tree.log
+
+Date and Time: Fri Aug 14 23:49:40 2026

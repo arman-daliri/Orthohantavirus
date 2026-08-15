@@ -1,0 +1,1195 @@
+IQ-TREE version 3.1.3 for Linux x86 64-bit built Jul 26 2026
+Developed by Bui Quang Minh, Thomas Wong, Nhan Ly-Trong, Huaiyan Ren
+Contributed by Lam-Tung Nguyen, Dominik Schrempf, Chris Bielow,
+Olga Chernomor, Michael Woodhams, Diep Thi Hoang, Heiko Schmidt
+
+Host:    fedora (AVX512, FMA3, 11 GB RAM)
+Command: /home/victorfrankestein/.conda/envs/hanta_phylo/bin/iqtree -s /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/S/aligned.fasta --seqtype DNA -m MFP -B 1000 -T 3 --seed 42 --prefix /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/S/tree --quiet --redo
+Seed:    42 (Using SPRNG - Scalable Parallel Random Number Generator)
+Time:    Sat Aug 15 05:18:07 2026
+Kernel:  AVX+FMA - 3 threads (4 CPU cores detected)
+
+Reading alignment file /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/S/aligned.fasta ... Fasta format detected
+Reading fasta file: done in 0.0104501 secs using 89.14% CPU
+Alignment most likely contains DNA/RNA sequences
+Constructing alignment: done in 0.00868511 secs using 249.4% CPU
+Alignment has 755 sequences with 1318 columns, 882 distinct patterns
+638 parsimony-informative, 91 singleton sites, 589 constant sites
+       Gap/Ambiguity  Composition  p-value
+Analyzing sequences: done in 0.000986099 secs using 286.6% CPU
+   1  I0000    0.76%    passed     71.35%
+   2  I0001    1.21%    passed     66.97%
+   3  I0002    1.21%    passed     65.60%
+   4  I0003    1.21%    passed     53.65%
+   5  I0004    1.21%    passed     54.11%
+   6  I0005    1.21%    passed     59.76%
+   7  I0006    1.21%    passed     97.55%
+   8  I0007    1.21%    passed     51.86%
+   9  I0008   35.51%    passed     75.20%
+  10  I0009   35.51%    passed     55.66%
+  11  I0010   35.51%    passed     54.80%
+  12  I0011   35.51%    passed     70.11%
+  13  I0012    0.08%    passed     85.14%
+  14  I0013   46.05%    passed     88.39%
+  15  I0014    1.21%    passed     97.20%
+  16  I0015    1.21%    passed     96.64%
+  17  I0016    1.21%    passed     98.26%
+  18  I0017    1.21%    passed     97.64%
+  19  I0018    1.21%    passed     52.21%
+  20  I0019   81.34%    passed     96.49%
+  21  I0020   81.34%    passed     99.01%
+  22  I0021   81.34%    passed     97.20%
+  23  I0022    1.21%    passed     58.68%
+  24  I0023    1.21%    passed     59.02%
+  25  I0024    1.21%    passed     97.20%
+  26  I0025    1.21%    passed     96.64%
+  27  I0026    1.21%    passed     94.86%
+  28  I0027    1.21%    passed     96.64%
+  29  I0028    1.37%    passed     98.86%
+  30  I0029    1.21%    passed     98.02%
+  31  I0030    1.59%    passed     96.99%
+  32  I0031   45.14%    passed     42.14%
+  33  I0032    1.82%    passed     97.11%
+  34  I0033   56.37%    passed     89.97%
+  35  I0034   80.50%    failed      3.52%
+  36  I0035    1.59%    passed     96.99%
+  37  I0036   45.14%    passed     42.14%
+  38  I0037    1.52%    passed     97.48%
+  39  I0038   45.14%    passed     42.14%
+  40  I0039    1.21%    passed     66.57%
+  41  I0040    1.21%    passed     97.73%
+  42  I0041    1.21%    passed     97.73%
+  43  I0042   68.13%    passed     32.75%
+  44  I0043   81.87%    failed      1.81%
+  45  I0044    1.21%    passed     96.64%
+  46  I0045   28.98%    passed     53.01%
+  47  I0046   45.22%    passed     42.97%
+  48  I0047    1.29%    passed     51.88%
+  49  I0048    1.21%    passed     96.65%
+  50  I0049   28.98%    passed     56.86%
+  51  I0050    1.21%    passed     97.73%
+  52  I0051    1.21%    passed     94.99%
+  53  I0052    1.21%    passed     60.02%
+  54  I0053   89.83%    passed     17.75%
+  55  I0054   45.14%    passed     45.84%
+  56  I0055    1.21%    passed     95.23%
+  57  I0056    1.21%    passed     95.23%
+  58  I0057    1.21%    passed     95.23%
+  59  I0058    1.21%    passed     95.23%
+  60  I0059    1.21%    passed     94.88%
+  61  I0060   68.13%    passed     23.52%
+  62  I0061   44.99%    passed     34.68%
+  63  I0062    1.52%    passed     97.83%
+  64  I0063   24.51%    passed     57.72%
+  65  I0064    1.82%    passed     96.44%
+  66  I0065   24.51%    passed     55.36%
+  67  I0066   45.14%    passed     40.52%
+  68  I0067    1.52%    passed     97.83%
+  69  I0068    1.21%    passed     94.39%
+  70  I0069    1.21%    passed     97.26%
+  71  I0070    1.59%    passed     97.28%
+  72  I0071    1.21%    passed     96.53%
+  73  I0072    1.52%    passed     98.32%
+  74  I0073    1.21%    passed     98.99%
+  75  I0074    1.59%    passed     97.90%
+  76  I0075    1.21%    passed     93.11%
+  77  I0076    1.21%    passed     92.05%
+  78  I0077    1.21%    passed     93.49%
+  79  I0078    1.21%    passed     95.23%
+  80  I0079    1.59%    passed     96.99%
+  81  I0080    1.21%    passed     96.53%
+  82  I0081    1.52%    passed     97.48%
+  83  I0082    1.21%    passed     94.78%
+  84  I0083    1.21%    passed     93.42%
+  85  I0084    1.21%    passed     70.39%
+  86  I0085   51.67%    passed     50.15%
+  87  I0086   51.67%    passed     50.15%
+  88  I0087   51.67%    passed     50.15%
+  89  I0088   51.67%    passed     50.15%
+  90  I0089   52.35%    passed     49.38%
+  91  I0090   51.67%    passed     50.15%
+  92  I0091   51.67%    passed     50.15%
+  93  I0092   51.67%    passed     55.22%
+  94  I0093   51.67%    passed     55.22%
+  95  I0094   51.67%    passed     55.22%
+  96  I0095   51.67%    passed     55.22%
+  97  I0096   51.67%    passed     55.22%
+  98  I0097   51.67%    passed     50.15%
+  99  I0098   51.67%    passed     55.22%
+ 100  I0099   51.67%    passed     55.22%
+ 101  I0100   51.67%    passed     55.22%
+ 102  I0101   51.67%    passed     55.22%
+ 103  I0102   51.67%    passed     55.22%
+ 104  I0103   51.67%    passed     50.15%
+ 105  I0104   51.67%    passed     55.22%
+ 106  I0105   51.67%    passed     50.15%
+ 107  I0106   51.67%    passed     55.22%
+ 108  I0107   51.67%    passed     50.15%
+ 109  I0108   51.67%    passed     50.15%
+ 110  I0109   51.67%    passed     55.22%
+ 111  I0110   51.67%    passed     55.22%
+ 112  I0111   51.67%    passed     50.15%
+ 113  I0112   51.67%    passed     55.22%
+ 114  I0113   51.67%    passed     55.22%
+ 115  I0114   51.67%    passed     56.36%
+ 116  I0115   51.67%    passed     56.36%
+ 117  I0116   51.67%    passed     55.22%
+ 118  I0117   51.90%    passed     52.36%
+ 119  I0118   51.67%    passed     56.36%
+ 120  I0119   51.67%    passed     55.22%
+ 121  I0120   51.67%    passed     55.22%
+ 122  I0121   51.67%    passed     55.22%
+ 123  I0122   51.67%    passed     56.36%
+ 124  I0123   51.67%    passed     55.22%
+ 125  I0124   51.67%    passed     56.36%
+ 126  I0125   51.67%    passed     56.36%
+ 127  I0126   61.99%    passed     38.57%
+ 128  I0127   61.99%    passed     38.57%
+ 129  I0128   61.99%    passed     38.57%
+ 130  I0129    1.21%    passed     67.40%
+ 131  I0130    1.21%    passed     52.17%
+ 132  I0131    1.21%    passed     51.69%
+ 133  I0132    1.21%    passed     56.15%
+ 134  I0133    1.21%    passed     36.50%
+ 135  I0134    1.21%    passed     20.68%
+ 136  I0135    1.21%    passed     91.68%
+ 137  I0136    1.21%    passed     84.66%
+ 138  I0137   51.67%    passed     50.15%
+ 139  I0138   51.67%    passed     50.15%
+ 140  I0139   51.67%    passed     50.15%
+ 141  I0140   51.67%    passed     50.15%
+ 142  I0141   51.67%    passed     50.15%
+ 143  I0142   51.67%    passed     54.48%
+ 144  I0143   51.67%    passed     56.36%
+ 145  I0144   54.17%    passed     61.96%
+ 146  I0145   51.67%    passed     50.15%
+ 147  I0146   51.67%    passed     50.15%
+ 148  I0147   51.67%    passed     50.15%
+ 149  I0148   51.67%    passed     50.15%
+ 150  I0149   51.67%    passed     50.15%
+ 151  I0150    1.21%    passed     84.66%
+ 152  I0151   50.61%    passed     98.85%
+ 153  I0152   52.66%    passed     76.49%
+ 154  I0153   59.48%    passed     74.35%
+ 155  I0154   52.66%    passed     97.33%
+ 156  I0155    1.21%    passed     51.69%
+ 157  I0156    1.21%    passed     44.71%
+ 158  I0157    1.21%    passed     91.55%
+ 159  I0158   46.66%    passed     78.77%
+ 160  I0159   61.99%    passed     38.10%
+ 161  I0160    1.21%    passed     84.66%
+ 162  I0161    1.21%    passed     47.13%
+ 163  I0162    1.21%    passed     42.66%
+ 164  I0163    1.21%    passed     61.31%
+ 165  I0164    1.21%    passed     94.61%
+ 166  I0165    2.35%    passed     93.90%
+ 167  I0166   81.79%    passed     84.49%
+ 168  I0167   82.02%    passed     80.92%
+ 169  I0168    8.80%    passed     74.34%
+ 170  I0169    1.21%    passed     59.35%
+ 171  I0170    1.21%    passed     77.03%
+ 172  I0171    1.21%    passed     54.23%
+ 173  I0172    1.21%    passed     32.78%
+ 174  I0173    1.21%    passed     32.78%
+ 175  I0174    1.21%    passed     21.81%
+ 176  I0175    1.21%    passed     79.90%
+ 177  I0176    1.21%    passed     86.06%
+ 178  I0177    1.21%    passed     30.11%
+ 179  I0178    1.21%    passed     30.11%
+ 180  I0179    1.21%    passed     47.63%
+ 181  I0180    1.21%    passed     49.57%
+ 182  I0181    1.21%    passed     61.91%
+ 183  I0182    1.21%    passed     84.66%
+ 184  I0183    1.21%    passed     89.67%
+ 185  I0184    8.27%    passed     72.19%
+ 186  I0185    1.21%    passed     48.73%
+ 187  I0186   61.99%    passed     35.37%
+ 188  I0187   61.99%    passed     38.10%
+ 189  I0188    1.21%    passed     96.37%
+ 190  I0189    1.21%    passed     85.05%
+ 191  I0190    1.21%    passed     85.05%
+ 192  I0191    1.21%    passed     83.67%
+ 193  I0192    1.21%    passed     83.67%
+ 194  I0193    1.21%    passed     87.21%
+ 195  I0194    1.44%    passed     93.40%
+ 196  I0195    1.44%    passed     92.20%
+ 197  I0196    1.44%    passed     88.67%
+ 198  I0197    1.44%    passed     88.99%
+ 199  I0198    1.44%    passed     84.46%
+ 200  I0199    1.44%    passed     88.99%
+ 201  I0200    1.44%    passed     86.58%
+ 202  I0201    1.44%    passed     91.08%
+ 203  I0202    1.44%    passed     83.86%
+ 204  I0203    1.44%    passed     83.86%
+ 205  I0204    1.44%    passed     92.02%
+ 206  I0205    1.44%    passed     94.81%
+ 207  I0206    1.44%    passed     91.12%
+ 208  I0207    1.44%    passed     88.38%
+ 209  I0208    1.44%    passed     86.43%
+ 210  I0209    1.44%    passed     86.04%
+ 211  I0210    1.44%    passed     75.27%
+ 212  I0211    1.44%    passed     76.75%
+ 213  I0212    1.44%    passed     84.40%
+ 214  I0213    1.44%    passed     81.81%
+ 215  I0214    1.44%    passed     87.85%
+ 216  I0215    1.44%    passed     72.17%
+ 217  I0216    1.44%    passed     72.95%
+ 218  I0217    1.44%    passed     72.17%
+ 219  I0218    1.44%    passed     75.27%
+ 220  I0219    1.21%    passed     88.86%
+ 221  I0220    1.21%    passed     76.28%
+ 222  I0221    1.44%    passed     91.25%
+ 223  I0222    1.44%    passed     92.68%
+ 224  I0223    1.44%    passed     93.10%
+ 225  I0224    1.44%    passed     87.64%
+ 226  I0225    1.44%    passed     89.37%
+ 227  I0226    1.44%    passed     91.77%
+ 228  I0227    1.44%    passed     89.11%
+ 229  I0228    1.44%    passed     90.85%
+ 230  I0229    1.21%    passed     84.31%
+ 231  I0230    1.21%    passed     69.36%
+ 232  I0231    1.21%    passed     65.85%
+ 233  I0232    1.21%    passed     86.60%
+ 234  I0233    1.21%    passed     88.27%
+ 235  I0234    1.21%    passed     96.34%
+ 236  I0235    1.21%    passed     96.34%
+ 237  I0236    1.21%    passed     98.09%
+ 238  I0237    1.21%    passed     74.26%
+ 239  I0238    1.21%    passed     73.73%
+ 240  I0239    1.21%    passed     96.97%
+ 241  I0240    1.21%    passed     97.37%
+ 242  I0241    1.21%    passed     95.56%
+ 243  I0242    1.21%    passed     52.92%
+ 244  I0243    1.21%    passed     72.03%
+ 245  I0244    1.44%    passed     69.77%
+ 246  I0245    1.44%    passed     69.77%
+ 247  I0246    1.44%    passed     69.77%
+ 248  I0247    1.44%    passed     72.16%
+ 249  I0248    1.44%    passed     67.57%
+ 250  I0249    1.44%    passed     69.77%
+ 251  I0250    1.21%    passed     92.44%
+ 252  I0251    1.21%    passed     92.94%
+ 253  I0252    1.21%    passed     77.28%
+ 254  I0253    1.21%    passed     77.28%
+ 255  I0254    1.21%    passed     74.26%
+ 256  I0255   19.80%    passed     53.98%
+ 257  I0256   19.80%    passed     53.98%
+ 258  I0257    1.21%    passed     89.95%
+ 259  I0258   19.80%    passed     53.98%
+ 260  I0259   19.80%    passed     54.03%
+ 261  I0260   19.80%    passed     53.98%
+ 262  I0261   19.80%    passed     53.98%
+ 263  I0262   19.80%    passed     53.98%
+ 264  I0263   19.80%    passed     58.45%
+ 265  I0264   19.80%    passed     58.45%
+ 266  I0265   19.80%    passed     58.45%
+ 267  I0266   66.39%    passed     59.96%
+ 268  I0267   66.39%    passed     64.84%
+ 269  I0268   66.39%    passed     69.24%
+ 270  I0269   66.39%    passed     53.58%
+ 271  I0270    1.21%    passed     86.70%
+ 272  I0271    1.21%    passed     97.55%
+ 273  I0272    1.21%    passed     96.41%
+ 274  I0273    1.21%    passed     89.21%
+ 275  I0274    1.21%    passed     80.63%
+ 276  I0275    1.21%    passed     88.90%
+ 277  I0276    1.21%    passed     81.25%
+ 278  I0277   19.80%    passed     82.94%
+ 279  I0278   19.80%    passed     81.79%
+ 280  I0279    1.21%    passed     92.75%
+ 281  I0280    1.21%    passed     72.20%
+ 282  I0281    1.21%    passed     77.60%
+ 283  I0282   19.80%    passed     77.73%
+ 284  I0283    1.21%    passed     91.62%
+ 285  I0284    1.21%    passed     81.10%
+ 286  I0285    1.21%    passed     87.52%
+ 287  I0286    1.21%    passed     94.99%
+ 288  I0287    1.21%    passed     88.13%
+ 289  I0288    1.21%    passed     88.13%
+ 290  I0289    1.21%    passed     95.56%
+ 291  I0290    1.21%    passed     60.72%
+ 292  I0291    1.21%    passed     71.74%
+ 293  I0292    1.21%    passed     69.62%
+ 294  I0293    1.21%    passed     56.82%
+ 295  I0294    1.21%    passed     58.13%
+ 296  I0295    1.21%    passed     58.13%
+ 297  I0296    1.21%    passed     65.45%
+ 298  I0297    1.21%    passed     54.29%
+ 299  I0298   79.21%    failed      4.65%
+ 300  I0299    1.21%    passed     56.82%
+ 301  I0300    1.21%    passed     61.44%
+ 302  I0301    1.21%    passed     88.06%
+ 303  I0302    1.21%    passed     96.01%
+ 304  I0303    1.21%    passed     91.96%
+ 305  I0304    1.21%    passed     94.93%
+ 306  I0305    1.21%    passed     83.33%
+ 307  I0306    1.21%    passed     90.47%
+ 308  I0307    1.21%    passed     79.74%
+ 309  I0308    1.21%    passed     79.74%
+ 310  I0309    1.21%    passed     79.74%
+ 311  I0310    1.21%    passed     76.64%
+ 312  I0311    1.21%    passed     54.92%
+ 313  I0312    1.21%    passed     67.05%
+ 314  I0313    1.21%    passed     67.05%
+ 315  I0314    1.21%    passed     59.86%
+ 316  I0315    1.21%    passed     59.86%
+ 317  I0316    1.21%    passed     42.55%
+ 318  I0317    1.21%    passed     42.35%
+ 319  I0318    1.21%    passed     41.97%
+ 320  I0319    1.21%    passed     33.35%
+ 321  I0320    1.21%    passed     89.48%
+ 322  I0321    1.21%    passed     95.85%
+ 323  I0322    1.21%    passed     91.75%
+ 324  I0323    1.21%    passed     94.86%
+ 325  I0324    1.21%    passed     94.86%
+ 326  I0325    1.21%    passed     89.36%
+ 327  I0326   19.80%    passed     76.03%
+ 328  I0327   19.80%    passed     81.05%
+ 329  I0328   19.80%    passed     78.74%
+ 330  I0329   19.80%    passed     78.74%
+ 331  I0330    1.21%    passed     83.40%
+ 332  I0331    1.21%    passed     85.05%
+ 333  I0332    1.21%    passed     96.12%
+ 334  I0333    1.21%    passed     96.12%
+ 335  I0334    1.21%    passed     96.12%
+ 336  I0335    1.21%    passed     91.65%
+ 337  I0336    1.21%    passed     95.85%
+ 338  I0337    1.21%    passed     97.96%
+ 339  I0338    1.21%    passed     97.20%
+ 340  I0339   19.80%    passed     44.77%
+ 341  I0340    1.21%    passed     94.49%
+ 342  I0341    1.21%    passed     94.49%
+ 343  I0342    1.21%    passed     94.49%
+ 344  I0343    1.21%    passed     94.49%
+ 345  I0344    1.21%    passed     94.49%
+ 346  I0345    1.21%    passed     94.49%
+ 347  I0346    1.21%    passed     83.57%
+ 348  I0347    1.21%    passed     98.39%
+ 349  I0348    1.21%    passed     86.70%
+ 350  I0349    1.21%    passed     86.70%
+ 351  I0350    1.21%    passed     74.26%
+ 352  I0351    1.21%    passed     74.26%
+ 353  I0352    1.21%    passed     93.85%
+ 354  I0353    1.21%    passed     95.83%
+ 355  I0354    1.21%    passed     91.19%
+ 356  I0355    1.21%    passed     91.19%
+ 357  I0356    1.21%    passed     97.73%
+ 358  I0357    1.21%    passed     97.59%
+ 359  I0358    1.21%    passed     96.64%
+ 360  I0359   51.67%    passed     49.25%
+ 361  I0360   51.67%    passed     49.25%
+ 362  I0361   51.67%    passed     49.25%
+ 363  I0362   51.67%    passed     49.25%
+ 364  I0363   51.67%    passed     53.64%
+ 365  I0364   51.67%    passed     53.64%
+ 366  I0365   51.67%    passed     51.63%
+ 367  I0366   51.67%    passed     49.25%
+ 368  I0367   51.67%    passed     49.25%
+ 369  I0368   51.67%    passed     51.63%
+ 370  I0369   51.67%    passed     51.63%
+ 371  I0370   51.67%    passed     49.25%
+ 372  I0371   51.67%    passed     49.25%
+ 373  I0372   51.67%    passed     51.63%
+ 374  I0373   51.67%    passed     49.25%
+ 375  I0374   51.67%    passed     51.63%
+ 376  I0375   51.67%    passed     51.63%
+ 377  I0376   51.67%    passed     51.63%
+ 378  I0377   51.67%    passed     49.25%
+ 379  I0378   51.67%    passed     49.25%
+ 380  I0379   51.67%    passed     51.63%
+ 381  I0380   51.67%    passed     51.63%
+ 382  I0381   51.67%    passed     51.63%
+ 383  I0382   51.67%    passed     51.63%
+ 384  I0383   51.67%    passed     49.25%
+ 385  I0384   51.67%    passed     49.25%
+ 386  I0385   51.67%    passed     49.25%
+ 387  I0386   52.43%    passed     51.30%
+ 388  I0387   51.67%    passed     51.63%
+ 389  I0388   51.82%    passed     49.12%
+ 390  I0389   51.67%    passed     51.63%
+ 391  I0390   51.67%    passed     51.63%
+ 392  I0391   51.67%    passed     51.63%
+ 393  I0392   51.67%    passed     51.63%
+ 394  I0393   51.67%    passed     51.63%
+ 395  I0394   51.67%    passed     51.63%
+ 396  I0395   51.67%    passed     51.63%
+ 397  I0396   51.67%    passed     49.25%
+ 398  I0397   51.67%    passed     51.63%
+ 399  I0398   51.67%    passed     51.63%
+ 400  I0399   51.67%    passed     51.63%
+ 401  I0400   51.67%    passed     51.63%
+ 402  I0401   51.67%    passed     51.63%
+ 403  I0402   51.67%    passed     51.63%
+ 404  I0403   51.90%    passed     48.08%
+ 405  I0404   51.67%    passed     51.63%
+ 406  I0405   51.67%    passed     51.63%
+ 407  I0406   51.67%    passed     51.63%
+ 408  I0407   51.67%    passed     51.63%
+ 409  I0408   51.67%    passed     51.63%
+ 410  I0409   51.67%    passed     51.63%
+ 411  I0410   51.67%    passed     51.63%
+ 412  I0411    1.21%    passed     81.92%
+ 413  I0412    8.27%    passed     92.95%
+ 414  I0413    1.21%    passed     61.86%
+ 415  I0414    1.21%    passed     91.77%
+ 416  I0415    1.21%    passed     92.58%
+ 417  I0416   38.54%    passed     75.29%
+ 418  I0417    1.21%    passed     53.15%
+ 419  I0418    1.21%    passed     55.22%
+ 420  I0419    1.21%    passed     55.11%
+ 421  I0420    1.21%    passed     55.11%
+ 422  I0421    1.21%    passed     55.11%
+ 423  I0422   51.67%    passed     43.00%
+ 424  I0423    1.21%    passed     32.20%
+ 425  I0424   47.12%    passed     86.60%
+ 426  I0425    1.21%    passed     89.24%
+ 427  I0426    1.21%    passed     89.85%
+ 428  I0427   51.67%    passed     39.04%
+ 429  I0428   51.67%    passed     39.04%
+ 430  I0429   51.67%    passed     39.04%
+ 431  I0430   51.67%    passed     42.32%
+ 432  I0431    1.21%    passed     82.47%
+ 433  I0432    1.21%    passed     35.02%
+ 434  I0433    1.21%    passed     39.33%
+ 435  I0434    1.21%    passed     81.92%
+ 436  I0435   61.99%    passed     35.21%
+ 437  I0436   61.99%    passed     35.21%
+ 438  I0437   61.99%    passed     29.21%
+ 439  I0438    1.21%    passed     82.95%
+ 440  I0439    1.90%    passed     92.33%
+ 441  I0440    1.90%    passed     92.33%
+ 442  I0441    1.90%    passed     61.14%
+ 443  I0442    1.90%    passed     92.33%
+ 444  I0443    1.90%    passed     92.33%
+ 445  I0444   46.97%    passed     22.47%
+ 446  I0445   34.83%    passed     20.09%
+ 447  I0446   48.56%    passed     73.02%
+ 448  I0447   46.97%    passed     49.72%
+ 449  I0448   48.79%    passed     62.68%
+ 450  I0449   46.74%    passed     62.40%
+ 451  I0450   46.74%    passed     52.44%
+ 452  I0451   46.97%    passed     36.13%
+ 453  I0452   46.97%    passed     56.94%
+ 454  I0453   47.19%    passed     51.63%
+ 455  I0454   45.37%    passed     32.73%
+ 456  I0455   44.69%    passed     31.45%
+ 457  I0456   46.28%    passed     29.22%
+ 458  I0457   46.28%    passed     25.92%
+ 459  I0458   46.74%    passed     12.21%
+ 460  I0459   46.74%    passed     40.34%
+ 461  I0460   46.74%    passed     40.34%
+ 462  I0461   46.74%    passed     64.15%
+ 463  I0462   46.74%    passed     13.64%
+ 464  I0463   46.74%    passed     17.89%
+ 465  I0464   46.74%    passed     79.70%
+ 466  I0465   46.74%    passed     44.81%
+ 467  I0466   56.37%    passed     88.98%
+ 468  I0467   46.74%    passed     75.36%
+ 469  I0468   56.60%    passed     43.19%
+ 470  I0469   56.37%    passed     64.71%
+ 471  I0470   56.37%    passed     64.71%
+ 472  I0471   56.37%    passed     64.71%
+ 473  I0472   56.37%    passed     59.48%
+ 474  I0473   56.37%    passed     56.58%
+ 475  I0474   56.37%    passed     71.75%
+ 476  I0475   56.37%    passed     76.29%
+ 477  I0476   56.37%    passed     68.48%
+ 478  I0477   56.37%    passed     59.48%
+ 479  I0478   56.37%    passed     59.48%
+ 480  I0479   56.37%    passed     64.71%
+ 481  I0480   56.60%    passed     73.96%
+ 482  I0481   56.60%    passed     82.76%
+ 483  I0482   56.60%    passed     84.99%
+ 484  I0483   56.60%    passed     84.99%
+ 485  I0484   56.60%    passed     84.99%
+ 486  I0485   56.60%    passed     87.60%
+ 487  I0486   46.74%    passed     28.21%
+ 488  I0487   46.74%    passed     58.10%
+ 489  I0488   46.74%    passed     56.37%
+ 490  I0489   56.37%    passed     93.60%
+ 491  I0490   56.37%    passed     71.26%
+ 492  I0491   56.60%    passed     84.99%
+ 493  I0492   56.37%    passed     81.34%
+ 494  I0493   56.37%    passed     77.18%
+ 495  I0494   56.37%    passed     81.34%
+ 496  I0495   56.60%    passed     66.00%
+ 497  I0496   56.60%    passed     51.94%
+ 498  I0497   56.60%    passed     56.74%
+ 499  I0498   56.60%    passed     51.94%
+ 500  I0499   56.60%    passed     51.94%
+ 501  I0500   56.60%    passed     56.74%
+ 502  I0501   56.37%    passed     88.98%
+ 503  I0502   56.37%    passed     77.18%
+ 504  I0503   56.37%    passed     88.98%
+ 505  I0504   56.37%    passed     81.34%
+ 506  I0505   46.74%    passed     22.86%
+ 507  I0506   46.74%    passed     22.86%
+ 508  I0507   46.74%    passed     29.59%
+ 509  I0508    1.90%    passed     72.60%
+ 510  I0509    1.90%    passed     68.46%
+ 511  I0510   59.03%    passed     65.39%
+ 512  I0511    2.12%    passed     69.25%
+ 513  I0512    2.12%    passed     99.83%
+ 514  I0513   59.03%    passed     70.27%
+ 515  I0514   59.03%    passed     91.40%
+ 516  I0515   59.03%    passed     70.27%
+ 517  I0516   59.03%    passed     88.50%
+ 518  I0517    2.12%    passed     91.30%
+ 519  I0518   67.37%    passed     95.21%
+ 520  I0519   67.37%    passed     95.21%
+ 521  I0520   67.37%    passed     86.50%
+ 522  I0521    2.12%    passed     35.42%
+ 523  I0522    2.12%    passed     65.14%
+ 524  I0523   67.37%    passed     99.68%
+ 525  I0524    2.12%    passed     86.20%
+ 526  I0525    2.12%    passed     91.31%
+ 527  I0526   67.37%    passed     99.70%
+ 528  I0527    2.12%    passed     93.83%
+ 529  I0528    1.90%    passed     76.84%
+ 530  I0529   67.37%    passed     99.51%
+ 531  I0530   67.37%    passed     98.26%
+ 532  I0531   67.37%    passed     95.91%
+ 533  I0532   67.37%    passed     95.91%
+ 534  I0533   67.37%    passed     99.70%
+ 535  I0534   67.37%    passed     98.26%
+ 536  I0535   67.37%    passed     95.91%
+ 537  I0536    1.90%    passed     80.88%
+ 538  I0537   67.37%    passed     95.89%
+ 539  I0538   67.37%    passed     98.26%
+ 540  I0539   67.37%    passed     98.26%
+ 541  I0540   67.37%    passed     98.26%
+ 542  I0541   67.37%    passed     99.70%
+ 543  I0542   67.60%    passed     78.35%
+ 544  I0543   67.60%    passed     62.27%
+ 545  I0544   67.60%    passed     74.50%
+ 546  I0545   67.60%    passed     74.50%
+ 547  I0546   67.60%    passed     74.50%
+ 548  I0547   67.60%    passed     78.35%
+ 549  I0548   67.60%    passed     74.50%
+ 550  I0549   67.60%    passed     74.50%
+ 551  I0550   67.60%    passed     74.50%
+ 552  I0551   67.60%    passed     78.35%
+ 553  I0552   67.60%    passed     74.50%
+ 554  I0553   67.60%    passed     74.50%
+ 555  I0554   67.60%    passed     74.50%
+ 556  I0555    2.12%    passed     92.34%
+ 557  I0556   59.03%    passed     94.16%
+ 558  I0557    1.90%    passed     92.98%
+ 559  I0558   67.37%    passed     93.39%
+ 560  I0559    1.90%    passed     98.35%
+ 561  I0560    1.90%    passed     79.37%
+ 562  I0561    1.90%    passed     79.37%
+ 563  I0562    1.90%    passed     77.36%
+ 564  I0563    2.12%    passed     73.82%
+ 565  I0564    1.90%    passed     74.69%
+ 566  I0565    1.90%    passed     74.69%
+ 567  I0566    1.90%    passed     74.69%
+ 568  I0567    1.90%    passed     74.69%
+ 569  I0568    1.90%    passed     74.69%
+ 570  I0569    1.90%    passed     79.69%
+ 571  I0570    1.90%    passed     74.69%
+ 572  I0571   59.03%    passed     94.16%
+ 573  I0572   59.03%    passed     94.16%
+ 574  I0573    2.12%    passed     99.80%
+ 575  I0574    2.12%    passed     70.03%
+ 576  I0575    1.90%    passed     91.33%
+ 577  I0576    1.90%    passed     91.33%
+ 578  I0577    1.90%    passed     91.33%
+ 579  I0578    1.90%    passed     91.33%
+ 580  I0579    1.90%    passed     91.33%
+ 581  I0580    1.90%    passed     91.33%
+ 582  I0581    1.90%    passed     91.33%
+ 583  I0582   67.37%    passed     94.61%
+ 584  I0583   67.37%    passed     94.61%
+ 585  I0584    1.90%    passed     68.50%
+ 586  I0585   67.37%    passed     99.94%
+ 587  I0586   67.37%    passed     91.40%
+ 588  I0587    1.90%    passed     86.15%
+ 589  I0588   67.37%    passed     99.99%
+ 590  I0589   59.03%    passed     86.15%
+ 591  I0590   59.03%    passed     84.96%
+ 592  I0591   59.03%    passed     88.34%
+ 593  I0592   59.03%    passed     88.26%
+ 594  I0593   59.03%    passed     86.15%
+ 595  I0594   59.03%    passed     84.96%
+ 596  I0595   59.03%    passed     88.26%
+ 597  I0596   59.03%    passed     86.15%
+ 598  I0597   59.03%    passed     86.15%
+ 599  I0598   59.03%    passed     86.15%
+ 600  I0599   59.03%    passed     88.34%
+ 601  I0600   59.03%    passed     88.26%
+ 602  I0601   59.03%    passed     88.26%
+ 603  I0602   59.03%    passed     88.34%
+ 604  I0603    2.12%    passed     98.50%
+ 605  I0604    2.12%    passed     99.99%
+ 606  I0605    2.12%    passed     96.89%
+ 607  I0606    1.90%    passed     70.48%
+ 608  I0607    2.12%    passed     99.37%
+ 609  I0608    2.12%    passed     99.83%
+ 610  I0609    2.12%    passed     99.59%
+ 611  I0610    2.12%    passed     98.43%
+ 612  I0611    2.12%    passed     92.28%
+ 613  I0612   67.37%    passed     99.94%
+ 614  I0613   67.37%    passed     99.05%
+ 615  I0614   67.37%    passed     99.81%
+ 616  I0615   67.37%    passed     99.99%
+ 617  I0616    1.90%    passed     65.35%
+ 618  I0617   67.37%    passed     93.81%
+ 619  I0618   67.37%    passed     79.36%
+ 620  I0619   67.37%    passed     93.10%
+ 621  I0620   67.37%    passed     93.81%
+ 622  I0621   67.37%    passed     96.06%
+ 623  I0622   59.03%    passed     94.53%
+ 624  I0623   59.03%    passed     94.16%
+ 625  I0624   59.18%    passed     95.93%
+ 626  I0625    1.90%    passed     55.84%
+ 627  I0626   67.37%    passed     96.06%
+ 628  I0627   67.37%    passed     96.06%
+ 629  I0628   67.37%    passed     96.06%
+ 630  I0629   67.37%    passed     96.06%
+ 631  I0630   67.37%    passed     83.40%
+ 632  I0631   67.37%    passed     96.06%
+ 633  I0632    1.90%    passed     76.75%
+ 634  I0633    1.90%    passed     76.75%
+ 635  I0634    1.90%    passed     88.24%
+ 636  I0635    1.90%    passed     84.49%
+ 637  I0636    1.90%    passed     86.86%
+ 638  I0637    2.12%    passed     99.37%
+ 639  I0638    2.12%    passed     99.87%
+ 640  I0639    2.12%    passed     99.42%
+ 641  I0640    1.90%    passed     91.30%
+ 642  I0641    2.12%    passed     99.48%
+ 643  I0642    2.12%    passed     99.48%
+ 644  I0643    2.12%    passed     98.08%
+ 645  I0644    2.12%    passed     99.48%
+ 646  I0645   67.37%    passed     99.80%
+ 647  I0646   59.03%    passed     94.16%
+ 648  I0647   59.03%    passed     96.04%
+ 649  I0648   59.03%    passed     92.79%
+ 650  I0649   59.03%    passed     94.16%
+ 651  I0650    1.90%    passed     67.22%
+ 652  I0651    1.90%    passed     75.29%
+ 653  I0652    1.90%    passed     87.92%
+ 654  I0653    1.90%    passed     87.92%
+ 655  I0654    1.90%    passed     90.70%
+ 656  I0655    1.90%    passed     69.48%
+ 657  I0656    1.90%    passed     69.48%
+ 658  I0657    1.90%    passed     92.72%
+ 659  I0658    1.90%    passed     72.62%
+ 660  I0659    1.90%    passed     91.05%
+ 661  I0660    1.90%    passed     91.05%
+ 662  I0661    1.90%    passed     91.05%
+ 663  I0662    2.12%    passed     99.99%
+ 664  I0663    1.90%    passed     80.83%
+ 665  I0664    1.90%    passed     98.81%
+ 666  I0665    2.12%    passed     95.51%
+ 667  I0666    2.12%    passed     99.75%
+ 668  I0667    2.12%    passed     99.97%
+ 669  I0668    2.12%    passed     98.79%
+ 670  I0669    1.90%    passed     80.16%
+ 671  I0670    1.90%    passed     84.43%
+ 672  I0671    1.90%    passed     85.20%
+ 673  I0672    1.90%    passed     85.20%
+ 674  I0673    1.90%    passed     87.64%
+ 675  I0674    1.90%    passed     85.20%
+ 676  I0675    1.90%    passed     87.64%
+ 677  I0676    2.12%    passed     77.55%
+ 678  I0677    1.90%    passed     83.86%
+ 679  I0678   67.37%    passed     96.92%
+ 680  I0679   67.37%    passed     96.92%
+ 681  I0680   67.37%    passed     96.92%
+ 682  I0681   67.37%    passed     96.92%
+ 683  I0682   67.37%    passed     73.37%
+ 684  I0683    2.12%    passed     98.44%
+ 685  I0684   67.37%    passed     73.11%
+ 686  I0685    1.90%    passed     67.51%
+ 687  I0686    1.90%    passed     78.21%
+ 688  I0687    1.90%    passed     78.57%
+ 689  I0688    1.90%    passed     79.31%
+ 690  I0689    1.90%    passed     78.57%
+ 691  I0690    1.90%    passed     74.45%
+ 692  I0691   59.03%    passed     86.42%
+ 693  I0692   59.03%    passed     86.42%
+ 694  I0693   59.03%    passed     82.88%
+ 695  I0694   59.03%    passed     89.10%
+ 696  I0695   59.03%    passed     89.10%
+ 697  I0696   59.03%    passed     86.73%
+ 698  I0697   59.03%    passed     89.50%
+ 699  I0698   59.03%    passed     86.42%
+ 700  I0699    1.90%    passed     81.04%
+ 701  I0700    1.90%    passed     86.58%
+ 702  I0701    1.90%    passed     86.58%
+ 703  I0702   67.37%    passed     70.93%
+ 704  I0703    1.90%    passed     93.47%
+ 705  I0704    1.90%    passed     97.81%
+ 706  I0705   67.37%    passed     72.24%
+ 707  I0706    2.12%    passed     99.68%
+ 708  I0707    2.12%    passed     99.00%
+ 709  I0708    2.12%    passed     99.48%
+ 710  I0709   59.03%    passed     65.39%
+ 711  I0710    2.12%    passed     73.82%
+ 712  I0711    2.12%    passed     98.30%
+ 713  I0712   59.03%    passed     91.40%
+ 714  I0713    1.90%    passed     74.45%
+ 715  I0714    1.90%    passed     81.21%
+ 716  I0715   67.37%    passed     99.94%
+ 717  I0716   67.37%    passed     99.94%
+ 718  I0717   67.37%    passed     97.71%
+ 719  I0718   67.37%    passed     99.94%
+ 720  I0719   67.37%    passed     99.10%
+ 721  I0720   67.37%    passed     97.71%
+ 722  I0721    1.90%    passed     52.53%
+ 723  I0722   59.03%    passed     84.96%
+ 724  I0723   59.10%    passed     85.15%
+ 725  I0724   59.03%    passed     82.88%
+ 726  I0725   59.03%    passed     82.88%
+ 727  I0726   59.03%    passed     77.42%
+ 728  I0727   59.03%    passed     82.88%
+ 729  I0728   59.03%    passed     77.42%
+ 730  I0729   59.03%    passed     82.88%
+ 731  I0730   59.03%    passed     82.88%
+ 732  I0731   59.03%    passed     82.88%
+ 733  I0732   59.03%    passed     82.88%
+ 734  I0733   59.03%    passed     88.26%
+ 735  I0734   59.03%    passed     82.88%
+ 736  I0735   59.03%    passed     82.88%
+ 737  I0736    1.90%    passed     91.30%
+ 738  I0737    1.90%    passed     93.60%
+ 739  I0738    1.90%    passed     53.51%
+ 740  I0739   67.37%    passed     99.50%
+ 741  I0740    1.90%    passed     76.70%
+ 742  I0741   67.37%    passed     99.50%
+ 743  I0742   67.37%    passed     99.93%
+ 744  I0743   67.37%    passed     99.50%
+ 745  I0744   67.37%    passed     99.31%
+ 746  I0745    1.90%    passed     62.52%
+ 747  I0746    2.12%    passed     93.10%
+ 748  I0747    1.67%    passed     27.56%
+ 749  I0748    1.67%    passed     50.88%
+ 750  I0749    1.67%    passed     78.32%
+ 751  I0750    1.90%    passed     86.96%
+ 752  I0751    1.90%    passed     89.84%
+ 753  I0752    1.90%    passed     89.84%
+ 754  I0753    1.90%    passed     87.86%
+ 755  I0754    1.97%    passed     94.74%
+WARNING: 299 sequences contain more than 50% gaps/ambiguity
+****  TOTAL   27.35%  3 sequences failed composition chi2 test (p-value<5%; df=3)
+NOTE: I0024 is identical to I0014 but kept for subsequent analysis
+NOTE: I0025 is identical to I0015 but kept for subsequent analysis
+NOTE: I0035 is identical to I0030 but kept for subsequent analysis
+NOTE: I0036 is identical to I0031 but kept for subsequent analysis
+NOTE: I0081 is identical to I0037 but kept for subsequent analysis
+NOTE: I0041 is identical to I0040 but kept for subsequent analysis
+NOTE: I0057 is identical to I0056 but kept for subsequent analysis
+NOTE: I0067 is identical to I0062 but kept for subsequent analysis
+NOTE: I0086 is identical to I0085 but kept for subsequent analysis
+NOTE: I0093 is identical to I0092 but kept for subsequent analysis
+NOTE: I0103 is identical to I0097 but kept for subsequent analysis
+NOTE: I0115 is identical to I0114 but kept for subsequent analysis
+NOTE: I0127 is identical to I0126 but kept for subsequent analysis
+NOTE: I0150 is identical to I0136 but kept for subsequent analysis
+NOTE: I0187 is identical to I0159 but kept for subsequent analysis
+NOTE: I0173 is identical to I0172 but kept for subsequent analysis
+NOTE: I0178 is identical to I0177 but kept for subsequent analysis
+NOTE: I0190 is identical to I0189 but kept for subsequent analysis
+NOTE: I0192 is identical to I0191 but kept for subsequent analysis
+NOTE: I0203 is identical to I0202 but kept for subsequent analysis
+NOTE: I0218 is identical to I0210 but kept for subsequent analysis
+NOTE: I0217 is identical to I0215 but kept for subsequent analysis
+NOTE: I0235 is identical to I0234 but kept for subsequent analysis
+NOTE: I0289 is identical to I0241 but kept for subsequent analysis
+NOTE: I0246 is identical to I0245 but kept for subsequent analysis
+NOTE: I0350 is identical to I0254 but kept for subsequent analysis
+NOTE: I0258 is identical to I0255 but kept for subsequent analysis
+NOTE: I0264 is identical to I0263 but kept for subsequent analysis
+NOTE: I0348 is identical to I0270 but kept for subsequent analysis
+NOTE: I0288 is identical to I0287 but kept for subsequent analysis
+NOTE: I0299 is identical to I0293 but kept for subsequent analysis
+NOTE: I0308 is identical to I0307 but kept for subsequent analysis
+NOTE: I0313 is identical to I0312 but kept for subsequent analysis
+NOTE: I0315 is identical to I0314 but kept for subsequent analysis
+NOTE: I0324 is identical to I0323 but kept for subsequent analysis
+NOTE: I0333 is identical to I0332 but kept for subsequent analysis
+NOTE: I0341 is identical to I0340 but kept for subsequent analysis
+NOTE: I0355 is identical to I0354 but kept for subsequent analysis
+NOTE: I0360 is identical to I0359 but kept for subsequent analysis
+NOTE: I0364 is identical to I0363 but kept for subsequent analysis
+NOTE: I0368 is identical to I0365 but kept for subsequent analysis
+NOTE: I0421 is identical to I0419 but kept for subsequent analysis
+NOTE: I0428 is identical to I0427 but kept for subsequent analysis
+NOTE: I0436 is identical to I0435 but kept for subsequent analysis
+NOTE: I0440 is identical to I0439 but kept for subsequent analysis
+NOTE: I0460 is identical to I0459 but kept for subsequent analysis
+NOTE: I0501 is identical to I0466 but kept for subsequent analysis
+NOTE: I0470 is identical to I0469 but kept for subsequent analysis
+NOTE: I0478 is identical to I0477 but kept for subsequent analysis
+NOTE: I0483 is identical to I0482 but kept for subsequent analysis
+NOTE: I0494 is identical to I0492 but kept for subsequent analysis
+NOTE: I0498 is identical to I0496 but kept for subsequent analysis
+NOTE: I0500 is identical to I0497 but kept for subsequent analysis
+NOTE: I0506 is identical to I0505 but kept for subsequent analysis
+NOTE: I0709 is identical to I0510 but kept for subsequent analysis
+NOTE: I0515 is identical to I0513 but kept for subsequent analysis
+NOTE: I0712 is identical to I0514 but kept for subsequent analysis
+NOTE: I0519 is identical to I0518 but kept for subsequent analysis
+NOTE: I0541 is identical to I0526 but kept for subsequent analysis
+NOTE: I0534 is identical to I0530 but kept for subsequent analysis
+NOTE: I0532 is identical to I0531 but kept for subsequent analysis
+NOTE: I0539 is identical to I0538 but kept for subsequent analysis
+NOTE: I0547 is identical to I0542 but kept for subsequent analysis
+NOTE: I0545 is identical to I0544 but kept for subsequent analysis
+NOTE: I0571 is identical to I0556 but kept for subsequent analysis
+NOTE: I0561 is identical to I0560 but kept for subsequent analysis
+NOTE: I0565 is identical to I0564 but kept for subsequent analysis
+NOTE: I0576 is identical to I0575 but kept for subsequent analysis
+NOTE: I0583 is identical to I0582 but kept for subsequent analysis
+NOTE: I0715 is identical to I0585 but kept for subsequent analysis
+NOTE: I0593 is identical to I0589 but kept for subsequent analysis
+NOTE: I0594 is identical to I0590 but kept for subsequent analysis
+NOTE: I0602 is identical to I0591 but kept for subsequent analysis
+NOTE: I0595 is identical to I0592 but kept for subsequent analysis
+NOTE: I0620 is identical to I0617 but kept for subsequent analysis
+NOTE: I0626 is identical to I0621 but kept for subsequent analysis
+NOTE: I0633 is identical to I0632 but kept for subsequent analysis
+NOTE: I0642 is identical to I0641 but kept for subsequent analysis
+NOTE: I0653 is identical to I0652 but kept for subsequent analysis
+NOTE: I0656 is identical to I0655 but kept for subsequent analysis
+NOTE: I0660 is identical to I0659 but kept for subsequent analysis
+NOTE: I0672 is identical to I0671 but kept for subsequent analysis
+NOTE: I0675 is identical to I0673 but kept for subsequent analysis
+NOTE: I0679 is identical to I0678 but kept for subsequent analysis
+NOTE: I0689 is identical to I0687 but kept for subsequent analysis
+NOTE: I0692 is identical to I0691 but kept for subsequent analysis
+NOTE: I0724 is identical to I0693 but kept for subsequent analysis
+NOTE: I0695 is identical to I0694 but kept for subsequent analysis
+NOTE: I0701 is identical to I0700 but kept for subsequent analysis
+NOTE: I0720 is identical to I0717 but kept for subsequent analysis
+NOTE: I0728 is identical to I0726 but kept for subsequent analysis
+NOTE: I0741 is identical to I0739 but kept for subsequent analysis
+NOTE: I0752 is identical to I0751 but kept for subsequent analysis
+Checking for duplicate sequences: done in 0.00313187 secs using 294% CPU
+Identifying sites to remove: done in 0.00561595 secs using 284.7% CPU
+NOTE: 163 identical sequences (see below) will be ignored for subsequent analysis
+NOTE: I0027 (identical to I0015) is ignored but added at the end
+NOTE: I0044 (identical to I0015) is ignored but added at the end
+NOTE: I0358 (identical to I0015) is ignored but added at the end
+NOTE: I0079 (identical to I0030) is ignored but added at the end
+NOTE: I0038 (identical to I0031) is ignored but added at the end
+NOTE: I0356 (identical to I0040) is ignored but added at the end
+NOTE: I0058 (identical to I0056) is ignored but added at the end
+NOTE: I0087 (identical to I0085) is ignored but added at the end
+NOTE: I0088 (identical to I0085) is ignored but added at the end
+NOTE: I0090 (identical to I0085) is ignored but added at the end
+NOTE: I0091 (identical to I0085) is ignored but added at the end
+NOTE: I0137 (identical to I0085) is ignored but added at the end
+NOTE: I0138 (identical to I0085) is ignored but added at the end
+NOTE: I0139 (identical to I0085) is ignored but added at the end
+NOTE: I0140 (identical to I0085) is ignored but added at the end
+NOTE: I0141 (identical to I0085) is ignored but added at the end
+NOTE: I0145 (identical to I0085) is ignored but added at the end
+NOTE: I0146 (identical to I0085) is ignored but added at the end
+NOTE: I0147 (identical to I0085) is ignored but added at the end
+NOTE: I0148 (identical to I0085) is ignored but added at the end
+NOTE: I0149 (identical to I0085) is ignored but added at the end
+NOTE: I0094 (identical to I0092) is ignored but added at the end
+NOTE: I0095 (identical to I0092) is ignored but added at the end
+NOTE: I0096 (identical to I0092) is ignored but added at the end
+NOTE: I0098 (identical to I0092) is ignored but added at the end
+NOTE: I0099 (identical to I0092) is ignored but added at the end
+NOTE: I0100 (identical to I0092) is ignored but added at the end
+NOTE: I0101 (identical to I0092) is ignored but added at the end
+NOTE: I0102 (identical to I0092) is ignored but added at the end
+NOTE: I0104 (identical to I0092) is ignored but added at the end
+NOTE: I0106 (identical to I0092) is ignored but added at the end
+NOTE: I0109 (identical to I0092) is ignored but added at the end
+NOTE: I0110 (identical to I0092) is ignored but added at the end
+NOTE: I0112 (identical to I0092) is ignored but added at the end
+NOTE: I0113 (identical to I0092) is ignored but added at the end
+NOTE: I0116 (identical to I0092) is ignored but added at the end
+NOTE: I0119 (identical to I0092) is ignored but added at the end
+NOTE: I0120 (identical to I0092) is ignored but added at the end
+NOTE: I0121 (identical to I0092) is ignored but added at the end
+NOTE: I0123 (identical to I0092) is ignored but added at the end
+NOTE: I0105 (identical to I0097) is ignored but added at the end
+NOTE: I0107 (identical to I0097) is ignored but added at the end
+NOTE: I0108 (identical to I0097) is ignored but added at the end
+NOTE: I0111 (identical to I0097) is ignored but added at the end
+NOTE: I0118 (identical to I0114) is ignored but added at the end
+NOTE: I0122 (identical to I0114) is ignored but added at the end
+NOTE: I0124 (identical to I0114) is ignored but added at the end
+NOTE: I0125 (identical to I0114) is ignored but added at the end
+NOTE: I0128 (identical to I0126) is ignored but added at the end
+NOTE: I0160 (identical to I0136) is ignored but added at the end
+NOTE: I0182 (identical to I0136) is ignored but added at the end
+NOTE: I0249 (identical to I0245) is ignored but added at the end
+NOTE: I0351 (identical to I0254) is ignored but added at the end
+NOTE: I0260 (identical to I0255) is ignored but added at the end
+NOTE: I0261 (identical to I0255) is ignored but added at the end
+NOTE: I0262 (identical to I0255) is ignored but added at the end
+NOTE: I0265 (identical to I0263) is ignored but added at the end
+NOTE: I0349 (identical to I0270) is ignored but added at the end
+NOTE: I0309 (identical to I0307) is ignored but added at the end
+NOTE: I0334 (identical to I0332) is ignored but added at the end
+NOTE: I0342 (identical to I0340) is ignored but added at the end
+NOTE: I0343 (identical to I0340) is ignored but added at the end
+NOTE: I0344 (identical to I0340) is ignored but added at the end
+NOTE: I0345 (identical to I0340) is ignored but added at the end
+NOTE: I0361 (identical to I0359) is ignored but added at the end
+NOTE: I0362 (identical to I0359) is ignored but added at the end
+NOTE: I0366 (identical to I0359) is ignored but added at the end
+NOTE: I0367 (identical to I0359) is ignored but added at the end
+NOTE: I0370 (identical to I0359) is ignored but added at the end
+NOTE: I0371 (identical to I0359) is ignored but added at the end
+NOTE: I0373 (identical to I0359) is ignored but added at the end
+NOTE: I0377 (identical to I0359) is ignored but added at the end
+NOTE: I0378 (identical to I0359) is ignored but added at the end
+NOTE: I0383 (identical to I0359) is ignored but added at the end
+NOTE: I0384 (identical to I0359) is ignored but added at the end
+NOTE: I0385 (identical to I0359) is ignored but added at the end
+NOTE: I0396 (identical to I0359) is ignored but added at the end
+NOTE: I0369 (identical to I0365) is ignored but added at the end
+NOTE: I0372 (identical to I0365) is ignored but added at the end
+NOTE: I0374 (identical to I0365) is ignored but added at the end
+NOTE: I0375 (identical to I0365) is ignored but added at the end
+NOTE: I0376 (identical to I0365) is ignored but added at the end
+NOTE: I0379 (identical to I0365) is ignored but added at the end
+NOTE: I0380 (identical to I0365) is ignored but added at the end
+NOTE: I0381 (identical to I0365) is ignored but added at the end
+NOTE: I0382 (identical to I0365) is ignored but added at the end
+NOTE: I0387 (identical to I0365) is ignored but added at the end
+NOTE: I0389 (identical to I0365) is ignored but added at the end
+NOTE: I0390 (identical to I0365) is ignored but added at the end
+NOTE: I0391 (identical to I0365) is ignored but added at the end
+NOTE: I0392 (identical to I0365) is ignored but added at the end
+NOTE: I0393 (identical to I0365) is ignored but added at the end
+NOTE: I0394 (identical to I0365) is ignored but added at the end
+NOTE: I0395 (identical to I0365) is ignored but added at the end
+NOTE: I0397 (identical to I0365) is ignored but added at the end
+NOTE: I0398 (identical to I0365) is ignored but added at the end
+NOTE: I0399 (identical to I0365) is ignored but added at the end
+NOTE: I0400 (identical to I0365) is ignored but added at the end
+NOTE: I0401 (identical to I0365) is ignored but added at the end
+NOTE: I0402 (identical to I0365) is ignored but added at the end
+NOTE: I0404 (identical to I0365) is ignored but added at the end
+NOTE: I0405 (identical to I0365) is ignored but added at the end
+NOTE: I0406 (identical to I0365) is ignored but added at the end
+NOTE: I0407 (identical to I0365) is ignored but added at the end
+NOTE: I0408 (identical to I0365) is ignored but added at the end
+NOTE: I0409 (identical to I0365) is ignored but added at the end
+NOTE: I0410 (identical to I0365) is ignored but added at the end
+NOTE: I0429 (identical to I0427) is ignored but added at the end
+NOTE: I0442 (identical to I0439) is ignored but added at the end
+NOTE: I0443 (identical to I0439) is ignored but added at the end
+NOTE: I0503 (identical to I0466) is ignored but added at the end
+NOTE: I0471 (identical to I0469) is ignored but added at the end
+NOTE: I0479 (identical to I0469) is ignored but added at the end
+NOTE: I0484 (identical to I0482) is ignored but added at the end
+NOTE: I0491 (identical to I0482) is ignored but added at the end
+NOTE: I0499 (identical to I0496) is ignored but added at the end
+NOTE: I0535 (identical to I0531) is ignored but added at the end
+NOTE: I0540 (identical to I0538) is ignored but added at the end
+NOTE: I0551 (identical to I0542) is ignored but added at the end
+NOTE: I0546 (identical to I0544) is ignored but added at the end
+NOTE: I0548 (identical to I0544) is ignored but added at the end
+NOTE: I0549 (identical to I0544) is ignored but added at the end
+NOTE: I0550 (identical to I0544) is ignored but added at the end
+NOTE: I0552 (identical to I0544) is ignored but added at the end
+NOTE: I0553 (identical to I0544) is ignored but added at the end
+NOTE: I0554 (identical to I0544) is ignored but added at the end
+NOTE: I0572 (identical to I0556) is ignored but added at the end
+NOTE: I0623 (identical to I0556) is ignored but added at the end
+NOTE: I0646 (identical to I0556) is ignored but added at the end
+NOTE: I0649 (identical to I0556) is ignored but added at the end
+NOTE: I0566 (identical to I0564) is ignored but added at the end
+NOTE: I0567 (identical to I0564) is ignored but added at the end
+NOTE: I0568 (identical to I0564) is ignored but added at the end
+NOTE: I0570 (identical to I0564) is ignored but added at the end
+NOTE: I0577 (identical to I0575) is ignored but added at the end
+NOTE: I0578 (identical to I0575) is ignored but added at the end
+NOTE: I0579 (identical to I0575) is ignored but added at the end
+NOTE: I0580 (identical to I0575) is ignored but added at the end
+NOTE: I0581 (identical to I0575) is ignored but added at the end
+NOTE: I0718 (identical to I0585) is ignored but added at the end
+NOTE: I0596 (identical to I0589) is ignored but added at the end
+NOTE: I0597 (identical to I0589) is ignored but added at the end
+NOTE: I0598 (identical to I0589) is ignored but added at the end
+NOTE: I0600 (identical to I0592) is ignored but added at the end
+NOTE: I0601 (identical to I0592) is ignored but added at the end
+NOTE: I0627 (identical to I0621) is ignored but added at the end
+NOTE: I0628 (identical to I0621) is ignored but added at the end
+NOTE: I0629 (identical to I0621) is ignored but added at the end
+NOTE: I0631 (identical to I0621) is ignored but added at the end
+NOTE: I0644 (identical to I0641) is ignored but added at the end
+NOTE: I0661 (identical to I0659) is ignored but added at the end
+NOTE: I0674 (identical to I0671) is ignored but added at the end
+NOTE: I0680 (identical to I0678) is ignored but added at the end
+NOTE: I0681 (identical to I0678) is ignored but added at the end
+NOTE: I0725 (identical to I0693) is ignored but added at the end
+NOTE: I0727 (identical to I0693) is ignored but added at the end
+NOTE: I0729 (identical to I0693) is ignored but added at the end
+NOTE: I0730 (identical to I0693) is ignored but added at the end
+NOTE: I0731 (identical to I0693) is ignored but added at the end
+NOTE: I0732 (identical to I0693) is ignored but added at the end
+NOTE: I0734 (identical to I0693) is ignored but added at the end
+NOTE: I0735 (identical to I0693) is ignored but added at the end
+NOTE: I0743 (identical to I0739) is ignored but added at the end
+Alignment was printed to /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/S/tree.uniqueseq.phy
+
+For your convenience alignment with unique sequences printed to /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/S/tree.uniqueseq.phy
+
+
+Create initial parsimony tree by phylogenetic likelihood library (PLL)... 0.156 seconds
+Perform fast likelihood tree search using GTR+I+G model...
+Estimate model parameters (epsilon = 5.000)
+Perform nearest neighbor interchange...
+Estimate model parameters (epsilon = 1.000)
+1. Initial log-likelihood: -44368.405
+2. Current log-likelihood: -44367.315
+3. Current log-likelihood: -44366.110
+4. Current log-likelihood: -44365.031
+Optimal log-likelihood: -44363.607
+Rate parameters:  A-C: 2.64816  A-G: 13.73548  A-T: 1.99015  C-G: 0.43580  C-T: 21.61707  G-T: 1.00000
+Base frequencies:  A: 0.324  C: 0.196  G: 0.231  T: 0.249
+Proportion of invariable sites: 0.368
+Gamma shape alpha: 0.575
+Parameters optimization took 4 rounds (1.770 sec)
+Time for fast ML tree search: 7.131 seconds
+
+NOTE: ModelFinder requires 173 MB RAM!
+ModelFinder will test up to 968 DNA models (sample size: 1318 epsilon: 0.100) ...
+ No. Model         -LnL         df  AIC          AICc         BIC
+Akaike Information Criterion:           GTR+F+R6
+Corrected Akaike Information Criterion: TPM2u+R5
+Bayesian Information Criterion:         GTR+F+R6
+Best-fit model: GTR+F+R6 chosen according to BIC
+
+All model information printed to /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/S/tree.model.gz
+CPU time for ModelFinder: 2415.034 seconds (0h:40m:15s)
+Wall-clock time for ModelFinder: 818.410 seconds (0h:13m:38s)
+Generating 1000 samples for ultrafast bootstrap (seed: 42)...
+
+NOTE: 105 MB RAM (0 GB) is required!
+Estimate model parameters (epsilon = 0.100)
+1. Initial log-likelihood: -44227.614
+2. Current log-likelihood: -44227.251
+Optimal log-likelihood: -44227.157
+Rate parameters:  A-C: 2.77922  A-G: 14.35543  A-T: 2.13154  C-G: 0.46810  C-T: 23.52303  G-T: 1.00000
+Base frequencies:  A: 0.324  C: 0.196  G: 0.231  T: 0.249
+Site proportion and rates:  (0.538,0.017) (0.130,0.281) (0.080,1.012) (0.114,2.477) (0.123,3.984) (0.015,6.840)
+Parameters optimization took 2 rounds (2.373 sec)
+Wrote distance file to... 
+Computing ML distances based on estimated model parameters...
+Calculating distance matrix: done in 1.03716 secs using 299.3% CPU
+Computing ML distances took 1.038729 sec (of wall-clock time) 3.109092 sec (of CPU time)
+WARNING: Some pairwise ML distances are too long (saturated)
+Setting up auxiliary I and S matrices: done in 0.003088 secs using 325.7% CPU
+Constructing RapidNJ tree: done in 0.0193319 secs using 385.9% CPU
+Computing RapidNJ tree took 0.022465 sec (of wall-clock time) 0.084746 sec (of CPU time)
+Log-likelihood of RapidNJ tree: -48672.914
+--------------------------------------------------------------------
+|             INITIALIZING CANDIDATE TREE SET                      |
+--------------------------------------------------------------------
+Generating 98 parsimony trees... 14.049 second
+Computing log-likelihood of 98 initial trees ... 10.801 seconds
+Current best score: -44227.157
+
+Do NNI search on 20 best initial trees
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 1: -44212.328
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 5: -44200.352
+Iteration 10 / LogL: -44209.887 / Time: 0h:14m:56s
+Iteration 20 / LogL: -44218.213 / Time: 0h:15m:41s
+Finish initializing candidate tree set (20)
+Current best tree score: -44200.352 / CPU time: 117.863
+Number of iterations: 20
+--------------------------------------------------------------------
+|               OPTIMIZING CANDIDATE TREE SET                      |
+--------------------------------------------------------------------
+Iteration 30 / LogL: -44283.205 / Time: 0h:16m:26s (0h:7m:15s left)
+Iteration 40 / LogL: -44264.139 / Time: 0h:17m:8s (0h:5m:50s left)
+Iteration 50 / LogL: -44207.824 / Time: 0h:17m:51s (0h:4m:44s left)
+Log-likelihood cutoff on original alignment: -44260.340
+Iteration 60 / LogL: -44206.826 / Time: 0h:18m:41s (0h:3m:50s left)
+Iteration 70 / LogL: -44203.252 / Time: 0h:19m:21s (0h:2m:54s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 72: -44198.982
+Iteration 80 / LogL: -44200.894 / Time: 0h:20m:9s (0h:7m:35s left)
+Iteration 90 / LogL: -44209.358 / Time: 0h:20m:56s (0h:6m:43s left)
+Iteration 100 / LogL: -44290.408 / Time: 0h:21m:41s (0h:5m:51s left)
+Log-likelihood cutoff on original alignment: -44260.340
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.996
+Iteration 110 / LogL: -44205.309 / Time: 0h:22m:30s (0h:7m:19s left)
+Iteration 120 / LogL: -44268.139 / Time: 0h:23m:13s (0h:6m:26s left)
+Iteration 130 / LogL: -44221.230 / Time: 0h:23m:53s (0h:5m:33s left)
+Iteration 140 / LogL: -44211.758 / Time: 0h:24m:39s (0h:4m:45s left)
+Iteration 150 / LogL: -44199.199 / Time: 0h:25m:23s (0h:3m:56s left)
+Log-likelihood cutoff on original alignment: -44260.340
+Iteration 160 / LogL: -44237.988 / Time: 0h:26m:9s (0h:3m:8s left)
+Iteration 170 / LogL: -44242.463 / Time: 0h:26m:57s (0h:2m:21s left)
+TREE SEARCH COMPLETED AFTER 173 ITERATIONS / Time: 0h:27m:13s
+
+--------------------------------------------------------------------
+|                    FINALIZING TREE SEARCH                        |
+--------------------------------------------------------------------
+Performs final model parameters optimization
+Estimate model parameters (epsilon = 0.010)
+1. Initial log-likelihood: -44198.982
+2. Current log-likelihood: -44198.961
+3. Current log-likelihood: -44198.933
+4. Current log-likelihood: -44198.916
+5. Current log-likelihood: -44198.901
+6. Current log-likelihood: -44198.887
+7. Current log-likelihood: -44198.873
+8. Current log-likelihood: -44198.860
+9. Current log-likelihood: -44198.844
+10. Current log-likelihood: -44198.830
+11. Current log-likelihood: -44198.818
+12. Current log-likelihood: -44198.805
+13. Current log-likelihood: -44198.792
+14. Current log-likelihood: -44198.780
+15. Current log-likelihood: -44198.767
+16. Current log-likelihood: -44198.757
+17. Current log-likelihood: -44198.744
+18. Current log-likelihood: -44198.732
+19. Current log-likelihood: -44198.721
+20. Current log-likelihood: -44198.710
+21. Current log-likelihood: -44198.700
+22. Current log-likelihood: -44198.689
+23. Current log-likelihood: -44198.679
+24. Current log-likelihood: -44198.668
+25. Current log-likelihood: -44198.658
+Optimal log-likelihood: -44198.643
+Rate parameters:  A-C: 2.76137  A-G: 14.32458  A-T: 2.08770  C-G: 0.49339  C-T: 23.43686  G-T: 1.00000
+Base frequencies:  A: 0.324  C: 0.196  G: 0.231  T: 0.249
+Site proportion and rates:  (0.533,0.016) (0.130,0.260) (0.079,0.940) (0.114,2.367) (0.130,3.955) (0.014,7.000)
+Parameters optimization took 25 rounds (23.210 sec)
+BEST SCORE FOUND : -44198.643
+Creating bootstrap support values...
+Split supports printed to NEXUS file /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/S/tree.splits.nex
+Total tree length: 13.716
+
+Total number of iterations: 173
+CPU time used for tree search: 2364.558 sec (0h:39m:24s)
+Wall-clock time used for tree search: 810.673 sec (0h:13m:30s)
+Total CPU time used: 4864.780 sec (1h:21m:4s)
+Total wall-clock time used: 1658.754 sec (0h:27m:38s)
+
+Computing bootstrap consensus tree...
+Reading input file /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/S/tree.splits.nex...
+592 taxa and 2889 splits.
+Consensus tree written to /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/S/tree.contree
+Reading input trees file /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/S/tree.contree
+Log-likelihood of consensus tree: -44199.419
+
+Analysis results written to: 
+  IQ-TREE report:                /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/S/tree.iqtree
+  Maximum-likelihood tree:       /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/S/tree.treefile
+  Likelihood distances:          /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/S/tree.mldist
+
+Ultrafast bootstrap approximation results written to:
+  Split support values:          /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/S/tree.splits.nex
+  Consensus tree:                /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/S/tree.contree
+  Screen log file:               /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/S/tree.log
+
+Date and Time: Sat Aug 15 05:45:47 2026
