@@ -249,6 +249,10 @@ RPI_WEIGHTS: Dict[str, Any] = {
         "same_family": 0.25,
         "same_order": 0.10,
         "different_order": 0.01,
+        # Neither isolate has any host taxonomy at all (host_name, host_family, and
+        # host_order all empty). Unknown, not separated -- must not collapse to
+        # 'different_order'. See host_rank_proximity's top-of-function guard.
+        "unknown_host_metadata": 1.0,
     },
     # Floors keeping every factor strictly positive. See the no-literal-zeros rule.
     "eco_floor": 0.01,
@@ -1040,6 +1044,15 @@ def host_rank_proximity(a: "ah.IsolateRecord", b: "ah.IsolateRecord") -> str:
     Missing metadata never yields 'different_order' by default: an empty field means
     unknown, and unknown must not masquerade as ecological separation.
     """
+    def has_any_host_field(isolate: "ah.IsolateRecord") -> bool:
+        return bool(isolate.host_name or isolate.host_family or isolate.host_order)
+
+    if not has_any_host_field(a) or not has_any_host_field(b):
+        # Either side entirely lacking host taxonomy (e.g. resolve_host_taxonomy
+        # failed and no biosample host was available) is unknown, not separated --
+        # mirrors ecological_opportunity's own geo term, which stays neutral when
+        # either side's country set is empty rather than assuming the worst.
+        return "unknown_host_metadata"
     if a.host_name and a.host_name == b.host_name:
         return "same_species"
     genus_a, genus_b = host_genus_of(a), host_genus_of(b)
@@ -1109,9 +1122,15 @@ def ecological_opportunity(
             )
             countries_a = {i.country for i in members_a if i.country}
             countries_b = {i.country for i in members_b if i.country}
-            geo = 1.0 if (countries_a & countries_b) else floor
+            # Missing-means-neutral takes precedence: an empty country set on either
+            # side is unknown, not separated, so it must be checked before the floor
+            # branch could otherwise apply.
             if not countries_a or not countries_b:
                 geo = 1.0
+            elif countries_a & countries_b:
+                geo = 1.0
+            else:
+                geo = floor
 
             span_a, span_b = _year_span(members_a), _year_span(members_b)
             if span_a and span_b:
@@ -2276,6 +2295,19 @@ class EcologicalOpportunityTest(unittest.TestCase):
         isolates = [_eco_isolate("A", "USA", "2001")]
         result = ecological_opportunity(["A", "B"], isolates)
         self.assertEqual(result["rpi_e_total"], 1.0)
+
+    def test_unknown_host_metadata_stays_neutral_not_maximal_separation(self):
+        """When one side's isolates carry no host taxonomy at all -- host_name,
+        host_family, and host_order all empty, as happens when resolve_host_taxonomy
+        fails and no biosample host is available (all_hanta.py:1560-1565, flagged
+        'missing_host') -- that is unknown, not separated. It must not fall through
+        to 'different_order' (0.01), the harshest value in the ladder."""
+        isolates = [
+            _eco_isolate("A", "USA", "2001"),
+            _eco_isolate("B", "USA", "2001", host_order="", host_family="", host_name=""),
+        ]
+        result = ecological_opportunity(["A", "B"], isolates)
+        self.assertEqual(result["rpi_e_host"], 1.0)
 
     def test_single_implicated_species_returns_neutral_one(self):
         isolates = [_eco_isolate("A", "USA", "2001")]
