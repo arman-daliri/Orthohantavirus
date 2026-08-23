@@ -21,7 +21,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, FrozenSet, List, Optional, Tuple
+from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Tuple
 
 import numpy as np
 from Bio.Align import PairwiseAligner, substitution_matrices
@@ -237,6 +237,21 @@ RPI_WEIGHTS: Dict[str, Any] = {
     # own PED distribution -- a "DEmARC-style analysis", NOT the DEmARC tool. Swept in
     # the sensitivity analysis.
     "stratum_identity_boundary": 0.80,
+
+    # STRUCTURAL ASSUMPTION -- NOT A MEASUREMENT. These decay weights cannot be
+    # estimated from 8 positives. The ladder's ORDERING is supported (Rodriguez 1998
+    # measured 8.5% within host species vs 0.6% across host species, both MOI 1); the
+    # INTERMEDIATE VALUES and the functional form are assumed. Both the values and the
+    # shape of the decay are swept in the sensitivity analysis (spec section 5, 12).
+    "host_decay": {
+        "same_species": 1.0,
+        "same_genus": 0.5,
+        "same_family": 0.25,
+        "same_order": 0.10,
+        "different_order": 0.01,
+    },
+    # Floors keeping every factor strictly positive. See the no-literal-zeros rule.
+    "eco_floor": 0.01,
 }
 
 
@@ -1008,6 +1023,104 @@ def divergence_stratum(identity: float, boundary: Optional[float] = None) -> str
         raise ValueError(f"identity must be a fraction in [0, 1], got {identity!r}")
     boundary = RPI_WEIGHTS["stratum_identity_boundary"] if boundary is None else boundary
     return "close" if identity >= boundary else "distant"
+
+
+def host_genus_of(isolate: "ah.IsolateRecord") -> str:
+    """Genus from the host binomial. IsolateRecord carries no host_genus field; host_name
+    is a binomial in the curated data ('Myodes glareolus'), so the first token is the
+    genus. Returns '' when host_name is absent, which callers treat as unknown rather
+    than as a mismatch.
+    """
+    return isolate.host_name.split()[0] if isolate.host_name else ""
+
+
+def host_rank_proximity(a: "ah.IsolateRecord", b: "ah.IsolateRecord") -> str:
+    """Finest shared host taxonomic rank between two isolates' reservoirs.
+
+    Missing metadata never yields 'different_order' by default: an empty field means
+    unknown, and unknown must not masquerade as ecological separation.
+    """
+    if a.host_name and a.host_name == b.host_name:
+        return "same_species"
+    genus_a, genus_b = host_genus_of(a), host_genus_of(b)
+    if genus_a and genus_a == genus_b:
+        return "same_genus"
+    if a.host_family and a.host_family == b.host_family:
+        return "same_family"
+    if a.host_order and a.host_order == b.host_order:
+        return "same_order"
+    return "different_order"
+
+
+def _year_span(isolates: Sequence["ah.IsolateRecord"]) -> Optional[Tuple[int, int]]:
+    years = [int(i.year) for i in isolates if str(i.year).isdigit()]
+    return (min(years), max(years)) if years else None
+
+
+def ecological_opportunity(
+    implicated_species: List[str], isolates: List["ah.IsolateRecord"],
+) -> Dict[str, float]:
+    """Factor E: relative opportunity for the implicated lineages to co-infect one cell.
+
+    E = h_host * g_geo * t_time, over the WORST pair among all implicated species --
+    deliberately unlike gate3_check, which reads implicated_species[:2] and has no
+    temporal term. Disagreement between the two is expected and informative.
+
+    Returns 1.0 (neutral) when fewer than two species are implicated: there is no
+    co-infection requirement to test, so E must not penalise.
+    """
+    floor = RPI_WEIGHTS["eco_floor"]
+    if len(implicated_species) < 2:
+        return {"rpi_e_host": 1.0, "rpi_e_geo": 1.0, "rpi_e_time": 1.0, "rpi_e_total": 1.0}
+
+    by_species: Dict[str, List["ah.IsolateRecord"]] = defaultdict(list)
+    for isolate in isolates:
+        if isolate.is_lab_derived or isolate.is_vaccine_strain:
+            continue
+        if isolate.species_name in implicated_species:
+            by_species[isolate.species_name].append(isolate)
+
+    worst = {"rpi_e_host": 1.0, "rpi_e_geo": 1.0, "rpi_e_time": 1.0}
+    for index, species_a in enumerate(implicated_species):
+        for species_b in implicated_species[index + 1:]:
+            members_a, members_b = by_species.get(species_a), by_species.get(species_b)
+            if not members_a or not members_b:
+                # No surviving WILD isolate at all for one species (e.g. only lab or
+                # vaccine strains remain after filtering): there is no ecological
+                # evidence to support a shared host niche for this pair, so the host
+                # term takes the floor rather than defaulting to full opportunity.
+                # This is distinct from a single blank country/year field on an
+                # isolate that does exist -- that case stays neutral below.
+                worst["rpi_e_host"] = min(worst["rpi_e_host"], floor)
+                continue
+
+            best_host = max(
+                RPI_WEIGHTS["host_decay"][host_rank_proximity(a, b)]
+                for a in members_a for b in members_b
+            )
+            countries_a = {i.country for i in members_a if i.country}
+            countries_b = {i.country for i in members_b if i.country}
+            geo = 1.0 if (countries_a & countries_b) else floor
+            if not countries_a or not countries_b:
+                geo = 1.0
+
+            span_a, span_b = _year_span(members_a), _year_span(members_b)
+            if span_a and span_b:
+                # +1: inclusive-year spans that merely touch (e.g. 2001 vs 2002, a
+                # one-year gap between point samples) count as overlapping -- point
+                # samples a year apart are effectively contemporaneous for a
+                # multi-year reservoir infection cycle, not evidence of separation.
+                overlap = min(span_a[1], span_b[1]) - max(span_a[0], span_b[0]) + 1
+                time = 1.0 if overlap >= 0 else max(floor, 1.0 / (1.0 + abs(overlap)))
+            else:
+                time = 1.0
+
+            worst["rpi_e_host"] = min(worst["rpi_e_host"], best_host)
+            worst["rpi_e_geo"] = min(worst["rpi_e_geo"], geo)
+            worst["rpi_e_time"] = min(worst["rpi_e_time"], time)
+
+    worst["rpi_e_total"] = worst["rpi_e_host"] * worst["rpi_e_geo"] * worst["rpi_e_time"]
+    return worst
 
 
 # ---------------------------------------------------------------------------
@@ -2076,3 +2189,78 @@ class DivergenceStratumTest(unittest.TestCase):
             divergence_stratum(1.5)
         with self.assertRaises(ValueError):
             divergence_stratum(-0.1)
+
+
+def _eco_isolate(species, country, year, host_order="Rodentia",
+                 host_family="Cricetidae", host_name="Peromyscus maniculatus"):
+    """IsolateRecord has host_name (a binomial), host_order and host_family -- but NO
+    host_genus and NO observed_host. Genus is derived from host_name."""
+    isolate = _make_ecology_isolate(species, country, host_order, year)
+    isolate.host_family = host_family
+    isolate.host_name = host_name
+    return isolate
+
+
+class EcologicalOpportunityTest(unittest.TestCase):
+    def test_same_host_genus_same_country_same_years_scores_high(self):
+        isolates = [
+            _eco_isolate("A", "USA", "2001"),
+            _eco_isolate("B", "USA", "2002"),
+        ]
+        result = ecological_opportunity(["A", "B"], isolates)
+        self.assertGreater(result["rpi_e_total"], 0.4)
+        self.assertEqual(result["rpi_e_geo"], 1.0)
+        self.assertEqual(result["rpi_e_time"], 1.0)
+
+    def test_disjoint_countries_drive_geo_term_down(self):
+        isolates = [
+            _eco_isolate("A", "USA", "2001"),
+            _eco_isolate("B", "Chile", "2002"),
+        ]
+        result = ecological_opportunity(["A", "B"], isolates)
+        self.assertLess(result["rpi_e_geo"], 1.0)
+
+    def test_disjoint_decades_drive_time_term_down(self):
+        isolates = [
+            _eco_isolate("A", "USA", "1985"),
+            _eco_isolate("B", "USA", "2020"),
+        ]
+        result = ecological_opportunity(["A", "B"], isolates)
+        self.assertLess(result["rpi_e_time"], 1.0)
+
+    def test_no_factor_is_ever_exactly_zero(self):
+        """A zero in a multiplicative index is a hidden hard gate. Ecological
+        impossibility must approach zero, never reach it."""
+        isolates = [
+            _eco_isolate("A", "USA", "1985", host_order="Rodentia"),
+            _eco_isolate("B", "Chile", "2020", host_order="Soricomorpha",
+                         host_family="Soricidae", host_name="Sorex araneus"),
+        ]
+        result = ecological_opportunity(["A", "B"], isolates)
+        for key in ("rpi_e_host", "rpi_e_geo", "rpi_e_time", "rpi_e_total"):
+            self.assertGreater(result[key], 0.0, key)
+        self.assertLess(result["rpi_e_total"], 0.01)
+
+    def test_covers_all_implicated_species_not_just_first_two(self):
+        """gate3_check reads implicated_species[:2]. Factor E must not."""
+        isolates = [
+            _eco_isolate("A", "USA", "2001"),
+            _eco_isolate("B", "USA", "2001"),
+            _eco_isolate("C", "Chile", "1980", host_order="Soricomorpha",
+                         host_family="Soricidae", host_name="Sorex araneus"),
+        ]
+        two = ecological_opportunity(["A", "B"], isolates)
+        three = ecological_opportunity(["A", "B", "C"], isolates)
+        self.assertLess(three["rpi_e_total"], two["rpi_e_total"])
+
+    def test_lab_and_vaccine_strains_are_excluded(self):
+        wild = _eco_isolate("A", "USA", "2001")
+        lab = _eco_isolate("B", "USA", "2001")
+        lab.is_lab_derived = True
+        result = ecological_opportunity(["A", "B"], [wild, lab])
+        self.assertLess(result["rpi_e_total"], 0.5)
+
+    def test_single_implicated_species_returns_neutral_one(self):
+        isolates = [_eco_isolate("A", "USA", "2001")]
+        result = ecological_opportunity(["A"], isolates)
+        self.assertEqual(result["rpi_e_total"], 1.0)
