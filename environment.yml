@@ -10,3 +10,9 @@ dependencies:
   - dendropy>=5.0
   - mafft=7.525
   - iqtree=3.1.3
+  # Exact pin required: RNAcofold's reported free energies (dG) are dependent on the
+  # ViennaRNA version's energy-parameter set, so an unpinned version would silently
+  # change every downstream Reassortment Plausibility Index score. This pin could not
+  # be reconciled against a real environment build in the authoring environment (no
+  # conda/mamba/micromamba available, no network access to resolve or verify it).
+  - viennarna=2.7.2

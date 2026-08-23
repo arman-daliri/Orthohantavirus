@@ -16,6 +16,9 @@ docs/superpowers/notes/2026-08-14-reassortment-detector-reconsolidation.md.
 
 import argparse
 import csv
+import math
+import re
+import subprocess
 import sys
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -1149,6 +1152,68 @@ def ecological_opportunity(
 
     worst["rpi_e_total"] = worst["rpi_e_host"] * worst["rpi_e_geo"] * worst["rpi_e_time"]
     return worst
+
+
+# Gas constant x RNAcofold's default temperature (37 C = 310.15 K), in kcal/mol so the
+# units match RNAcofold's reported dG. Both the temperature and the energy-parameter set
+# are pinned with the ViennaRNA version in environment.yml -- dG is parameter-set
+# dependent. Spec section 6.1.
+RPI_RT_KCAL_PER_MOL = 0.0019872 * 310.15  # ~= 0.6163
+
+
+def boltzmann_compatibility(
+    dg_non_cognate: float, dg_cognate: float, rt: Optional[float] = None,
+) -> float:
+    """Relative Boltzmann weight of the non-cognate duplex against the cognate one.
+
+    ddG = dG_non_cognate - dG_cognate. A WEAKER non-cognate duplex has a LESS NEGATIVE
+    dG, so ddG > 0 and the result is < 1. REVERSING THIS SUBTRACTION INVERTS THE ENTIRE
+    INDEX -- see test_sign_convention_is_not_flipped.
+
+    Clamped to 1.0 above: this factor is a penalty for non-cognate competition, never a
+    bonus. Strictly positive below: a zero would be a hidden hard gate.
+
+    Methods sentence: the exp(-ddG/RT) form is the relative Boltzmann weight of the
+    non-cognate versus cognate duplex -- the equilibrium expression of the competition
+    argument of McDonald et al. (2016), in which low-affinity non-cognate RNA-RNA
+    interactions are outcompeted by higher-affinity cognate ones.
+    """
+    rt = RPI_RT_KCAL_PER_MOL if rt is None else rt
+    ddg = dg_non_cognate - dg_cognate
+    return min(1.0, math.exp(-ddg / rt))
+
+
+def _parse_rnacofold_dg(stdout_text: str) -> float:
+    """Parse the minimum free energy (kcal/mol) from RNAcofold's stdout.
+
+    ASSUMED FORMAT, NOT VALIDATED AGAINST A REAL RUN: no ViennaRNA binary was available
+    in the authoring environment (no conda/mamba, no network access), so this regex is
+    inferred from documented RNAcofold usage -- a dot-bracket structure line followed by
+    the minimum free energy in parentheses, e.g. "...(((...))). ( -12.30)" -- rather than
+    captured from an actual invocation. Verify against a live RNAcofold run before
+    relying on this in production; see RnacofoldDgParsingTest.
+
+    Raises RuntimeError rather than returning a sentinel: a silently-defaulted dG would
+    propagate a fabricated energy into every downstream score.
+    """
+    match = re.search(r"\(\s*(-?\d+\.\d+)\)\s*$", stdout_text.strip())
+    if not match:
+        raise RuntimeError(f"could not parse RNAcofold output: {stdout_text!r}")
+    return float(match.group(1))
+
+
+def rnacofold_dg(seq_a: str, seq_b: str, binary: str = "RNAcofold") -> float:
+    """Minimum free energy of the seq_a/seq_b duplex, in kcal/mol, via RNAcofold.
+
+    Raises RuntimeError rather than returning a sentinel: a silently-defaulted dG would
+    propagate a fabricated energy into every downstream score. See _parse_rnacofold_dg
+    for the output-format caveat.
+    """
+    completed = subprocess.run(
+        [binary, "--noPS"], input=f"{seq_a}&{seq_b}\n",
+        capture_output=True, text=True, check=True,
+    )
+    return _parse_rnacofold_dg(completed.stdout)
 
 
 # ---------------------------------------------------------------------------
@@ -2313,3 +2378,56 @@ class EcologicalOpportunityTest(unittest.TestCase):
         isolates = [_eco_isolate("A", "USA", "2001")]
         result = ecological_opportunity(["A"], isolates)
         self.assertEqual(result["rpi_e_total"], 1.0)
+
+
+class BoltzmannCompatibilityTest(unittest.TestCase):
+    def test_identical_energies_score_one(self):
+        self.assertAlmostEqual(boltzmann_compatibility(-10.0, -10.0), 1.0, places=9)
+
+    def test_weaker_non_cognate_scores_below_one(self):
+        # A weaker duplex has a LESS NEGATIVE dG.
+        self.assertLess(boltzmann_compatibility(-5.0, -10.0), 1.0)
+
+    def test_stronger_non_cognate_is_clamped_to_one(self):
+        """Non-cognate cannot beat cognate in this index -- McDonald's competition
+        argument is that cognate wins; clamping keeps the factor a penalty, never a
+        bonus."""
+        self.assertEqual(boltzmann_compatibility(-20.0, -10.0), 1.0)
+
+    def test_positive_dg_is_well_defined_and_small(self):
+        """The old quotient form was meaningless for an unfavourable duplex."""
+        value = boltzmann_compatibility(3.0, -10.0)
+        self.assertGreater(value, 0.0)
+        self.assertLess(value, 1e-5)
+
+    def test_sign_convention_is_not_flipped(self):
+        """Guards the single most damaging possible bug in this index: reversing ddG
+        would score INCOMPATIBLE constellations as maximally plausible. Spec section 6.1."""
+        weaker_non_cognate = boltzmann_compatibility(-5.0, -10.0)
+        stronger_non_cognate = boltzmann_compatibility(-10.0, -5.0)
+        self.assertLess(weaker_non_cognate, stronger_non_cognate)
+
+    def test_rt_constant_matches_rnacofold_units(self):
+        """kcal/mol at RNAcofold's default 37 C = 310.15 K."""
+        self.assertAlmostEqual(RPI_RT_KCAL_PER_MOL, 0.6163, places=3)
+
+    def test_never_returns_zero(self):
+        self.assertGreater(boltzmann_compatibility(100.0, -10.0), 0.0)
+
+
+class RnacofoldDgParsingTest(unittest.TestCase):
+    """Exercises _parse_rnacofold_dg, the stdout-parsing half of rnacofold_dg, against
+    literal sample strings -- no RNAcofold binary is available in this environment, so
+    these samples are an ASSUMED output format (inferred from documented RNAcofold
+    usage: a dot-bracket structure line followed by the minimum free energy in
+    parentheses), NOT output captured from a real run. See _parse_rnacofold_dg's
+    docstring and rnacofold_dg's docstring for the same caveat.
+    """
+
+    def test_well_formed_output_parses_to_expected_float(self):
+        sample = "AGUAGUAGUAGU&ACUACUACUACU\n((((((((((((&)))))))))))) (-15.20)"
+        self.assertAlmostEqual(_parse_rnacofold_dg(sample), -15.20, places=9)
+
+    def test_malformed_output_raises_runtime_error(self):
+        with self.assertRaises(RuntimeError):
+            _parse_rnacofold_dg("RNAcofold: command not found")
