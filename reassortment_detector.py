@@ -1226,6 +1226,77 @@ def rnacofold_dg(seq_a: str, seq_b: str, binary: str = "RNAcofold") -> float:
     return _parse_rnacofold_dg(completed.stdout)
 
 
+# The terminal 14 nt of S, M and L are highly conserved across the genus AND shared
+# between the three segments (J Virol 1995;69(12):8132-8136, PMC189768 -- content
+# verified, author list NOT verified; resolve before any bibliography). M_pol must
+# therefore NEVER be scored on this window: it would saturate at ~1.0 for every pair.
+HANTAVIRUS_TERMINAL_TAG_NT = 14
+
+# N-recognition footprint lengths. Mir MA & Panganiban AT, "Hantavirus N Protein Exhibits
+# Genus-Specific Recognition of the Viral RNA Panhandle", J Virol 2006,
+# doi:10.1128/JVI.00820-06 -- existence and abstract verified, FULL TEXT NOT READ.
+# SNV N requires the first 23 nt; most hantavirus N proteins need only the terminal 9.
+# This asymmetry VARIES BETWEEN LINEAGES, which is why it carries signal where the
+# invariant tag does not.
+RPI_N_FOOTPRINT_NT = {"Orthohantavirus sinnombreense": 23}
+RPI_N_FOOTPRINT_DEFAULT_NT = 9
+
+# Below this variance across sampled pairs, M_pol is declared uninformative and fixed.
+RPI_M_POL_MIN_VARIANCE = 1e-4
+
+
+def n_recognition_footprint(species_name: str) -> int:
+    """Length of the N-recognition window for a species, in nucleotides."""
+    return RPI_N_FOOTPRINT_NT.get(species_name, RPI_N_FOOTPRINT_DEFAULT_NT)
+
+
+def _beyond_tag(sequence: str, footprint: int) -> str:
+    """The scoring window: past the conserved tag, out to the footprint boundary."""
+    return sequence[HANTAVIRUS_TERMINAL_TAG_NT:HANTAVIRUS_TERMINAL_TAG_NT + footprint]
+
+
+def polymerase_compatibility(
+    candidate_termini: Dict[str, str], parent_termini: Dict[str, str],
+    footprint: int = RPI_N_FOOTPRINT_DEFAULT_NT,
+) -> Tuple[float, str]:
+    """Factor M_pol: protein-RNA recognition compatibility, scored BEYOND the conserved tag.
+
+    Returns (value, status). Status is "scored" here; m_pol_variance_check may later
+    downgrade the factor to "fixed_constant" across a run.
+
+    FRAMING REQUIREMENT (spec 6.2): hantavirus L-polymerase terminal recognition is a
+    STRUCTURALLY MOTIVATED HYPOTHESIS, by analogy with the rotavirus 3'-terminal
+    seven-nucleotide polymerase recognition described by McDonald et al. (2016). It is
+    NOT an experimentally demonstrated hantavirus mechanism. Methods text must say so.
+    """
+    matches = total = 0
+    for segment in ("S", "M", "L"):
+        window_a = _beyond_tag(candidate_termini.get(segment, ""), footprint)
+        window_b = _beyond_tag(parent_termini.get(segment, ""), footprint)
+        for base_a, base_b in zip(window_a, window_b):
+            total += 1
+            matches += int(base_a == base_b)
+    if total == 0:
+        return 1.0, "scored"
+    identity = matches / total
+    return max(RPI_WEIGHTS["eco_floor"], identity), "scored"
+
+
+def m_pol_variance_check(
+    observed: Sequence[Tuple[float, Any]], min_variance: float = RPI_M_POL_MIN_VARIANCE,
+) -> Tuple[float, str]:
+    """Mandatory gate from spec 6.2.
+
+    If M_pol shows negligible variance across a representative sample of pairs, it is
+    measuring nothing and must be FIXED AT 1.0 AND DECLARED SO. A constant factor that
+    announces itself is honest; a constant dressed as a measurement is not.
+    """
+    values = [value for value, _ in observed]
+    if not values or float(np.var(values)) < min_variance:
+        return 1.0, "fixed_constant"
+    return float(np.mean(values)), "scored"
+
+
 # ---------------------------------------------------------------------------
 # CLI entry point.
 # ---------------------------------------------------------------------------
@@ -2447,3 +2518,46 @@ class RnacofoldDgParsingTest(unittest.TestCase):
     def test_malformed_output_raises_runtime_error(self):
         with self.assertRaises(RuntimeError):
             _parse_rnacofold_dg("RNAcofold: command not found")
+
+
+class PolymeraseCompatibilityTest(unittest.TestCase):
+    TAG = "AUCAUCAUCUGAGG"  # conserved across the genus AND across S/M/L
+
+    def test_conserved_tag_is_excluded_from_scoring(self):
+        """The terminal 14 nt are identical across S, M and L genus-wide. If M_pol
+        scored them it would saturate at 1.0 and measure nothing (spec 6.2)."""
+        same_tag_different_footprint = polymerase_compatibility(
+            {"S": self.TAG + "GGGGGGGGG", "L": self.TAG + "GGGGGGGGG"},
+            {"S": self.TAG + "CCCCCCCCC", "L": self.TAG + "CCCCCCCCC"},
+        )[0]
+        self.assertLess(same_tag_different_footprint, 1.0)
+
+    def test_identical_footprints_score_one(self):
+        seqs = {"S": self.TAG + "AAAAAAAAA", "L": self.TAG + "AAAAAAAAA"}
+        value, _ = polymerase_compatibility(seqs, seqs)
+        self.assertAlmostEqual(value, 1.0, places=9)
+
+    def test_footprint_length_follows_mir_panganiban(self):
+        """SNV N requires the first 23 nt; most hantavirus N needs only the terminal 9."""
+        self.assertEqual(n_recognition_footprint("Orthohantavirus sinnombreense"), 23)
+        self.assertEqual(n_recognition_footprint("Orthohantavirus puumalaense"), 9)
+
+    def test_never_returns_zero(self):
+        value, _ = polymerase_compatibility(
+            {"S": self.TAG + "AAAAAAAAA", "L": self.TAG + "AAAAAAAAA"},
+            {"S": self.TAG + "UUUUUUUUU", "L": self.TAG + "UUUUUUUUU"},
+        )
+        self.assertGreater(value, 0.0)
+
+    def test_variance_check_fixes_constant_when_no_signal(self):
+        """Spec 6.2: if M_pol shows negligible variance across real pairs, fix it at 1.0
+        and SAY SO, rather than pretend it measures something."""
+        identical = [(0.5, 0.5)] * 20
+        fixed, status = m_pol_variance_check(identical)
+        self.assertEqual(status, "fixed_constant")
+        self.assertEqual(fixed, 1.0)
+
+    def test_variance_check_keeps_scoring_when_signal_present(self):
+        varied = [(v / 20.0, 0.5) for v in range(20)]
+        _, status = m_pol_variance_check(varied)
+        self.assertEqual(status, "scored")
