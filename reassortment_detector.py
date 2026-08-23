@@ -228,6 +228,15 @@ RPI_WEIGHTS: Dict[str, Any] = {
         "close": {"M": 12, "S": 12, "L": 1},
         "distant": {"M": 11, "S": 0, "L": 0},
     },
+
+    # Pairwise nucleotide identity below which a pair is treated as "distant".
+    # PROVISIONAL, literature-anchored: Rodriguez's close pair sits at ~0.85 identity
+    # (15% divergence, Table 7); the distant anchors sit at 0.548 (Rizvanov, SNV x ANDV)
+    # and 0.707 (Rizvanov, SNV x BCCV). 0.80 separates them with margin on both sides.
+    # Spec section 7 calls for replacing this with a mixture-model fit to the project's
+    # own PED distribution -- a "DEmARC-style analysis", NOT the DEmARC tool. Swept in
+    # the sensitivity analysis.
+    "stratum_identity_boundary": 0.80,
 }
 
 
@@ -987,6 +996,18 @@ def combine_verdict(
             return "supported_reassortment_candidate_with_structural_warning"
         return "supported_reassortment_candidate"
     return "no_conflict"
+
+
+def divergence_stratum(identity: float, boundary: Optional[float] = None) -> str:
+    """Classify a parental pair as 'close' or 'distant' by nucleotide identity.
+
+    `identity` is a fraction in [0, 1], NOT a percentage. The stratum selects which
+    constellation prior applies -- see constellation_prior.
+    """
+    if not 0.0 <= identity <= 1.0:
+        raise ValueError(f"identity must be a fraction in [0, 1], got {identity!r}")
+    boundary = RPI_WEIGHTS["stratum_identity_boundary"] if boundary is None else boundary
+    return "close" if identity >= boundary else "distant"
 
 
 # ---------------------------------------------------------------------------
@@ -2029,3 +2050,29 @@ class ConstellationPriorTest(unittest.TestCase):
     def test_unknown_stratum_raises(self):
         with self.assertRaises(KeyError):
             constellation_prior("intermediate")
+
+
+class DivergenceStratumTest(unittest.TestCase):
+    def test_rodriguez_within_species_pair_is_close(self):
+        """SNV NMR11 x CC107: ~15% N-gene nt divergence (Rodriguez 1998 Table 7)."""
+        self.assertEqual(divergence_stratum(0.85), "close")
+
+    def test_rizvanov_cross_species_pair_is_distant(self):
+        """SNV x ANDV: 54.8% S-segment nt similarity (Rizvanov 2004)."""
+        self.assertEqual(divergence_stratum(0.548), "distant")
+
+    def test_snv_bccv_pair_is_distant(self):
+        """70.7% S similarity per Rizvanov; ~34% N divergence per Rodriguez Table 7.
+        The two sources disagree on this pair; both land in 'distant'."""
+        self.assertEqual(divergence_stratum(0.707), "distant")
+        self.assertEqual(divergence_stratum(0.66), "distant")
+
+    def test_boundary_is_configurable_for_sensitivity_sweep(self):
+        self.assertEqual(divergence_stratum(0.75, boundary=0.70), "close")
+        self.assertEqual(divergence_stratum(0.75, boundary=0.80), "distant")
+
+    def test_identity_outside_unit_interval_raises(self):
+        with self.assertRaises(ValueError):
+            divergence_stratum(1.5)
+        with self.assertRaises(ValueError):
+            divergence_stratum(-0.1)
