@@ -1180,7 +1180,13 @@ def boltzmann_compatibility(
     """
     rt = RPI_RT_KCAL_PER_MOL if rt is None else rt
     ddg = dg_non_cognate - dg_cognate
-    return min(1.0, math.exp(-ddg / rt))
+    # Clamp the EXPONENT, not just the result: math.exp overflows above ~709, so a
+    # far-stronger non-cognate duplex (ddg very negative, exponent very positive) would
+    # raise OverflowError before an outer min(1.0, ...) ever got a chance to clamp it.
+    # min(0.0, ...) here means math.exp's argument is never positive, so its result is
+    # never above 1.0 -- the outer min(1.0, ...) below is now redundant but kept as a
+    # cheap, harmless belt-and-suspenders guard against floating-point edge cases.
+    return min(1.0, math.exp(min(0.0, -ddg / rt)))
 
 
 def _parse_rnacofold_dg(stdout_text: str) -> float:
@@ -1205,9 +1211,13 @@ def _parse_rnacofold_dg(stdout_text: str) -> float:
 def rnacofold_dg(seq_a: str, seq_b: str, binary: str = "RNAcofold") -> float:
     """Minimum free energy of the seq_a/seq_b duplex, in kcal/mol, via RNAcofold.
 
-    Raises RuntimeError rather than returning a sentinel: a silently-defaulted dG would
-    propagate a fabricated energy into every downstream score. See _parse_rnacofold_dg
-    for the output-format caveat.
+    Raises RuntimeError specifically when RNAcofold's output cannot be parsed, rather
+    than returning a sentinel: a silently-defaulted dG would propagate a fabricated
+    energy into every downstream score. See _parse_rnacofold_dg for the output-format
+    caveat. That does NOT cover invocation failure: a missing binary raises
+    FileNotFoundError, and a nonzero RNAcofold exit raises CalledProcessError, both from
+    subprocess.run(..., check=True) -- those propagate as-is rather than being wrapped,
+    since silencing them would be its own kind of silent failure.
     """
     completed = subprocess.run(
         [binary, "--noPS"], input=f"{seq_a}&{seq_b}\n",
@@ -2413,6 +2423,12 @@ class BoltzmannCompatibilityTest(unittest.TestCase):
 
     def test_never_returns_zero(self):
         self.assertGreater(boltzmann_compatibility(100.0, -10.0), 0.0)
+
+    def test_extreme_ddg_clamps_instead_of_overflowing(self):
+        """A far-stronger non-cognate duplex (ddG very negative) must clamp to 1.0, not
+        raise OverflowError from math.exp -- the exponent has to be clamped BEFORE
+        exponentiating, not just the result afterward."""
+        self.assertEqual(boltzmann_compatibility(-1000.0, 0.0), 1.0)
 
 
 class RnacofoldDgParsingTest(unittest.TestCase):
