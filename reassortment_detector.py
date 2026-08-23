@@ -200,6 +200,52 @@ def find_aligned_residue(
 
 
 # ---------------------------------------------------------------------------
+# Reassortment Plausibility Index (RPI) -- see
+# docs/superpowers/specs/2026-08-24-reassortment-plausibility-index-design.md
+#
+# This is a RELATIVE index, never a probability. Anchored on primary experimental
+# measurements, not on any published model's fitted coefficients -- the pipeline has
+# only 8 positive labels, which cannot support fitting anything.
+# ---------------------------------------------------------------------------
+
+RPI_WEIGHTS: Dict[str, Any] = {
+    # Jeffreys prior, Dirichlet(1/2, 1/2, 1/2). NOT arbitrary: Rizvanov's S-odd = 0 and
+    # L-odd = 0 are UNOBSERVED events in n = 10, not measured impossibilities. Swept in
+    # the sensitivity analysis (spec section 12).
+    "jeffreys_alpha": 0.5,
+
+    # Raw in vitro constellation counts -- which segment was the odd one out -- by
+    # divergence stratum. Spec section 7.
+    #   close   = Rodriguez 1998, SNV NMR11 x CC107, MOI 1.0-1.5, n = 25 (12 M, 12 S, 1 L)
+    #   distant = Rizvanov 2004, SNV x ANDV, MOI 3, n = 10 (all M-odd)
+    #           + Rodriguez 1998, SNV x BCCV, MOI 1.0-1.5, n = 1 (M-odd)
+    #
+    # CONFOUNDED AND UNTESTABLE WITH CURRENT LITERATURE: divergence is confounded with
+    # pair identity AND with MOI. No distant-pair MOI-1 experiment exists. Leave-one-
+    # pair-out (Task 8) and the sensitivity sweep (Task 9) probe this; they cannot
+    # resolve it.
+    "constellation_counts": {
+        "close": {"M": 12, "S": 12, "L": 1},
+        "distant": {"M": 11, "S": 0, "L": 0},
+    },
+}
+
+
+def constellation_prior(stratum: str, alpha: Optional[float] = None) -> Dict[str, float]:
+    """Jeffreys-smoothed prior over which segment is the odd one out.
+
+    Returns a distribution over "S", "M", "L" summing to 1.0, with every category
+    strictly positive. Raises KeyError for an unknown stratum rather than silently
+    defaulting -- a wrong stratum must be loud.
+    """
+    alpha = RPI_WEIGHTS["jeffreys_alpha"] if alpha is None else alpha
+    counts = RPI_WEIGHTS["constellation_counts"][stratum]
+    smoothed = {segment: counts[segment] + alpha for segment in ("S", "M", "L")}
+    total = sum(smoothed.values())
+    return {segment: value / total for segment, value in smoothed.items()}
+
+
+# ---------------------------------------------------------------------------
 # Reference dataset loading.
 #
 # load_reference_data replicates the ingest portion of all_hanta.py's run_pipeline (see
@@ -1944,3 +1990,42 @@ class FindAlignedResidueTest(unittest.TestCase):
     def test_short_unrelated_sequence_reports_not_aligned_or_wrong_residue(self):
         residue, aligned = find_aligned_residue("MAAAAAAAAAA", "M" * 50, 745)
         self.assertFalse(aligned)
+
+
+class ConstellationPriorTest(unittest.TestCase):
+    def test_no_category_is_zero_after_smoothing(self):
+        """Rizvanov's S-odd=0 and L-odd=0 are unobserved events in n=10, not measured
+        impossibilities. A literal zero inside a multiplicative index is a hidden hard
+        gate -- the same cliff logic rejected for gate3's veto."""
+        prior = constellation_prior("distant")
+        for segment in ("S", "M", "L"):
+            self.assertGreater(prior[segment], 0.0)
+
+    def test_priors_sum_to_one(self):
+        for stratum in ("close", "distant"):
+            self.assertAlmostEqual(sum(constellation_prior(stratum).values()), 1.0, places=9)
+
+    def test_distant_stratum_favours_m_exchange(self):
+        prior = constellation_prior("distant")
+        self.assertGreater(prior["M"], prior["S"])
+        self.assertGreater(prior["M"], prior["L"])
+
+    def test_close_stratum_m_and_s_are_equal(self):
+        """Rodriguez 1998 observed 12 M-odd and 12 S-odd. The close stratum must NOT
+        inherit the M-only rule -- Klempa's own Table 2 reproduces all three genotypes."""
+        prior = constellation_prior("close")
+        self.assertAlmostEqual(prior["M"], prior["S"], places=9)
+
+    def test_close_stratum_l_exchange_is_rare_but_present(self):
+        prior = constellation_prior("close")
+        self.assertLess(prior["L"], prior["M"])
+        self.assertGreater(prior["L"], 0.0)
+
+    def test_smoothing_constant_is_configurable_for_sensitivity_sweep(self):
+        strong = constellation_prior("distant", alpha=5.0)
+        weak = constellation_prior("distant", alpha=0.5)
+        self.assertGreater(strong["S"], weak["S"])
+
+    def test_unknown_stratum_raises(self):
+        with self.assertRaises(KeyError):
+            constellation_prior("intermediate")
