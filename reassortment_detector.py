@@ -259,6 +259,16 @@ RPI_WEIGHTS: Dict[str, Any] = {
     },
     # Floors keeping every factor strictly positive. See the no-literal-zeros rule.
     "eco_floor": 0.01,
+    # Generation -> retention shift, normalised to M = 1.0.
+    #   Generation (Rodriguez 1998, in vitro, plaque-level, no amplification): M:S:L = 12:12:1
+    #   Retention  (Henderson 1995 via Rodriguez 1998, natural; TIER 3 SECONDHAND): 14:2:1
+    # WEAKLY DETERMINED: the natural denominators are 2 S-odd and 1 L-odd. L carries no
+    # signal at n = 1 and is set equal to S rather than read off one observation.
+    # Swept in the sensitivity analysis.
+    "retention_by_odd_segment": {"M": 1.0, "S": 0.15, "L": 0.15},
+    # Gate 2 structural integrity (WAASA, TM/IS, pH switch) failing does not veto -- it
+    # discounts. Provisional; not fitted.
+    "retention_structural_penalty": 0.5,
 }
 
 
@@ -1295,6 +1305,20 @@ def m_pol_variance_check(
     if not values or float(np.var(values)) < min_variance:
         return 1.0, "fixed_constant"
     return float(np.mean(values)), "scored"
+
+
+def retention_factor(odd_segment: str, structural_intact: bool) -> float:
+    """Factor F: scales rpi_generation into rpi_retention.
+
+    SCOPE (spec 0.7, 8): models IMMEDIATE post-reassortment fitness only. McDonald's
+    Fig. 4 mode (c) -- compensatory mutations restoring interaction interfaces over time
+    -- is OUT OF SCOPE and is a named limitation, not a term here. A reassortant scoring
+    low may still emerge after adaptation.
+    """
+    base = RPI_WEIGHTS["retention_by_odd_segment"].get(odd_segment, 0.15)
+    if not structural_intact:
+        base *= RPI_WEIGHTS["retention_structural_penalty"]
+    return max(RPI_WEIGHTS["eco_floor"], min(1.0, base))
 
 
 # ---------------------------------------------------------------------------
@@ -2561,3 +2585,23 @@ class PolymeraseCompatibilityTest(unittest.TestCase):
         varied = [(v / 20.0, 0.5) for v in range(20)]
         _, status = m_pol_variance_check(varied)
         self.assertEqual(status, "scored")
+
+
+class RetentionFactorTest(unittest.TestCase):
+    def test_m_exchange_is_favoured_over_s_exchange(self):
+        """Generation (Rodriguez, in vitro): M:S:L = 12:12:1. Retention (Henderson,
+        natural, Tier 3 secondhand): 14:2:1. S-exchange is generated as often as M but
+        survives markedly less. That gap IS the selection filter."""
+        self.assertGreater(retention_factor("M", True), retention_factor("S", True))
+
+    def test_structural_damage_reduces_retention(self):
+        self.assertLess(retention_factor("M", False), retention_factor("M", True))
+
+    def test_never_returns_zero(self):
+        for segment in ("S", "M", "L"):
+            for intact in (True, False):
+                self.assertGreater(retention_factor(segment, intact), 0.0)
+
+    def test_bounded_above_by_one(self):
+        for segment in ("S", "M", "L"):
+            self.assertLessEqual(retention_factor(segment, True), 1.0)
