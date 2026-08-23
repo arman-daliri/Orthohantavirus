@@ -1073,6 +1073,7 @@ def ecological_opportunity(
     if len(implicated_species) < 2:
         return {"rpi_e_host": 1.0, "rpi_e_geo": 1.0, "rpi_e_time": 1.0, "rpi_e_total": 1.0}
 
+    all_species_present = {isolate.species_name for isolate in isolates}
     by_species: Dict[str, List["ah.IsolateRecord"]] = defaultdict(list)
     for isolate in isolates:
         if isolate.is_lab_derived or isolate.is_vaccine_strain:
@@ -1085,12 +1086,20 @@ def ecological_opportunity(
         for species_b in implicated_species[index + 1:]:
             members_a, members_b = by_species.get(species_a), by_species.get(species_b)
             if not members_a or not members_b:
-                # No surviving WILD isolate at all for one species (e.g. only lab or
-                # vaccine strains remain after filtering): there is no ecological
-                # evidence to support a shared host niche for this pair, so the host
-                # term takes the floor rather than defaulting to full opportunity.
-                # This is distinct from a single blank country/year field on an
-                # isolate that does exist -- that case stays neutral below.
+                # Two distinct absence cases, checked against the UNFILTERED isolates
+                # list so they aren't conflated:
+                #  (a) the species IS present in the reference, but every one of its
+                #      isolates is lab- or vaccine-derived: there is genuinely no wild
+                #      population, so no natural ecological route -- the host term
+                #      takes the floor rather than defaulting to full opportunity.
+                #  (b) the species does not appear in the reference AT ALL (novel, or
+                #      simply never sampled): that is unknown, not separated. Scoring
+                #      it as impossible would contradict gate3_check's own
+                #      "ecology_unknown" treatment of this exact situation and would
+                #      punish a candidate for lack of data rather than lack of
+                #      plausibility -- stay neutral and leave `worst` untouched.
+                if species_a not in all_species_present or species_b not in all_species_present:
+                    continue
                 worst["rpi_e_host"] = min(worst["rpi_e_host"], floor)
                 continue
 
@@ -2259,6 +2268,14 @@ class EcologicalOpportunityTest(unittest.TestCase):
         lab.is_lab_derived = True
         result = ecological_opportunity(["A", "B"], [wild, lab])
         self.assertLess(result["rpi_e_total"], 0.5)
+
+    def test_species_absent_from_reference_entirely_stays_neutral(self):
+        """A species with no isolate of any kind (wild, lab, or vaccine) is unknown to
+        the reference -- novel or simply unsampled -- not ecologically separated.
+        gate3_check already treats this as 'ecology_unknown'; Factor E must agree."""
+        isolates = [_eco_isolate("A", "USA", "2001")]
+        result = ecological_opportunity(["A", "B"], isolates)
+        self.assertEqual(result["rpi_e_total"], 1.0)
 
     def test_single_implicated_species_returns_neutral_one(self):
         isolates = [_eco_isolate("A", "USA", "2001")]
