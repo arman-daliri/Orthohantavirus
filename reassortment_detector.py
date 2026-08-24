@@ -1553,9 +1553,17 @@ def compute_rpi(
     # countries, a few years apart gives 3.33e-05, which read as 0.0 in the CSV.
     # EcologicalOpportunityTest.test_no_factor_is_ever_exactly_zero did not catch it
     # because it asserts on ecological_opportunity's RAW output, not on this rounded row.
-    for key in ("rpi_e_host", "rpi_e_geo", "rpi_e_time"):
-        row[key] = round(row[key], _rpi_decimals(floor))
-    row["rpi_e_total"] = round(row["rpi_e_total"], _rpi_decimals(floor ** 3))
+    #
+    # THE WHOLE FAMILY SHARES THE DEEPEST PRECISION, for the same reason rpi_generation
+    # and rpi_retention do. rpi_e_total = h * g * t with every term <= 1, so
+    # rpi_e_total <= min(h, g, t) is an invariant, and round() only preserves order at
+    # EQUAL precision. Reporting the total at 6 dp beside its components at 4 dp put the
+    # PRODUCT above its own factor: h = g = 1.0 with t = 1/3 gave rpi_e_total = 0.333333
+    # against rpi_e_time = 0.3333. Arithmetically impossible, and it would not survive a
+    # reader recomputing h * g * t from the reported columns.
+    e_decimals = _rpi_decimals(floor ** 3)
+    for key in ("rpi_e_host", "rpi_e_geo", "rpi_e_time", "rpi_e_total"):
+        row[key] = round(row[key], e_decimals)
     return row
 
 
@@ -3908,6 +3916,33 @@ class RpiAssemblyTest(unittest.TestCase):
                           "fixed_constant", False)
         self.assertEqual(row["rpi_generation"], RPI_WEIGHTS["eco_floor"] ** 4)
         self.assertGreater(row["rpi_retention"], 0.0)
+
+    def test_rounding_never_reports_e_total_above_its_own_components(self):
+        """rpi_e_total = h * g * t with every term <= 1, so it can never exceed any one
+        of them. round() preserves that only at EQUAL precision: reporting the total at
+        6 dp beside its components at 4 dp put the PRODUCT above its own factor.
+
+        The fixture is chosen to produce a component that 4 dp cannot represent -- same
+        host and country (h = g = 1.0) with sampling years three apart (t = 1/3). At
+        split precision this reported rpi_e_total = 0.333333 against
+        rpi_e_time = 0.3333."""
+        near_a = _eco_isolate("SpA", "USA", "2001")
+        near_b = _eco_isolate("SpB", "USA", "2004")
+        seen_fractional = False
+        for odd_segment in ("S", "M", "L"):
+            for identity in (0.5, 0.9):
+                row = compute_rpi(["SpA", "SpB"], [near_a, near_b], odd_segment,
+                                  identity, 1.0, 1.0, "fixed_constant", True)
+                components = (row["rpi_e_host"], row["rpi_e_geo"], row["rpi_e_time"])
+                if any(0.0 < c < 1.0 for c in components):
+                    seen_fractional = True
+                self.assertLessEqual(row["rpi_e_total"], min(components),
+                                     f"{odd_segment}/{identity}: {row['rpi_e_total']} "
+                                     f"> min{components}")
+        # Guard the guard: if every component came back 1.0 the assertion above is
+        # trivially true and this test would pass while measuring nothing.
+        self.assertTrue(seen_fractional,
+                        "fixture stopped producing a fractional ecological term")
 
     def test_rounding_never_reports_retention_above_generation(self):
         """F <= 1 makes rpi_retention <= rpi_generation an invariant of the model, but

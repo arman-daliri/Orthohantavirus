@@ -646,7 +646,7 @@ def main(argv=None) -> int:
               f"verdict={row['observed_verdict']}")
 
     print("\n=== SUMMARY ===")
-    print(json.dumps(summary, indent=2, default=str))
+    print(json.dumps(rd._json_safe(summary), indent=2, default=str, allow_nan=False))
 
     if skipped:
         print("\nSkipped (sequences not in this dataset):")
@@ -661,15 +661,60 @@ def main(argv=None) -> int:
             "results": results,
             "skipped": skipped,
         }
+        # Same discipline as write_rpi_report, and it was missing here: Python emits
+        # bare `NaN` tokens by default, which jq and JavaScript's JSON.parse reject
+        # while Python's own json.loads accepts them. Not hypothetical -- summarise()
+        # returns float("nan") for any class rate whose class is empty, which happens
+        # on any reduced --reference-input. Non-finite values serialise as null; null
+        # is "undefined", 0.0 would be a claim.
         Path(args.json).write_text(
-            json.dumps(payload, indent=2, default=str), encoding="utf-8")
+            json.dumps(rd._json_safe(payload), indent=2, default=str, allow_nan=False),
+            encoding="utf-8")
         print(f"\nFull report: {args.json}")
 
     sens = summary["sensitivity_on_inter_species_reassortants"]
     spec = summary["specificity_on_true_negatives"]
-    ok = (sens["correct"] == sens["n"] and not spec["false_positives"])
-    print("\nRESULT:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
+    adv = summary["adversarial"]
+    blind = summary["known_blind_spot_intra_species"]
+
+    # A class that failed to build must FAIL, not pass quietly. The criterion used to
+    # read only sensitivity and specificity, so a run whose adversarial class was
+    # skipped -- which happens whenever the reference lacks a full-length SEOV triplet,
+    # since the None-guard above degrades to `skipped` -- reported PASS having tested
+    # nothing adversarial at all. An absent measurement is not a passing measurement.
+    present = {klass: sum(1 for r in results if r["class"] == klass)
+               for klass in ("A_published_inter_species", "B_published_intra_species",
+                             "C_true_negative", "D_synthetic_inter_species",
+                             "E_adversarial")}
+    empty = sorted(klass for klass, count in present.items() if count == 0)
+
+    failures = []
+    if empty:
+        failures.append(f"class(es) built no candidates: {', '.join(empty)}")
+    if sens["correct"] != sens["n"]:
+        failures.append(f"sensitivity {sens['correct']}/{sens['n']}")
+    if spec["false_positives"]:
+        failures.append(f"false positives: {', '.join(map(str, spec['false_positives']))}")
+    if adv["handled_as_expected"] != adv["n"]:
+        failures.append(f"adversarial {adv['handled_as_expected']}/{adv['n']}")
+
+    # Deliberately NOT a failure. The blind-spot class asserts that gate1 stays silent
+    # on intra-species reassortment; if it ever stops being silent that is an
+    # IMPROVEMENT, and failing the run for it would train whoever sees it to suppress
+    # the improvement. It still has to be impossible to miss.
+    if blind["silent_as_predicted"] != blind["n"]:
+        print(f"\nNOTICE: {blind['n'] - blind['silent_as_predicted']} of {blind['n']} "
+              f"intra-species cases were NOT silent. That is a change in gate1's reach "
+              f"-- investigate before assuming it is a regression; it may be a gain.")
+
+    if failures:
+        print("\nRESULT: FAIL")
+        for item in failures:
+            print("  -", item)
+        return 1
+    print(f"\nRESULT: PASS  (classes: "
+          + ", ".join(f"{k.split('_')[0]}={v}" for k, v in sorted(present.items())) + ")")
+    return 0
 
 
 if __name__ == "__main__":
