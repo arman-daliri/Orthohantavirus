@@ -1444,18 +1444,32 @@ def retrospective_reproduction(holdout: Optional[str] = None) -> Dict[str, Any]:
     pairs: Dict[str, Any] = {}
     for name, record in RPI_INVITRO_BENCHMARK.items():
         prior = constellation_prior(record["stratum"])
-        modal = max(prior, key=prior.get)
-        observed_modal = max(record["observed"], key=record["observed"].get)
+        observed = record["observed"]
+
+        # Ties must be represented explicitly, not resolved by dict insertion order.
+        # The close stratum gives M and S EXACTLY equal weight (12 vs 12), and
+        # Rodriguez's own observed counts are tied the same way -- max(d, key=d.get)
+        # would silently pick whichever key comes first in each dict's own literal
+        # order (constellation_prior orders "S" before "M"; RPI_INVITRO_BENCHMARK's
+        # `observed` dicts order "M" before "S"), manufacturing a spurious
+        # disagreement out of a perfect tie-for-tie match.
+        predicted_top = sorted(seg for seg, val in prior.items() if val == max(prior.values()))
+        observed_top = sorted(seg for seg, val in observed.items() if val == max(observed.values()))
+        modal = predicted_top[0] if len(predicted_top) == 1 else None
+        observed_modal = observed_top[0] if len(observed_top) == 1 else None
+
         pairs[name] = {
             "source": record["source"],
             "stratum": record["stratum"],
             "moi": record["moi"],
             "genotyping": record["genotyping"],
-            "observed": record["observed"],
+            "observed": observed,
             "predicted_prior": prior,
             "predicted_modal_segment": modal,
+            "predicted_top_segments": predicted_top,
             "observed_modal_segment": observed_modal,
-            "modal_agrees": modal == observed_modal,
+            "observed_top_segments": observed_top,
+            "modal_agrees": bool(set(predicted_top) & set(observed_top)),
         }
     return {
         "pairs": pairs,
@@ -2915,3 +2929,18 @@ class RetrospectiveReproductionTest(unittest.TestCase):
     def test_report_carries_the_confound_warning(self):
         report = retrospective_reproduction()
         self.assertIn("untestable", report["caveat"].lower())
+
+    def test_close_pair_tie_is_represented_explicitly_not_by_dict_order(self):
+        """The close stratum's prior gives M and S EXACTLY equal weight (12 vs 12 in the
+        underlying tissue-culture data), and Rodriguez's observed counts are also
+        exactly tied 12 M / 12 S. max(d, key=d.get) silently breaks ties by dict
+        insertion order, which would report predicted='S' (constellation_prior's dict
+        order) against observed='M' (RPI_INVITRO_BENCHMARK's dict order) as a
+        DISAGREEMENT -- a pure key-ordering artefact, not a real model failure. A tie
+        must surface as None, not a guessed letter, and the two tied sets must be
+        recognised as agreeing."""
+        report = retrospective_reproduction()
+        row = report["pairs"]["SNV_NMR11_x_CC107"]
+        self.assertIsNone(row["predicted_modal_segment"])
+        self.assertEqual(row["predicted_top_segments"], ["M", "S"])
+        self.assertTrue(row["modal_agrees"])
