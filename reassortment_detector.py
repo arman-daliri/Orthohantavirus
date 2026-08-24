@@ -1481,39 +1481,217 @@ def retrospective_reproduction(holdout: Optional[str] = None) -> Dict[str, Any]:
     }
 
 
+def _rpi_sensitivity_panel() -> List[Dict[str, Any]]:
+    """Fixed synthetic candidate panel for sensitivity_sweep.
+
+    Exists so the sweep can Spearman-correlate ACTUAL compute_rpi() output under
+    perturbed weights against the same under baseline weights -- rather than
+    correlating a weight lookup table against a positive scalar multiple of itself,
+    which is provably 1.0 regardless of the real answer (see the review that added
+    this function: comparing `RPI_WEIGHTS[key].values()` to `v * (1 - factor)` for the
+    SAME v's can never show instability).
+
+    Deliberately spans:
+      - every odd_segment (S, M, L);
+      - host-proximity categories same_species through different_order, PLUS a
+        single-implicated-species candidate (Factor E pinned neutral at 1.0 by
+        construction -- immune to host_decay) and an unknown-host-metadata candidate;
+      - identities on both sides of the stratum boundary in both perturbation
+        directions (0.62 crosses at the low boundary; 0.95 crosses at the high one);
+      - one matched same-species pair (candidates A and B) whose baseline
+        rpi_generation ratio is engineered into (0.15, 0.225) -- exactly the window
+        where a +50% retention_by_odd_segment perturbation flips their rpi_retention
+        order, because M's retention ratio is already pinned at retention_factor's
+        1.0 ceiling and cannot follow the increase while S's (0.15, well under
+        the ceiling) does.
+    Reused (not reimplemented) IsolateRecord construction via the test fixture
+    `_eco_isolate`/`_make_ecology_isolate`, defined below in the Tests section --
+    building the ~20-field IsolateRecord by hand a second time here would drift from
+    EcologicalOpportunityTest's own fixture. Resolved at call time, not at import
+    time, so the earlier definition position of this function is not an issue.
+    """
+    def two(label: str, odd_segment: str, identity: float, m_pack: float, m_pol: float,
+            host_name_a: str = "Peromyscus maniculatus", host_family_a: str = "Cricetidae",
+            host_order_a: str = "Rodentia", host_name_b: str = "Peromyscus maniculatus",
+            host_family_b: str = "Cricetidae", host_order_b: str = "Rodentia") -> Dict[str, Any]:
+        isolate_a = _eco_isolate(f"Sp_{label}_a", "USA", "2001", host_order=host_order_a,
+                                  host_family=host_family_a, host_name=host_name_a)
+        isolate_b = _eco_isolate(f"Sp_{label}_b", "USA", "2001", host_order=host_order_b,
+                                  host_family=host_family_b, host_name=host_name_b)
+        return {
+            "label": label, "implicated_species": [isolate_a.species_name, isolate_b.species_name],
+            "isolates": [isolate_a, isolate_b], "odd_segment": odd_segment, "identity": identity,
+            "m_pack": m_pack, "m_pol": m_pol, "structural_intact": True,
+        }
+
+    panel = [
+        two("A_same_species_close_M", "M", 0.90, 0.41, 0.41),
+        two("B_same_species_close_S", "S", 0.90, 0.95, 0.95),
+        two("C_same_genus_close_L", "L", 0.90, 0.5, 0.5, host_name_b="Peromyscus leucopus"),
+        two("D_same_family_distant_M", "M", 0.60, 0.3, 0.3, host_name_b="Neotoma albigula"),
+        two("E_same_order_distant_S", "S", 0.60, 0.6, 0.6,
+            host_family_b="Muridae", host_name_b="Rattus norvegicus"),
+        two("F_different_order_distant_L", "L", 0.60, 0.9, 0.9,
+            host_order_b="Soricomorpha", host_family_b="Soricidae", host_name_b="Sorex araneus"),
+        two("G_boundary_low_crossing_M", "M", 0.62, 0.9, 0.9),
+        two("H_boundary_high_crossing_M", "M", 0.95, 0.9, 0.9),
+    ]
+    single = _eco_isolate("Sp_I_single", "USA", "2001")
+    panel.append({
+        "label": "I_single_species_close_S", "implicated_species": [single.species_name],
+        "isolates": [single], "odd_segment": "S", "identity": 0.90,
+        "m_pack": 0.6, "m_pol": 0.6, "structural_intact": True,
+    })
+    unknown_a = _eco_isolate("Sp_J_a", "USA", "2001")
+    unknown_b = _eco_isolate("Sp_J_b", "USA", "2001", host_order="", host_family="", host_name="")
+    panel.append({
+        "label": "J_unknown_host_close_L",
+        "implicated_species": [unknown_a.species_name, unknown_b.species_name],
+        "isolates": [unknown_a, unknown_b], "odd_segment": "L", "identity": 0.90,
+        "m_pack": 0.7, "m_pol": 0.7, "structural_intact": True,
+    })
+    return panel
+
+
+def _score_panel(
+    panel: Sequence[Dict[str, Any]], weights: Optional[Dict[str, Any]] = None,
+) -> Dict[str, List[float]]:
+    """rpi_generation and rpi_retention for every panel candidate under `weights`.
+
+    `weights` must be a caller-owned dict (a deep copy of RPI_WEIGHTS with one key
+    perturbed) or None to score under the current global unperturbed. Temporarily
+    swaps the module-level RPI_WEIGHTS so compute_rpi's internal lookups pick up the
+    perturbation, then restores the ORIGINAL object -- via try/finally, so this holds
+    even if compute_rpi raises -- meaning the module-level RPI_WEIGHTS binding is
+    never left mutated or swapped once this function returns.
+    """
+    global RPI_WEIGHTS
+    original = RPI_WEIGHTS
+    if weights is not None:
+        RPI_WEIGHTS = weights
+    try:
+        generation, retention = [], []
+        for candidate in panel:
+            row = compute_rpi(
+                candidate["implicated_species"], candidate["isolates"], candidate["odd_segment"],
+                candidate["identity"], candidate["m_pack"], candidate["m_pol"], "scored",
+                candidate["structural_intact"],
+            )
+            generation.append(row["rpi_generation"])
+            retention.append(row["rpi_retention"])
+        return {"generation": generation, "retention": retention}
+    finally:
+        RPI_WEIGHTS = original
+
+
 def sensitivity_sweep(factor: float = 0.5) -> Dict[str, Any]:
     """Vary every ASSUMED parameter by +/- `factor` and report rank stability.
 
     Required before any RPI result is reported (spec 12). The headline question is:
-    do the top-ranked candidates stay top-ranked?
+    do the top-ranked candidates stay top-ranked? Answered against a fixed synthetic
+    candidate panel (_rpi_sensitivity_panel), scored end-to-end through compute_rpi, so
+    the answer reflects real candidate reordering -- not a weight table compared to a
+    scalar multiple of itself.
 
-    Operates on deep copies -- never mutates RPI_WEIGHTS.
+    `rank_correlation` for host_decay, retention_by_odd_segment and
+    stratum_identity_boundary is the WORSE (lower) of the two perturbation directions
+    (+factor, -factor) -- the sweep's headline question is whether ranking survives,
+    so the more conservative direction is reported, not whichever happens to look
+    stabler.
+
+    Operates on deep copies -- never mutates RPI_WEIGHTS. `_score_panel` restores the
+    original RPI_WEIGHTS object even if scoring raises partway through.
     """
     varied: Dict[str, Any] = {}
-    baseline = [constellation_prior(s)["M"] for s in ("close", "distant")]
+    panel = _rpi_sensitivity_panel()
 
-    for alpha in (RPI_WEIGHTS["jeffreys_alpha"] * (1 - factor),
-                  RPI_WEIGHTS["jeffreys_alpha"] * (1 + factor)):
-        perturbed = [constellation_prior(s, alpha=alpha)["M"] for s in ("close", "distant")]
-        varied.setdefault("jeffreys_alpha", {"samples": []})["samples"].append(
-            {"alpha": alpha, "m_prior": perturbed})
-    varied["jeffreys_alpha"]["rank_correlation"] = _spearman(
-        baseline, varied["jeffreys_alpha"]["samples"][-1]["m_prior"])
+    # --- jeffreys_alpha: constellation_prior's own alpha= override, no weights swap
+    # needed. Genuinely non-tautological already (the Jeffreys smoothing formula is
+    # nonlinear in alpha and the two strata's raw counts differ), but the ORIGINAL
+    # version of this sweep only scored the +factor sample -- fixed here to take the
+    # worse of both directions, matching the other three parameters.
+    baseline_alpha = [constellation_prior(s)["M"] for s in ("close", "distant")]
+    low_alpha = RPI_WEIGHTS["jeffreys_alpha"] * (1 - factor)
+    high_alpha = RPI_WEIGHTS["jeffreys_alpha"] * (1 + factor)
+    low_alpha_sample = [constellation_prior(s, alpha=low_alpha)["M"] for s in ("close", "distant")]
+    high_alpha_sample = [constellation_prior(s, alpha=high_alpha)["M"] for s in ("close", "distant")]
+    varied["jeffreys_alpha"] = {
+        "samples": [{"alpha": low_alpha, "m_prior": low_alpha_sample},
+                    {"alpha": high_alpha, "m_prior": high_alpha_sample}],
+        "rank_correlation": min(_spearman(baseline_alpha, low_alpha_sample),
+                                 _spearman(baseline_alpha, high_alpha_sample)),
+    }
 
-    for key in ("host_decay", "retention_by_odd_segment"):
-        scaled = {k: v * (1 - factor) for k, v in RPI_WEIGHTS[key].items()}
-        varied[key] = {
-            "scaled_by": 1 - factor, "values": scaled,
-            "rank_correlation": _spearman(
-                list(RPI_WEIGHTS[key].values()), list(scaled.values())),
-        }
+    # --- host_decay: affects Factor E (rpi_generation), via ecological_opportunity's
+    # host term. Correlate against the panel's rpi_generation, not the weight table.
+    baseline_generation = _score_panel(panel)["generation"]
+    host_decay_low_weights = copy.deepcopy(RPI_WEIGHTS)
+    host_decay_low_weights["host_decay"] = {
+        k: v * (1 - factor) for k, v in RPI_WEIGHTS["host_decay"].items()}
+    host_decay_high_weights = copy.deepcopy(RPI_WEIGHTS)
+    host_decay_high_weights["host_decay"] = {
+        k: v * (1 + factor) for k, v in RPI_WEIGHTS["host_decay"].items()}
+    host_decay_gen_low = _score_panel(panel, host_decay_low_weights)["generation"]
+    host_decay_gen_high = _score_panel(panel, host_decay_high_weights)["generation"]
+    varied["host_decay"] = {
+        "scaled_by": (1 - factor, 1 + factor),
+        "values_low": host_decay_low_weights["host_decay"],
+        "values_high": host_decay_high_weights["host_decay"],
+        "rank_correlation": min(_spearman(baseline_generation, host_decay_gen_low),
+                                 _spearman(baseline_generation, host_decay_gen_high)),
+        "note": "Correlated against rpi_generation on the fixed synthetic panel "
+                "(_rpi_sensitivity_panel), not against the weight table itself.",
+    }
 
+    # --- retention_by_odd_segment: affects Factor F (rpi_retention), NOT
+    # rpi_generation -- compute_rpi never multiplies F into rpi_generation. Correlate
+    # against the panel's rpi_retention, the quantity this weight actually scales.
+    baseline_retention = _score_panel(panel)["retention"]
+    retention_low_weights = copy.deepcopy(RPI_WEIGHTS)
+    retention_low_weights["retention_by_odd_segment"] = {
+        k: v * (1 - factor) for k, v in RPI_WEIGHTS["retention_by_odd_segment"].items()}
+    retention_high_weights = copy.deepcopy(RPI_WEIGHTS)
+    retention_high_weights["retention_by_odd_segment"] = {
+        k: v * (1 + factor) for k, v in RPI_WEIGHTS["retention_by_odd_segment"].items()}
+    retention_low = _score_panel(panel, retention_low_weights)["retention"]
+    retention_high = _score_panel(panel, retention_high_weights)["retention"]
+    varied["retention_by_odd_segment"] = {
+        "scaled_by": (1 - factor, 1 + factor),
+        "values_low": retention_low_weights["retention_by_odd_segment"],
+        "values_high": retention_high_weights["retention_by_odd_segment"],
+        "rank_correlation": min(_spearman(baseline_retention, retention_low),
+                                 _spearman(baseline_retention, retention_high)),
+        "note": "Correlated against rpi_retention (the factor this weight actually "
+                "scales), not rpi_generation, on the same fixed panel.",
+    }
+
+    # --- stratum_identity_boundary: reclassification is a STEP change (spec 7), not a
+    # smooth one. Report which panel candidates actually move between strata at each
+    # swept boundary -- observed on this run, never a hardcoded constant -- alongside
+    # the resulting rpi_generation rank correlation.
     boundary = RPI_WEIGHTS["stratum_identity_boundary"]
+    low_boundary = boundary * (1 - factor)
+    high_boundary = min(1.0, boundary * (1 + factor))
+    moved_low = [c["label"] for c in panel if divergence_stratum(c["identity"])
+                 != divergence_stratum(c["identity"], boundary=low_boundary)]
+    moved_high = [c["label"] for c in panel if divergence_stratum(c["identity"])
+                  != divergence_stratum(c["identity"], boundary=high_boundary)]
+    boundary_low_weights = copy.deepcopy(RPI_WEIGHTS)
+    boundary_low_weights["stratum_identity_boundary"] = low_boundary
+    boundary_high_weights = copy.deepcopy(RPI_WEIGHTS)
+    boundary_high_weights["stratum_identity_boundary"] = high_boundary
+    boundary_gen_low = _score_panel(panel, boundary_low_weights)["generation"]
+    boundary_gen_high = _score_panel(panel, boundary_high_weights)["generation"]
     varied["stratum_identity_boundary"] = {
-        "low": boundary * (1 - factor), "high": min(1.0, boundary * (1 + factor)),
-        "rank_correlation": 1.0,
+        "low": low_boundary, "high": high_boundary,
+        "moved_low": moved_low, "moved_high": moved_high,
+        "rank_correlation": min(_spearman(baseline_generation, boundary_gen_low),
+                                 _spearman(baseline_generation, boundary_gen_high)),
         "note": "Reclassification between strata is a step change, not a smooth one; "
-                "report which pairs move.",
+                "'moved_low'/'moved_high' name which panel candidates ACTUALLY changed "
+                "stratum at each swept boundary on this run -- an empty list is itself "
+                "an observed result (this boundary choice did not move that candidate "
+                "in that direction), never a hardcoded assumption of stability.",
     }
     return {"factor": factor, "varied": varied}
 
@@ -1525,6 +1703,14 @@ def _spearman(a: Sequence[float], b: Sequence[float]) -> float:
     if np.std(rank_a) == 0 or np.std(rank_b) == 0:
         return 1.0
     return float(np.corrcoef(rank_a, rank_b)[0, 1])
+
+
+# The production pipeline carries exactly 8 supported_reassortment_candidate labels
+# (spec 0.6). 8 positives cannot support fitting or validating anything -- this
+# threshold is set well ABOVE that count, not merely above it, so a dataset the same
+# size as today's cannot clear "underpowered" by the coincidence of a boundary drawn
+# exactly at the current label count. See spec 11.2.
+RPI_RANK_MIN_POSITIVES = 30
 
 
 def rank_consistency(
@@ -1542,18 +1728,33 @@ def rank_consistency(
                  if r.get(verdict_key) == "no_conflict"]
     n_pos, n_neg = len(positives), len(negatives)
     if not n_pos or not n_neg:
-        auc, half_width = float("nan"), float("nan")
+        # Genuinely undefined with no positives or no negatives -- stays nan/nan rather
+        # than letting max(0.0, nan)/min(1.0, nan) silently collapse to a full-width
+        # (0.0, 1.0) interval that looks like a real (if uninformative) measurement.
+        auc = float("nan")
+        confidence_interval = (float("nan"), float("nan"))
     else:
         wins = sum(1 for p in positives for n in negatives
                    if p > n) + 0.5 * sum(1 for p in positives for n in negatives if p == n)
         auc = wins / (n_pos * n_neg)
-        half_width = 1.96 * math.sqrt(auc * (1 - auc) / n_pos)
+        # Wilson score interval, n = n_pos: the 8 positives are the limiting sample
+        # size (n_neg ~= 3,000 contributes negligible extra uncertainty here), and a
+        # naive Wald interval (z*sqrt(p(1-p)/n)) collapses to EXACTLY ZERO width at
+        # p in {0, 1} -- which 8 positives can reach by chance alone -- falsely
+        # reporting perfect certainty from the smallest possible sample. Wilson does
+        # not collapse at the boundary.
+        z = 1.96
+        n = n_pos
+        denominator = 1 + z**2 / n
+        centre = (auc + z**2 / (2 * n)) / denominator
+        half_width = z * math.sqrt(auc * (1 - auc) / n + z**2 / (4 * n**2)) / denominator
+        confidence_interval = (max(0.0, centre - half_width), min(1.0, centre + half_width))
     return {
         "auc": auc,
         "n_positive": n_pos,
         "n_negative": n_neg,
-        "confidence_interval": (max(0.0, auc - half_width), min(1.0, auc + half_width)),
-        "underpowered": n_pos < 8,
+        "confidence_interval": confidence_interval,
+        "underpowered": n_pos < RPI_RANK_MIN_POSITIVES,
         "interpretation": (
             "Sanity check, not validation. The primary evidence is the retrospective "
             "reproduction of the published in vitro experiments (spec 11.1). Report the "
@@ -3062,3 +3263,53 @@ class SensitivityAndRankTest(unittest.TestCase):
         rows = [{"verdict": "no_conflict", "rpi_generation": 0.1} for _ in range(200)]
         rows += [{"verdict": "supported_reassortment_candidate", "rpi_generation": 0.6}]
         self.assertTrue(rank_consistency(rows)["underpowered"])
+
+    def test_sweep_reports_genuine_reordering(self):
+        """host_decay and retention_by_odd_segment must NOT be a tautology: comparing
+        RPI_WEIGHTS[key].values() to a positive scalar multiple of itself is provably
+        1.0 and can never report instability. Correlating rpi_generation /
+        rpi_retention on the fixed synthetic panel instead can, and does, on at least
+        one perturbation direction for every parameter that actually varies scores."""
+        report = sensitivity_sweep()
+        for key in ("host_decay", "retention_by_odd_segment", "stratum_identity_boundary"):
+            self.assertLess(report["varied"][key]["rank_correlation"], 1.0, key)
+
+    def test_stratum_identity_boundary_reports_which_candidates_move(self):
+        """Spec: reclassification is a step change, not a smooth one -- the report must
+        name which pairs move, not assert stability by fiat."""
+        report = sensitivity_sweep()
+        entry = report["varied"]["stratum_identity_boundary"]
+        self.assertIn("moved_low", entry)
+        self.assertIn("moved_high", entry)
+        self.assertTrue(entry["moved_low"] or entry["moved_high"])
+
+    def test_rank_consistency_interval_has_nonzero_width_at_perfect_separation(self):
+        """A naive Wald interval (z*sqrt(p(1-p)/n)) is exactly 0 width at auc=1.0 --
+        false certainty from 8 positives. Wilson must not collapse there."""
+        rows = [{"verdict": "no_conflict", "rpi_generation": 0.1} for _ in range(200)]
+        rows += [{"verdict": "supported_reassortment_candidate",
+                  "rpi_generation": 0.6} for _ in range(8)]
+        report = rank_consistency(rows)
+        self.assertEqual(report["auc"], 1.0)
+        lower, upper = report["confidence_interval"]
+        self.assertGreater(upper, lower)
+
+    def test_rank_consistency_underpowered_at_production_dataset_size(self):
+        """The production pipeline has exactly 8 supported_reassortment_candidate
+        labels. The threshold must fire unambiguously at that exact count, not sit at
+        a boundary equal to it by coincidence."""
+        rows = [{"verdict": "no_conflict", "rpi_generation": 0.1} for _ in range(200)]
+        rows += [{"verdict": "supported_reassortment_candidate",
+                  "rpi_generation": 0.6} for _ in range(8)]
+        self.assertTrue(rank_consistency(rows)["underpowered"])
+
+    def test_rank_consistency_confidence_interval_undefined_without_both_classes(self):
+        """No positives (or no negatives) means the AUC is genuinely undefined -- the
+        interval must stay nan/nan, not silently collapse to a full-width (0.0, 1.0)
+        via max(0.0, nan) / min(1.0, nan)."""
+        rows = [{"verdict": "no_conflict", "rpi_generation": 0.1} for _ in range(200)]
+        report = rank_consistency(rows)
+        self.assertTrue(math.isnan(report["auc"]))
+        lower, upper = report["confidence_interval"]
+        self.assertTrue(math.isnan(lower))
+        self.assertTrue(math.isnan(upper))
