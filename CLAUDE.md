@@ -33,8 +33,21 @@ stale — everything is reachable from `main` and from `origin/main`).
 3. **`dendropy` reconciliation.** pip 5.0.13 in system Python, not the conda env.
    Options discussed: add a `requirements-pip.txt` documenting the system-Python path so
    `environment.yml` is not silently contradicted.
-4. Unfixed review findings N4/N5/N6 (all LOW) — see the review notes: nan-ddG behaviour
-   flip, `_json_safe` np.float32 hole, and the thin ordering test.
+4. Unfixed review findings, all LOW, all verified real — fix or consciously accept:
+   - **N4 nan-ddG flip.** `boltzmann_compatibility(float('nan'), 0.0)` returned `1.0`
+     before the underflow clamp and returns `9.86e-305` after it, because
+     `max(-700.0, nan)` yields `-700.0` where `min(0.0, nan)` yielded `0.0`. Silent flip
+     from "no penalty" to "maximal penalty"; neither is a good answer for nan. Untested
+     either way.
+   - **N5 `_json_safe` type hole.** `np.float32('nan')` is not `isinstance(x, float)`
+     (only `np.float64` subclasses it), so it survives sanitisation; `default=str` then
+     intercepts before `allow_nan=False` can fire and it serialises as the JSON *string*
+     `"nan"`. Not reachable today (all report values are Python float / np.float64).
+   - **N6 thin ordering test.** `test_rounding_never_reports_retention_above_generation`
+     catches its regression (a call-site precision split) on only 1 of its 6
+     combinations, and cannot fail via any change to `_rpi_decimals` because the call
+     site passes `floor**5` to both columns. Unlike its N1 sibling it has no
+     guard-the-guard assertion.
 
 **User asked at sign-off:** pick between (a) `requirements-pip.txt` reconciliation or
 (b) the M_pack scaling question. That choice is still open.
