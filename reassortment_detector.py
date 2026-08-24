@@ -17,7 +17,9 @@ docs/superpowers/notes/2026-08-14-reassortment-detector-reconsolidation.md.
 import argparse
 import copy
 import csv
+import json
 import math
+import os
 import re
 import subprocess
 import sys
@@ -234,9 +236,18 @@ RPI_WEIGHTS: Dict[str, Any] = {
     },
 
     # Pairwise nucleotide identity below which a pair is treated as "distant".
-    # PROVISIONAL, literature-anchored: Rodriguez's close pair sits at ~0.85 identity
-    # (15% divergence, Table 7); the distant anchors sit at 0.548 (Rizvanov, SNV x ANDV)
-    # and 0.707 (Rizvanov, SNV x BCCV). 0.80 separates them with margin on both sides.
+    # PROVISIONAL, literature-anchored. All three anchors below are TIER 1 PRIMARY --
+    # the numeric values were read off and verified against the source PDFs during
+    # design, and are labelled here so they are not the only unlabelled figures in this
+    # module (every other citation in this file carries its verification state):
+    #   ~0.85 identity / ~15% divergence -- Rodriguez et al. 1998, Virology 242:99-106,
+    #       Table 7 (SNV NMR11 x CC107, the close pair). TIER 1 PRIMARY, value verified
+    #       against the source PDF.
+    #   0.548 -- Rizvanov et al. 2004, Virology 327:225-232 (SNV x ANDV).
+    #       TIER 1 PRIMARY, value verified against the source PDF.
+    #   0.707 -- Rizvanov et al. 2004, Virology 327:225-232 (SNV x BCCV).
+    #       TIER 1 PRIMARY, value verified against the source PDF.
+    # 0.80 separates them with margin on both sides.
     # Spec section 7 calls for replacing this with a mixture-model fit to the project's
     # own PED distribution -- a "DEmARC-style analysis", NOT the DEmARC tool. Swept in
     # the sensitivity analysis.
@@ -273,6 +284,20 @@ RPI_WEIGHTS: Dict[str, Any] = {
 }
 
 
+def smoothed_prior(counts: Dict[str, float], alpha: float) -> Dict[str, float]:
+    """Jeffreys-smoothed distribution over "S", "M", "L" from raw odd-segment counts.
+
+    Smoothing is applied AFTER any count arithmetic the caller has done (e.g. the
+    leave-one-pair-out subtraction in retrospective_reproduction), so no category can
+    reach zero even when the subtraction empties it -- a literal zero inside a
+    multiplicative model is a hidden hard gate, which is precisely what spec section 7
+    forbids.
+    """
+    smoothed = {segment: max(0.0, counts.get(segment, 0)) + alpha for segment in ("S", "M", "L")}
+    total = sum(smoothed.values())
+    return {segment: value / total for segment, value in smoothed.items()}
+
+
 def constellation_prior(stratum: str, alpha: Optional[float] = None) -> Dict[str, float]:
     """Jeffreys-smoothed prior over which segment is the odd one out.
 
@@ -281,10 +306,7 @@ def constellation_prior(stratum: str, alpha: Optional[float] = None) -> Dict[str
     defaulting -- a wrong stratum must be loud.
     """
     alpha = RPI_WEIGHTS["jeffreys_alpha"] if alpha is None else alpha
-    counts = RPI_WEIGHTS["constellation_counts"][stratum]
-    smoothed = {segment: counts[segment] + alpha for segment in ("S", "M", "L")}
-    total = sum(smoothed.values())
-    return {segment: value / total for segment, value in smoothed.items()}
+    return smoothed_prior(RPI_WEIGHTS["constellation_counts"][stratum], alpha)
 
 
 # ---------------------------------------------------------------------------
@@ -403,41 +425,79 @@ def _translate(seq: str) -> str:
     return "".join(protein)
 
 
-def _longest_orf_span(genomic_seq: str) -> str:
-    """Longest ATG...stop nucleotide span (stop codon included) across all 6 reading
-    frames. Shared by longest_orf_protein (Gate 0, translates it) and
-    candidate_cds_from_orf (Gate 4, uses the nucleotide span directly) so the ORF-search
-    loop exists exactly once. Returns '' if no in-frame stop codon terminates any
-    ATG-initiated ORF.
+def _longest_orf_span_with_terminus(genomic_seq: str) -> Tuple[str, bool]:
+    """(longest ATG-initiated nucleotide span, whether a stop codon terminated it).
+
+    Searches all 6 reading frames. A span that reaches the end of the record WITHOUT
+    hitting an in-frame stop is a valid candidate, and is returned truncated to whole
+    codons with stop_terminated=False.
+
+    WHY OPEN-ENDED SPANS COUNT. Requiring a terminal stop silently discarded real
+    full-length ORFs, because GenBank records are routinely trimmed to (or just inside)
+    the CDS. Measured case: Tatenale virus Upton Heath M, NC_055637.1 -- a RefSeq
+    record this project's own upstream annotates as coding-complete with an 1118 aa
+    glycoprotein. The record is 3355 nt; that CDS needs 3360 nt with start and stop, so
+    the deposit stops 5 nt short of its own stop codon. The real ORF was therefore
+    thrown away and a spurious 62 aa ORF elsewhere in the record won instead --
+    whereupon gate1 could match nothing and reported the segment "too_divergent" on an
+    ordinary, unmodified isolate. Translating the first codons of that record gives
+    MEQRSTVCLCLFLTGLLLWNPSESRN, an unmistakable hantavirus GPC signal peptide.
+
+    This does not soften junk detection. An open-ended span is only long when a frame
+    genuinely runs stop-free, which is the signature of coding sequence: in random
+    sequence a stop appears every ~21 codons, so the probability of 400 stop-free
+    codons is about 4e-9. Stop-terminated spans still win ties, so nothing that has a
+    real terminus is reinterpreted.
     """
     genomic_seq = genomic_seq.upper()
-    best = ""
+    best, best_stop_terminated = "", False
     for strand_seq in (genomic_seq, _reverse_complement(genomic_seq)):
         for frame in range(3):
             i = frame
             while i < len(strand_seq) - 2:
                 if strand_seq[i:i + 3] == "ATG":
                     j = i + 3
+                    stop_found = False
                     while j < len(strand_seq) - 2:
-                        codon = strand_seq[j:j + 3]
-                        if codon in _STOP_CODONS:
-                            span = strand_seq[i:j + 3]
-                            if len(span) > len(best):
-                                best = span
+                        if strand_seq[j:j + 3] in _STOP_CODONS:
+                            stop_found = True
                             break
                         j += 3
+                    if stop_found:
+                        span = strand_seq[i:j + 3]
+                    else:
+                        # Run to the last COMPLETE codon; a trailing partial codon is
+                        # not translatable and must not inflate the comparison.
+                        span = strand_seq[i:i + 3 * ((len(strand_seq) - i) // 3)]
+                    if len(span) > len(best) or (
+                            len(span) == len(best) and stop_found and not best_stop_terminated):
+                        best, best_stop_terminated = span, stop_found
                 i += 3
-    return best
+    return best, best_stop_terminated
+
+
+def _longest_orf_span(genomic_seq: str) -> str:
+    """Longest ATG-initiated nucleotide span (stop codon included when there is one)
+    across all 6 reading frames. Shared by longest_orf_protein (Gate 0, translates it)
+    and candidate_cds_from_orf (Gate 4, uses the nucleotide span directly) so the
+    ORF-search loop exists exactly once. Returns '' when no ATG-initiated span exists.
+    """
+    return _longest_orf_span_with_terminus(genomic_seq)[0]
 
 
 def longest_orf_protein(genomic_seq: str) -> str:
-    """Longest ATG...stop ORF across all 6 reading frames, translated to protein (start
-    and stop codons both excluded from the returned protein -- the initiator Met is not
-    counted). Returns '' if no in-frame stop codon terminates any ATG-initiated ORF --
+    """Longest ATG-initiated ORF across all 6 reading frames, translated to protein.
+
+    The initiator Met and the stop codon are both excluded from the returned protein.
+    An ORF running off the end of a CDS-trimmed record is translated to its last
+    complete codon -- see _longest_orf_span_with_terminus for why that case is real and
+    what it cost when it was not handled. Returns '' when no ATG-initiated span exists;
     Gate 0 treats that as a structural failure, not a crash.
     """
-    span = _longest_orf_span(genomic_seq)
-    return _translate(span[3:-3]) if span else ""
+    span, stop_terminated = _longest_orf_span_with_terminus(genomic_seq)
+    if not span:
+        return ""
+    return _translate(span[3:-3] if stop_terminated else span[3:])
 
 
 def empirical_protein_length_range(protein_lengths: List[int]) -> Tuple[int, int]:
@@ -527,8 +587,38 @@ def gate0_check(
 
     for segment, genomic in genomic_by_segment.items():
         low, high = ah.SEGMENT_LENGTH_RANGE[segment]
-        if not (low <= len(genomic) <= high):
-            failures.append(f"{segment}: genomic length {len(genomic)} outside expected {low}-{high}")
+        # Same tolerance principle as the protein-length check below, for the same
+        # reason, and it was missing here: SEGMENT_LENGTH_RANGE is ICTV's band for
+        # DECIDING WHICH SEGMENT a record is (all_hanta.py:86), not a validity
+        # criterion, so enforcing it exactly turned "unusual length" into "junk".
+        #
+        # Measured against this project's own reference set, that rejected real NCBI
+        # RefSeq complete genomes at the margins: Luxi virus LX309 S (NC_038530.1) is
+        # 2107 nt against a 1200-2100 band -- junk_sequence by SEVEN nucleotides -- and
+        # Tatenale virus Upton Heath M (NC_055637.1) is 3355 nt against 3400-3800.
+        # junk_sequence is terminal (score_candidate returns immediately), so a
+        # divergent novel hantavirus was discarded unscored for being marginally off a
+        # band derived from better-sampled relatives. That inverts the tool's purpose.
+        #
+        # The band is still enforced, just with room at the edges. Genuinely truncated
+        # records are unaffected: a 1014 nt M is 70% below the band and fails either
+        # way. all_hanta.py's own SEGMENT_LENGTH_ABSURD_MAX stays a hard ceiling --
+        # beyond it a record "is almost certainly a multi-segment concatenation or a
+        # mis-label" (all_hanta.py:90), which is junk in the sense this gate means.
+        tolerance = max(1, int(0.15 * (high - low + 1)))
+        absurd_max = ah.SEGMENT_LENGTH_ABSURD_MAX.get(segment, high + tolerance)
+        if len(genomic) > absurd_max:
+            failures.append(
+                f"{segment}: genomic length {len(genomic)} exceeds the plausible maximum "
+                f"{absurd_max} -- likely a concatenation or mis-labelled record")
+        elif not (low - tolerance <= len(genomic) <= high + tolerance):
+            failures.append(
+                f"{segment}: genomic length {len(genomic)} outside expected {low}-{high} "
+                f"(+/- {tolerance} nt tolerance)")
+        elif not (low <= len(genomic) <= high):
+            warnings.append(
+                f"{segment}: genomic length {len(genomic)} outside the ICTV band "
+                f"{low}-{high} but within tolerance -- unusual, not junk")
 
         protein = longest_orf_protein(genomic)
         orf_proteins[segment] = protein
@@ -1197,7 +1287,18 @@ def boltzmann_compatibility(
     # min(0.0, ...) here means math.exp's argument is never positive, so its result is
     # never above 1.0 -- the outer min(1.0, ...) below is now redundant but kept as a
     # cheap, harmless belt-and-suspenders guard against floating-point edge cases.
-    return min(1.0, math.exp(min(0.0, -ddg / rt)))
+    #
+    # The exponent is clamped BELOW as well, and that half is not symmetry for its own
+    # sake. math.exp does not raise on underflow the way it raises on overflow -- it
+    # returns 0.0 silently, so a large POSITIVE ddg produced exactly the hidden hard
+    # gate the docstring above promises never to produce: boltzmann_compatibility(500.0,
+    # 0.0) was 0.0. That is not an unreachable input, because rnacofold_dg is documented
+    # as taking whole-segment duplexes whose MFEs run to hundreds of kcal/mol, so
+    # cognate/non-cognate differences of that size are expected rather than exotic.
+    # -700 keeps exp() in normal range (its smallest normal result is ~1e-308) while
+    # still being far below any physically meaningful ddg.
+    exponent = min(0.0, max(-700.0, -ddg / rt))
+    return min(1.0, math.exp(exponent))
 
 
 def _parse_rnacofold_dg(stdout_text: str) -> float:
@@ -1262,8 +1363,23 @@ def n_recognition_footprint(species_name: str) -> int:
 
 
 def _beyond_tag(sequence: str, footprint: int) -> str:
-    """The scoring window: past the conserved tag, out to the footprint boundary."""
-    return sequence[HANTAVIRUS_TERMINAL_TAG_NT:HANTAVIRUS_TERMINAL_TAG_NT + footprint]
+    """The scoring window: the part of the N-recognition footprint lying BEYOND the tag.
+
+    Mir & Panganiban's footprints are measured FROM THE TERMINUS -- "the first 23 nt"
+    for SNV N, "the terminal 9" for most other hantavirus N proteins. So the footprint
+    spans sequence[0:footprint], and the part of it that is not the genus-invariant
+    14-nt tag is sequence[14:footprint].
+
+    An earlier version returned sequence[14:14+footprint], which for the 9-nt default
+    scored nt 15-23 -- entirely OUTSIDE a footprint that ends at nt 9. That window had
+    no source behind it.
+
+    For the 9-nt default this slice is EMPTY, and correctly so: the whole default
+    footprint lies inside the invariant tag, so there is nothing left to measure. Only
+    the SNV 23-vs-9 asymmetry -- the part that actually varies between lineages -- can
+    produce a scoring window at all. See polymerase_compatibility's empty-window branch.
+    """
+    return sequence[HANTAVIRUS_TERMINAL_TAG_NT:footprint]
 
 
 def polymerase_compatibility(
@@ -1272,8 +1388,16 @@ def polymerase_compatibility(
 ) -> Tuple[float, str]:
     """Factor M_pol: protein-RNA recognition compatibility, scored BEYOND the conserved tag.
 
-    Returns (value, status). Status is "scored" here; m_pol_variance_check may later
-    downgrade the factor to "fixed_constant" across a run.
+    Returns (value, status). Status is one of:
+      "scored"               -- a non-empty window beyond the tag was compared;
+      "no_signal_beyond_tag" -- the footprint lies entirely inside the invariant 14-nt
+                                tag (the 9-nt default) or no sequence was supplied, so
+                                there is nothing to measure. Value is 1.0, neutral.
+    m_pol_variance_check may later downgrade the factor to "fixed_constant" across a run.
+
+    Reporting "no_signal_beyond_tag" rather than a scored 1.0 is the honest half of the
+    _beyond_tag fix: a neutral value that came from an EMPTY comparison must not be
+    reported in the same status as a neutral value that came from a perfect match.
 
     FRAMING REQUIREMENT (spec 6.2): hantavirus L-polymerase terminal recognition is a
     STRUCTURALLY MOTIVATED HYPOTHESIS, by analogy with the rotavirus 3'-terminal
@@ -1288,7 +1412,7 @@ def polymerase_compatibility(
             total += 1
             matches += int(base_a == base_b)
     if total == 0:
-        return 1.0, "scored"
+        return 1.0, "no_signal_beyond_tag"
     identity = matches / total
     return max(RPI_WEIGHTS["eco_floor"], identity), "scored"
 
@@ -1325,7 +1449,36 @@ def retention_factor(odd_segment: str, structural_intact: bool) -> float:
 # Tag identifying which revision of RPI_WEIGHTS produced a given rpi_* row -- not itself
 # a weight, so it lives at module scope rather than inside RPI_WEIGHTS. Bump this any
 # time RPI_WEIGHTS changes so historical output rows remain attributable.
-RPI_WEIGHTS_VERSION = "2026-08-24.1"
+RPI_WEIGHTS_VERSION = "2026-08-24.2"
+
+# Emitted as the rpi_k_stratum_provisional column on every row.
+#
+# TRUE because the `identity` compute_rpi is currently handed by the production call
+# site is gate0.best_kmer_identity -- PROTEIN k-mer novelty against the nearest
+# reference, maximised over segments -- and NOT the parental NUCLEOTIDE divergence that
+# spec section 7's close/distant stratification is defined on. The two are different
+# quantities on different scales (best_kmer_identity runs ~0.35-0.46 in this dataset;
+# the boundary's calibration points are 0.548 / 0.707 / 0.85 nucleotide identity), so
+# rpi_k_stratum must NOT be read as a real divergence stratification.
+#
+# Computing real parental identity is a documented follow-up, not a rename: it needs
+# parental sequences sourced per implicated species from the reference index. Flip this
+# constant to False in the same change that lands it, and bump RPI_WEIGHTS_VERSION.
+RPI_K_STRATUM_PROVISIONAL = True
+
+
+def _rpi_decimals(floor_value: float) -> int:
+    """Decimal places at which `floor_value` still survives round() as nonzero.
+
+    A column whose smallest legitimate value is 1e-6 cannot be reported at 4 dp: the
+    floor exists precisely so no factor is ever exactly zero, and rounding coarser than
+    the floor throws that guarantee away at the last step, in the CSV a reader actually
+    sees. Deriving the precision from the floor keeps the two in step automatically if
+    eco_floor is ever retuned, instead of leaving a hand-picked literal to drift.
+
+    Never returns fewer than 4, so the human-readable columns stay readable.
+    """
+    return max(4, int(math.ceil(-math.log10(floor_value))))
 
 
 def compute_rpi(
@@ -1364,20 +1517,45 @@ def compute_rpi(
         "rpi_m_pol": round(m_pol, 4),
         "rpi_m_pol_status": m_pol_status,
         "rpi_k_stratum": stratum,
+        # Explicit honesty marker -- see RPI_K_STRATUM_PROVISIONAL. Without it a reader
+        # would take rpi_k_stratum for a real parental-divergence stratification.
+        "rpi_k_stratum_provisional": RPI_K_STRATUM_PROVISIONAL,
         "rpi_k_value": round(k_value, 4),
         "rpi_f": round(f_value, 4),
         "rpi_smoothing": RPI_WEIGHTS["jeffreys_alpha"],
         "rpi_weights_version": RPI_WEIGHTS_VERSION,
-        # 8 decimal places here, not 4: these two are a PRODUCT of up to four floored
-        # factors, so they can legitimately land as low as floor ** 4 (1e-8, see above).
-        # Rounding a value in that range to 4 decimals would collapse it to a literal
-        # 0.0 and quietly violate the no-literal-zeros guarantee this floor exists to
-        # uphold -- see test_no_factor_is_ever_exactly_zero.
-        "rpi_generation": round(generation, 8),
-        "rpi_retention": round(generation * f_value, 8),
+        # Precision per column is set by THAT COLUMN'S OWN FLOOR, not picked by eye.
+        # Each is a product of floored factors, so each has a different smallest
+        # legitimate value, and rounding any of them coarser than its floor collapses a
+        # small-but-nonzero score to a literal 0.0 -- the hidden hard gate spec 7
+        # forbids. See _rpi_decimals.
+        #
+        #   rpi_generation = E * M_pack * M_pol * K, clamped at floor**4 = 1e-8
+        #   rpi_retention  = rpi_generation * F, and F is itself floored at eco_floor,
+        #                    so the product bottoms out one factor lower, at
+        #                    floor**5 = 1e-10. At 8 dp that rounded to 0.0: generation
+        #                    at its clamp with F = 0.075 (odd segment S/L,
+        #                    structural_intact False) gives 7.5e-10.
+        #
+        # BOTH use the deeper of the two precisions, and must. F <= 1, so
+        # rpi_retention <= rpi_generation is an invariant of the model
+        # (test_retention_never_exceeds_generation). Rounding is only order-preserving
+        # at EQUAL precision -- rounding retention finer than generation let a retention
+        # of 1.57233e-05 be reported above a generation of 1.572e-05, inverting the pair
+        # by pure formatting.
+        "rpi_generation": round(generation, _rpi_decimals(floor ** 5)),
+        "rpi_retention": round(generation * f_value, _rpi_decimals(floor ** 5)),
     })
-    for key in ("rpi_e_host", "rpi_e_geo", "rpi_e_time", "rpi_e_total"):
-        row[key] = round(row[key], 4)
+    # rpi_e_host/geo/time are single floored terms (min eco_floor = 0.01), but
+    # rpi_e_total is their PRODUCT and bottoms out at floor**3 = 1e-6. Rounding it to 4
+    # dp alongside its own components reported a literal 0.0 for entirely ordinary
+    # candidates -- two implicated species in different host orders, different
+    # countries, a few years apart gives 3.33e-05, which read as 0.0 in the CSV.
+    # EcologicalOpportunityTest.test_no_factor_is_ever_exactly_zero did not catch it
+    # because it asserts on ecological_opportunity's RAW output, not on this rounded row.
+    for key in ("rpi_e_host", "rpi_e_geo", "rpi_e_time"):
+        row[key] = round(row[key], _rpi_decimals(floor))
+    row["rpi_e_total"] = round(row["rpi_e_total"], _rpi_decimals(floor ** 3))
     return row
 
 
@@ -1396,33 +1574,50 @@ def compute_rpi(
 
 # Published in vitro coinfection experiments, used as the PRIMARY validation evidence
 # (spec 11.1). Ecology is held at 1.0: these experiments forced coinfection.
+#
+# `contributes_to_prior` records whether a pair's counts are actually inside
+# RPI_WEIGHTS["constellation_counts"]. Only three of the five are:
+#     close   {M: 12, S: 12, L: 1} = SNV_NMR11_x_CC107 alone
+#     distant {M: 11, S:  0, L: 0} = SNV_x_ANDV (10) + SNV_x_BCCV (1)
+# The two Tier-3 pairs (PUUV_x_PHV, DOBV_Aa_x_DOBV_Af) were deliberately NOT folded
+# into the weights, so holding either out changes nothing and neither may be listed as
+# a contributor. This flag is what makes the leave-one-pair-out subtraction in
+# retrospective_reproduction correct rather than approximate.
 RPI_INVITRO_BENCHMARK: Dict[str, Dict[str, Any]] = {
     "SNV_NMR11_x_CC107": {
-        "source": "Rodriguez et al. 1998, Virology 242:99-106",
+        "source": "Rodriguez et al. 1998, Virology 242:99-106, Table 7 "
+                  "(TIER 1 PRIMARY -- counts read off the source PDF)",
         "stratum": "close", "moi": "1.0-1.5", "genotyping": "plaque-level, no amplification",
         "observed": {"M": 12, "S": 12, "L": 1},
+        "contributes_to_prior": True,
     },
     "SNV_x_BCCV": {
-        "source": "Rodriguez et al. 1998, Virology 242:99-106",
+        "source": "Rodriguez et al. 1998, Virology 242:99-106 "
+                  "(TIER 1 PRIMARY -- counts read off the source PDF)",
         "stratum": "distant", "moi": "1.0-1.5", "genotyping": "plaque-level, no amplification",
         "observed": {"M": 1, "S": 0, "L": 0},
+        "contributes_to_prior": True,
     },
     "SNV_x_ANDV": {
-        "source": "Rizvanov et al. 2004, Virology 327:225-232",
+        "source": "Rizvanov et al. 2004, Virology 327:225-232 "
+                  "(TIER 1 PRIMARY -- counts read off the source PDF)",
         "stratum": "distant", "moi": "3", "genotyping": "plaque-level, then passaged",
         "observed": {"M": 10, "S": 0, "L": 0},
+        "contributes_to_prior": True,
     },
     "PUUV_x_PHV": {
         "source": "Handke et al. 2010, J Gen Virol 91:2351-2359 (TIER 3 -- read the "
                   "library PDF and promote before relying on this row)",
         "stratum": "distant", "moi": "unrecorded", "genotyping": "unrecorded",
         "observed": {"M": 1, "S": 0, "L": 0},
+        "contributes_to_prior": False,
     },
     "DOBV_Aa_x_DOBV_Af": {
         "source": "Kirsanovs et al. 2010, Virus Genes 41:319-328, via Klempa 2018 "
                   "(TIER 3 SECONDHAND)",
         "stratum": "close", "moi": "unrecorded", "genotyping": "unrecorded",
         "observed": {"M": 65, "S": 0, "L": 0},
+        "contributes_to_prior": False,
     },
 }
 
@@ -1435,16 +1630,80 @@ RPI_BENCHMARK_CAVEAT = (
 )
 
 
+def _composition_distance(prior: Dict[str, float], observed: Dict[str, float]) -> float:
+    """Total-variation distance between the prior and the observed composition.
+
+    0.5 * sum(|prior[s] - observed_fraction[s]|) over S, M, L. Ranges 0 (identical) to
+    1 (disjoint support).
+
+    This exists because `modal_agrees` SATURATES -- see retrospective_reproduction. A
+    boolean "is the observed top segment in the predicted top set?" cannot fail when
+    every predicted top set contains M and every observed top set contains M. The
+    total-variation distance is a real quantitative comparison and does fail: an
+    all-M observation against a prior that weights S equally to M scores ~0.53, which
+    the boolean reports as a clean pass.
+
+    Returns nan for an empty observation rather than a flattering 0.0 -- an unmeasured
+    pair is not a perfectly-matching pair.
+    """
+    total = sum(max(0.0, observed.get(segment, 0)) for segment in ("S", "M", "L"))
+    if total <= 0:
+        return float("nan")
+    return 0.5 * sum(
+        abs(prior[segment] - max(0.0, observed.get(segment, 0)) / total)
+        for segment in ("S", "M", "L")
+    )
+
+
+def _prior_counts_excluding(holdout: Optional[str]) -> Dict[str, Dict[str, float]]:
+    """RPI_WEIGHTS' constellation counts with `holdout`'s own observations removed.
+
+    THIS IS WHAT MAKES LEAVE-ONE-PAIR-OUT ACTUALLY HOLD SOMETHING OUT. The previous
+    version filtered a `derived_from` list and then called constellation_prior, which
+    reads the fixed weight table -- so the held-out pair's counts still generated the
+    prediction that was supposed to test it independently, and the prior came back
+    byte-identical with and without the holdout.
+
+    Pairs flagged contributes_to_prior=False are not inside the weight table at all,
+    so holding them out is a no-op here -- correctly, and visibly so.
+    """
+    counts = copy.deepcopy(RPI_WEIGHTS["constellation_counts"])
+    if holdout is None:
+        return counts
+    record = RPI_INVITRO_BENCHMARK[holdout]  # KeyError on a typo, deliberately loud
+    if not record.get("contributes_to_prior"):
+        return counts
+    stratum = counts[record["stratum"]]
+    for segment, observed_count in record["observed"].items():
+        stratum[segment] = max(0, stratum.get(segment, 0) - observed_count)
+    return counts
+
+
 def retrospective_reproduction(holdout: Optional[str] = None) -> Dict[str, Any]:
     """Primary validation: does the index reproduce the published constellation profiles?
 
     Pass `holdout` to exclude a pair from prior derivation, so it becomes an independent
-    test rather than a restatement of its own input.
+    test rather than a restatement of its own input. The exclusion is a real count
+    SUBTRACTION (_prior_counts_excluding), not a list filter -- Jeffreys smoothing is
+    applied afterwards, so no category can hit zero even when the subtraction empties it.
+
+    Two agreement measures are reported per pair:
+      `composition_distance` -- PRIMARY. Total-variation distance between the prior and
+          the observed composition. Quantitative, and able to fail.
+      `modal_agrees`         -- SECONDARY, and it SATURATES. The distant top set is {M},
+          the close top set is {M, S}, and every benchmark observation's top set
+          contains M -- so no possible input in this benchmark returns False. It is kept
+          because it is the comparison the spec's prose describes, but it must never be
+          quoted as a pass on its own; read composition_distance beside it.
     """
-    derived_from = [name for name in RPI_INVITRO_BENCHMARK if name != holdout]
+    alpha = RPI_WEIGHTS["jeffreys_alpha"]
+    counts = _prior_counts_excluding(holdout)
+    contributors = [name for name, record in RPI_INVITRO_BENCHMARK.items()
+                    if record.get("contributes_to_prior")]
+    derived_from = [name for name in contributors if name != holdout]
     pairs: Dict[str, Any] = {}
     for name, record in RPI_INVITRO_BENCHMARK.items():
-        prior = constellation_prior(record["stratum"])
+        prior = smoothed_prior(counts[record["stratum"]], alpha)
         observed = record["observed"]
 
         # Ties must be represented explicitly, not resolved by dict insertion order.
@@ -1470,15 +1729,76 @@ def retrospective_reproduction(holdout: Optional[str] = None) -> Dict[str, Any]:
             "predicted_top_segments": predicted_top,
             "observed_modal_segment": observed_modal,
             "observed_top_segments": observed_top,
+            # PRIMARY quantitative comparison -- see _composition_distance.
+            "composition_distance": _composition_distance(prior, observed),
+            # SECONDARY and saturating -- see this function's docstring.
             "modal_agrees": bool(set(predicted_top) & set(observed_top)),
         }
     return {
         "pairs": pairs,
         "derived_from": derived_from,
+        "prior_counts_used": counts,
+        "contributes_to_prior": contributors,
         "holdout": holdout,
+        "holdout_changed_the_prior": bool(
+            holdout is not None
+            and counts != RPI_WEIGHTS["constellation_counts"]
+        ),
         "ecological_factor_held_at": 1.0,
+        "primary_agreement_measure": "composition_distance",
+        "modal_agrees_saturates": (
+            "modal_agrees is SECONDARY: the distant top set is {M}, the close top set "
+            "is {M, S}, and every benchmark observation's top set contains M, so no "
+            "input in this benchmark can return False. Read composition_distance."
+        ),
         "caveat": RPI_BENCHMARK_CAVEAT,
     }
+
+
+# ---------------------------------------------------------------------------
+# Synthetic IsolateRecord builders.
+#
+# These live HERE, in the production area, and not in the Tests section, because
+# _rpi_sensitivity_panel (production) calls _eco_isolate. Under `import
+# reassortment_detector` the name resolved at call time regardless of definition
+# order, but under script-mode invocation (`python reassortment_detector.py`, which
+# stops at `sys.exit(main())` before the Tests section is ever executed) the name did
+# not exist -- so any production path reaching the sweep raised NameError. Defining
+# them above the CLI section removes that dependency on how the module was entered.
+#
+# The tests below (Gate3CheckTest, EcologicalOpportunityTest) still use them; they are
+# module-level names, so nothing about the test side changes.
+# ---------------------------------------------------------------------------
+
+def _make_ecology_isolate(species: str, country: str, host_order: str, year: str,
+                          lab: bool = False, vaccine: bool = False) -> "ah.IsolateRecord":
+    return ah.IsolateRecord(
+        isolate_key=f"{species}|{country}|{year}", species_name=species, species_taxid="999",
+        species_status="classified", biosample="", isolate="", strain="", host_name="Test host",
+        host_taxid="1", host_order=host_order, host_family="", host_role="reservoir_rodent",
+        collection_date=year, year=year, location="", country=country, region="",
+        grouping_tier="tier_2_species_isolate", grouping_confidence=1.0,
+        s_accession="", m_accession="", l_accession="",
+        s_completeness="", m_completeness="", l_completeness="",
+        s_nt_length=0, m_nt_length=0, l_nt_length=0,
+        s_protein_aa="", m_protein_aa="", l_protein_aa="", concatenated_protein_aa="",
+        segments_present=[], coding_complete_segments=[], triplet_status="", has_complete_triplet=False,
+        is_lab_derived=lab, is_vaccine_strain=vaccine, has_nss_orf=False,
+        metadata_conflict=False, taxonomic_incongruence=False, cross_species_partners=[],
+        kmer_cluster_id="", s_protein_accessions=[], m_protein_accessions=[],
+        l_protein_accessions=[], all_accessions=[], warnings=[],
+    )
+
+
+def _eco_isolate(species: str, country: str, year: str, host_order: str = "Rodentia",
+                 host_family: str = "Cricetidae",
+                 host_name: str = "Peromyscus maniculatus") -> "ah.IsolateRecord":
+    """IsolateRecord has host_name (a binomial), host_order and host_family -- but NO
+    host_genus and NO observed_host. Genus is derived from host_name."""
+    isolate = _make_ecology_isolate(species, country, host_order, year)
+    isolate.host_family = host_family
+    isolate.host_name = host_name
+    return isolate
 
 
 def _rpi_sensitivity_panel() -> List[Dict[str, Any]]:
@@ -1504,11 +1824,12 @@ def _rpi_sensitivity_panel() -> List[Dict[str, Any]]:
         order, because M's retention ratio is already pinned at retention_factor's
         1.0 ceiling and cannot follow the increase while S's (0.15, well under
         the ceiling) does.
-    Reused (not reimplemented) IsolateRecord construction via the test fixture
-    `_eco_isolate`/`_make_ecology_isolate`, defined below in the Tests section --
-    building the ~20-field IsolateRecord by hand a second time here would drift from
-    EcologicalOpportunityTest's own fixture. Resolved at call time, not at import
-    time, so the earlier definition position of this function is not an issue.
+    Reuses (does not reimplement) IsolateRecord construction via
+    `_eco_isolate`/`_make_ecology_isolate`, defined directly above -- building the
+    ~20-field IsolateRecord by hand a second time here would drift from
+    EcologicalOpportunityTest's own fixture. Those builders used to live in the Tests
+    section, which made this production function depend on a name that does not exist
+    under script-mode invocation; they were moved up for that reason.
     """
     def two(label: str, odd_segment: str, identity: float, m_pack: float, m_pol: float,
             host_name_a: str = "Peromyscus maniculatus", host_family_a: str = "Cricetidae",
@@ -1535,6 +1856,22 @@ def _rpi_sensitivity_panel() -> List[Dict[str, Any]]:
             host_order_b="Soricomorpha", host_family_b="Soricidae", host_name_b="Sorex araneus"),
         two("G_boundary_low_crossing_M", "M", 0.62, 0.9, 0.9),
         two("H_boundary_high_crossing_M", "M", 0.95, 0.9, 0.9),
+        # K and L: engineered for the jeffreys_alpha direction, the same way A and B
+        # are engineered for retention_by_odd_segment. Both sit at same_species host
+        # proximity, same country, same year, so Factor E is 1.0 for both and the only
+        # thing separating their rpi_generation is k_value x m_pack x m_pol.
+        #
+        # k(distant, S) and k(close, L) are BOTH near-zero categories, but they move at
+        # different rates with alpha -- k(close,L)/k(distant,S) is 2.28 at alpha 0.25,
+        # 1.42 at 0.5 and 1.13 at 0.75, because the close stratum's L count is a real
+        # observation (1) while the distant stratum's S count is an unobserved zero that
+        # alpha alone populates. Scaling L's molecular product to 0.8 (0.8944^2) puts
+        # the pair's baseline ratio at 1.13, inside the window where the +50% direction
+        # flips their order and the -50% direction does not. Without a pair like this
+        # the panel simply has no candidates close enough for alpha to reorder, and the
+        # sweep would report stability it never tested.
+        two("K_alpha_flip_distant_S", "S", 0.60, 1.0, 1.0),
+        two("L_alpha_flip_close_L", "L", 0.90, 0.8944, 0.8944),
     ]
     single = _eco_isolate("Sp_I_single", "USA", "2001")
     panel.append({
@@ -1605,42 +1942,61 @@ def sensitivity_sweep(factor: float = 0.5) -> Dict[str, Any]:
     varied: Dict[str, Any] = {}
     panel = _rpi_sensitivity_panel()
 
-    # --- jeffreys_alpha: constellation_prior's own alpha= override, no weights swap
-    # needed. Genuinely non-tautological already (the Jeffreys smoothing formula is
-    # nonlinear in alpha and the two strata's raw counts differ), but the ORIGINAL
-    # version of this sweep only scored the +factor sample -- fixed here to take the
-    # worse of both directions, matching the other three parameters.
-    baseline_alpha = [constellation_prior(s)["M"] for s in ("close", "distant")]
+    baseline_generation = _score_panel(panel)["generation"]
+
+    # --- jeffreys_alpha: routed through _score_panel like every other parameter.
+    #
+    # The ORIGINAL version Spearman-correlated [close_M_prior, distant_M_prior] against
+    # itself under perturbation. distant-M exceeds close-M at every alpha, so that rank
+    # order is fixed BY CONSTRUCTION and the statistic returned 1.0 unconditionally --
+    # a tautology, exactly the defect the host_decay/retention entries were already
+    # fixed for. alpha is reachable via RPI_WEIGHTS["jeffreys_alpha"], so a deep-copied
+    # perturbed weights dict routes it through compute_rpi unchanged and the answer is
+    # now about real candidate reordering. The two-strata `samples` are retained as
+    # descriptive context, but they are NOT what rank_correlation is computed from.
     low_alpha = RPI_WEIGHTS["jeffreys_alpha"] * (1 - factor)
     high_alpha = RPI_WEIGHTS["jeffreys_alpha"] * (1 + factor)
-    low_alpha_sample = [constellation_prior(s, alpha=low_alpha)["M"] for s in ("close", "distant")]
-    high_alpha_sample = [constellation_prior(s, alpha=high_alpha)["M"] for s in ("close", "distant")]
+    alpha_low_weights = copy.deepcopy(RPI_WEIGHTS)
+    alpha_low_weights["jeffreys_alpha"] = low_alpha
+    alpha_high_weights = copy.deepcopy(RPI_WEIGHTS)
+    alpha_high_weights["jeffreys_alpha"] = high_alpha
+    alpha_gen_low = _score_panel(panel, alpha_low_weights)["generation"]
+    alpha_gen_high = _score_panel(panel, alpha_high_weights)["generation"]
     varied["jeffreys_alpha"] = {
-        "samples": [{"alpha": low_alpha, "m_prior": low_alpha_sample},
-                    {"alpha": high_alpha, "m_prior": high_alpha_sample}],
-        "rank_correlation": min(_spearman(baseline_alpha, low_alpha_sample),
-                                 _spearman(baseline_alpha, high_alpha_sample)),
+        "samples": [
+            {"alpha": low_alpha,
+             "m_prior": [constellation_prior(s, alpha=low_alpha)["M"] for s in ("close", "distant")]},
+            {"alpha": high_alpha,
+             "m_prior": [constellation_prior(s, alpha=high_alpha)["M"] for s in ("close", "distant")]},
+        ],
+        "rank_correlation": _worst_rank_correlation(
+            _spearman(baseline_generation, alpha_gen_low),
+            _spearman(baseline_generation, alpha_gen_high)),
+        "note": "Correlated against rpi_generation on the fixed synthetic panel "
+                "(_rpi_sensitivity_panel), the same route as every other parameter. "
+                "'samples' is descriptive only.",
     }
 
     # --- host_decay: affects Factor E (rpi_generation), via ecological_opportunity's
     # host term. Correlate against the panel's rpi_generation, not the weight table.
-    baseline_generation = _score_panel(panel)["generation"]
     host_decay_low_weights = copy.deepcopy(RPI_WEIGHTS)
-    host_decay_low_weights["host_decay"] = {
-        k: v * (1 - factor) for k, v in RPI_WEIGHTS["host_decay"].items()}
+    host_decay_low_weights["host_decay"] = _perturbed_host_decay(1 - factor)
     host_decay_high_weights = copy.deepcopy(RPI_WEIGHTS)
-    host_decay_high_weights["host_decay"] = {
-        k: v * (1 + factor) for k, v in RPI_WEIGHTS["host_decay"].items()}
+    host_decay_high_weights["host_decay"] = _perturbed_host_decay(1 + factor)
     host_decay_gen_low = _score_panel(panel, host_decay_low_weights)["generation"]
     host_decay_gen_high = _score_panel(panel, host_decay_high_weights)["generation"]
     varied["host_decay"] = {
         "scaled_by": (1 - factor, 1 + factor),
         "values_low": host_decay_low_weights["host_decay"],
         "values_high": host_decay_high_weights["host_decay"],
-        "rank_correlation": min(_spearman(baseline_generation, host_decay_gen_low),
-                                 _spearman(baseline_generation, host_decay_gen_high)),
+        "excluded_from_perturbation": sorted(RPI_HOST_DECAY_NOT_PERTURBED),
+        "rank_correlation": _worst_rank_correlation(
+            _spearman(baseline_generation, host_decay_gen_low),
+            _spearman(baseline_generation, host_decay_gen_high)),
         "note": "Correlated against rpi_generation on the fixed synthetic panel "
-                "(_rpi_sensitivity_panel), not against the weight table itself.",
+                "(_rpi_sensitivity_panel), not against the weight table itself. The "
+                "neutral unknown_host_metadata sentinel is held fixed and the "
+                "perturbed weights are clamped -- see _perturbed_host_decay.",
     }
 
     # --- retention_by_odd_segment: affects Factor F (rpi_retention), NOT
@@ -1659,8 +2015,9 @@ def sensitivity_sweep(factor: float = 0.5) -> Dict[str, Any]:
         "scaled_by": (1 - factor, 1 + factor),
         "values_low": retention_low_weights["retention_by_odd_segment"],
         "values_high": retention_high_weights["retention_by_odd_segment"],
-        "rank_correlation": min(_spearman(baseline_retention, retention_low),
-                                 _spearman(baseline_retention, retention_high)),
+        "rank_correlation": _worst_rank_correlation(
+            _spearman(baseline_retention, retention_low),
+            _spearman(baseline_retention, retention_high)),
         "note": "Correlated against rpi_retention (the factor this weight actually "
                 "scales), not rpi_generation, on the same fixed panel.",
     }
@@ -1685,24 +2042,120 @@ def sensitivity_sweep(factor: float = 0.5) -> Dict[str, Any]:
     varied["stratum_identity_boundary"] = {
         "low": low_boundary, "high": high_boundary,
         "moved_low": moved_low, "moved_high": moved_high,
-        "rank_correlation": min(_spearman(baseline_generation, boundary_gen_low),
-                                 _spearman(baseline_generation, boundary_gen_high)),
+        "rank_correlation": _worst_rank_correlation(
+            _spearman(baseline_generation, boundary_gen_low),
+            _spearman(baseline_generation, boundary_gen_high)),
         "note": "Reclassification between strata is a step change, not a smooth one; "
                 "'moved_low'/'moved_high' name which panel candidates ACTUALLY changed "
                 "stratum at each swept boundary on this run -- an empty list is itself "
                 "an observed result (this boundary choice did not move that candidate "
                 "in that direction), never a hardcoded assumption of stability.",
     }
-    return {"factor": factor, "varied": varied}
+    return {
+        "factor": factor,
+        # The panel is SYNTHETIC and FIXED (_rpi_sensitivity_panel) -- twelve constructed
+        # candidates chosen to span the parameter space, not real pipeline rows. This
+        # marker is top-level so no number below can be quoted as a statement about
+        # real candidates without the reader seeing what it was measured on.
+        "panel": "synthetic_fixed",
+        # Reported rather than written into prose so the count cannot drift out of date
+        # as candidates are added to _rpi_sensitivity_panel.
+        "panel_size": len(panel),
+        "panel_labels": [candidate["label"] for candidate in panel],
+        "varied": varied,
+    }
+
+
+def _tied_ranks(values: Sequence[float]) -> "np.ndarray":
+    """Ranks with TIED values sharing their average rank (midrank).
+
+    The obvious double-argsort idiom, np.argsort(np.argsort(v)), does NOT do this: it
+    breaks ties by position, so a constant vector comes back as [0, 1, 2, ...] -- a
+    perfectly ordered ranking manufactured out of an input with no order in it at all.
+    That defeats the zero-variance guard in _spearman (the guard tested the ranks, and
+    the ranks were never constant), and it also lets any tie in a real score panel
+    contribute a spurious ordering to the correlation.
+
+    Midranks are the standard Spearman treatment of ties and make both problems go
+    away: a constant vector ranks flat, so the guard fires, and tied candidates in the
+    panel neither gain nor lose order relative to each other.
+    """
+    array = np.asarray(values, dtype=float)
+    # mergesort for a stable, reproducible grouping of equal values.
+    order = np.argsort(array, kind="mergesort")
+    sorted_values = array[order]
+    ranks = np.empty(array.shape, dtype=float)
+    start = 0
+    while start < len(array):
+        stop = start
+        while stop + 1 < len(array) and sorted_values[stop + 1] == sorted_values[start]:
+            stop += 1
+        ranks[order[start:stop + 1]] = (start + stop) / 2.0
+        start = stop + 1
+    return ranks
 
 
 def _spearman(a: Sequence[float], b: Sequence[float]) -> float:
-    if len(a) < 2:
-        return 1.0
-    rank_a, rank_b = np.argsort(np.argsort(a)), np.argsort(np.argsort(b))
+    """Spearman rank correlation, or nan where the statistic is UNDEFINED.
+
+    Undefined means: fewer than two observations, or one side's ranks are constant (a
+    correlation with a zero-variance variable has no value, and numpy would emit
+    0/0 = nan for it anyway). Returning 1.0 there -- as this used to -- reports PERFECT
+    RANK STABILITY from an input that measured nothing, which is the same class of
+    defect as a constant factor dressed as a measurement. nan matches
+    rank_consistency's own discipline for its undefined AUC.
+
+    Callers must surface the nan rather than fold it away; see
+    _worst_rank_correlation, which is nan-contagious for exactly that reason.
+    """
+    if len(a) < 2 or len(b) < 2:
+        return float("nan")
+    rank_a, rank_b = _tied_ranks(a), _tied_ranks(b)
     if np.std(rank_a) == 0 or np.std(rank_b) == 0:
-        return 1.0
+        return float("nan")
     return float(np.corrcoef(rank_a, rank_b)[0, 1])
+
+
+def _worst_rank_correlation(*values: float) -> float:
+    """The WORSE (lower) of the perturbation directions -- with nan contagious.
+
+    The sweep's headline question is whether ranking survives, so the more conservative
+    direction is reported rather than whichever looks stabler. But builtin min() is
+    order-dependent around nan (min(nan, 0.5) is nan; min(0.5, nan) is 0.5), so an
+    undefined direction could be silently discarded depending on argument order. If any
+    direction is undefined, the answer is undefined.
+    """
+    if any(math.isnan(value) for value in values):
+        return float("nan")
+    return min(values)
+
+
+# host_decay keys held FIXED during the sensitivity sweep. unknown_host_metadata is a
+# NEUTRAL SENTINEL (1.0 = "unknown, not separated"), not an estimated decay weight.
+# Scaling it up turned missing host metadata into a positive bonus and saturated
+# compute_rpi's min(1.0, ...) clamp; scaling it down turned unknown into a penalty,
+# which is the exact failure host_rank_proximity's top-of-function guard exists to
+# prevent. Neither direction is a meaningful perturbation of an assumption.
+RPI_HOST_DECAY_NOT_PERTURBED: FrozenSet[str] = frozenset({"unknown_host_metadata"})
+
+
+def _perturbed_host_decay(scale: float) -> Dict[str, float]:
+    """RPI_WEIGHTS['host_decay'] scaled by `scale`, sentinel held fixed and clamped.
+
+    Clamped to [eco_floor, 1.0]:
+      - 1.0 above, because host proximity is a discount on ecological opportunity and
+        never a bonus -- an unclamped +50% pushed same_species to 1.5, which
+        compute_rpi's own min(1.0, ...) then silently absorbed, making the whole
+        upward direction of the sweep a no-op for the candidates it should have moved.
+      - eco_floor below rather than a literal 0.0, per the no-literal-zeros rule: at
+        factor >= 1.0 the low direction would otherwise zero every weight and drive
+        Factor E's host term to an exact 0.
+    """
+    return {
+        key: value if key in RPI_HOST_DECAY_NOT_PERTURBED
+        else min(1.0, max(RPI_WEIGHTS["eco_floor"], value * scale))
+        for key, value in RPI_WEIGHTS["host_decay"].items()
+    }
 
 
 # The production pipeline carries exactly 8 supported_reassortment_candidate labels
@@ -1759,6 +2212,87 @@ def rank_consistency(
             "Sanity check, not validation. The primary evidence is the retrospective "
             "reproduction of the published in vitro experiments (spec 11.1). Report the "
             "confidence interval, never a bare pass/fail."
+        ),
+    }
+
+
+# Threshold below which rpi_e_total counts as "near zero" for the spec 11.3 cross-layer
+# check. Defaults to eco_floor (0.01), and that is a reasoned choice, not a round
+# number: E = h_host * g_geo * t_time with each term in (0, 1], so ANY one term sitting
+# at its floor drags rpi_e_total to <= eco_floor regardless of the other two. "At least
+# one ecological term is floored" is precisely the continuous analogue of gate3's
+# categorical "no ecological route", which makes it the right comparison point.
+RPI_E_NEAR_ZERO_THRESHOLD = RPI_WEIGHTS["eco_floor"]
+
+
+def veto_vs_continuous_e(
+    scored_rows: Sequence[Dict[str, Any]],
+    near_zero_threshold: float = RPI_E_NEAR_ZERO_THRESHOLD,
+    gate3_key: str = "gate3_status",
+    e_key: str = "rpi_e_total",
+    id_key: str = "candidate_id",
+) -> Dict[str, Any]:
+    """Spec 11.3 cross-layer check: hard gate3 veto vs near-zero continuous Factor E.
+
+    Spec 10.2 is why the RPI is computed for vetoed candidates at all -- without this
+    comparison that delivered behaviour has no consumer. Divergence between the two
+    layers flags a defect in ONE OF THEM and is informative either way; it is not
+    automatically a bug in the RPI.
+
+    Disagreement is EXPECTED, per spec 10.2: gate3_check reads implicated_species[:2]
+    and has no temporal dimension, while Factor E covers every implicated species and
+    includes t_time. The counts below are the measurement, not a pass/fail.
+
+    Rows lacking either key (e.g. junk_sequence rows, which never reach compute_rpi)
+    are counted as `skipped` rather than silently scored as agreement.
+
+    Returns agreement counts plus the ids of the disagreeing candidates in both
+    directions.
+    """
+    agree_veto_near_zero = agree_route_nonzero = 0
+    veto_but_e_not_near_zero: List[Any] = []
+    near_zero_e_but_no_veto: List[Any] = []
+    skipped: List[Any] = []
+
+    for row in scored_rows:
+        gate3_status = row.get(gate3_key)
+        e_total = row.get(e_key)
+        if gate3_status is None or e_total is None:
+            skipped.append(row.get(id_key))
+            continue
+        vetoed = gate3_status == "no_ecological_route"
+        near_zero = float(e_total) <= near_zero_threshold
+        if vetoed and near_zero:
+            agree_veto_near_zero += 1
+        elif not vetoed and not near_zero:
+            agree_route_nonzero += 1
+        elif vetoed:
+            veto_but_e_not_near_zero.append(row.get(id_key))
+        else:
+            near_zero_e_but_no_veto.append(row.get(id_key))
+
+    n_agree = agree_veto_near_zero + agree_route_nonzero
+    n_disagree = len(veto_but_e_not_near_zero) + len(near_zero_e_but_no_veto)
+    n_compared = n_agree + n_disagree
+    return {
+        "near_zero_threshold": near_zero_threshold,
+        "n_compared": n_compared,
+        "n_skipped": len(skipped),
+        "skipped_candidates": skipped,
+        "n_agree": n_agree,
+        "n_disagree": n_disagree,
+        "agree_veto_and_near_zero_e": agree_veto_near_zero,
+        "agree_route_and_nonzero_e": agree_route_nonzero,
+        "disagree_veto_but_e_not_near_zero": veto_but_e_not_near_zero,
+        "disagree_near_zero_e_but_no_veto": near_zero_e_but_no_veto,
+        "agreement_fraction": (n_agree / n_compared) if n_compared else float("nan"),
+        "interpretation": (
+            "Spec 11.3 / 10.2. gate3_check reads implicated_species[:2] and has no "
+            "temporal term; Factor E covers all implicated species and includes "
+            "t_time. Disagreement is expected and informative -- it is the point of "
+            "the check, not a bug. Investigate the named candidates in both "
+            "directions; it flags a defect in one layer or the other, and which one "
+            "is a judgement this function does not make."
         ),
     }
 
@@ -1869,23 +2403,54 @@ def score_candidate(
     # Task 8 possible. It is assembled from the gate results above but never feeds BACK
     # into verdict/combine_verdict -- see VerdictUnchangedRegressionTest.
     #
-    # SCAFFOLDING: terminal_windows is built from the CANDIDATE's own CDS and passed as
-    # BOTH the candidate_termini and parent_termini arguments below, i.e. M_pol is
-    # scored against itself and is trivially 1.0 for every candidate. Real parental
-    # termini would need to be sourced from reference.genomic_index per implicated
-    # species -- deferred to a follow-up (see task brief). m_pol_variance_check (Task 5)
-    # exists precisely to catch this: run across a real sample of pairs it will report
-    # "fixed_constant" rather than pretending this measures anything yet.
+    # SCAFFOLDING (M_pol): terminal_windows is built from the CANDIDATE's own CDS and
+    # passed as BOTH the candidate_termini and parent_termini arguments below, i.e.
+    # M_pol is scored against itself and is identically 1.0 for every candidate. Real
+    # parental termini would need to be sourced from reference.genomic_index per
+    # implicated species -- deferred to a follow-up (see task brief).
+    #
+    # The status is therefore FORCED to "fixed_constant" here, discarding the status
+    # polymerase_compatibility returns. That function has no way to know it is being
+    # handed the same dict twice, and m_pol_variance_check -- the mechanism spec 6.2
+    # provides for making this call -- has no real sample of lineage pairs to run over
+    # in production, so it is never invoked on this path. Reporting the "scored" it
+    # returns would put a constant in the output dressed as a measurement, which is the
+    # exact thing spec 6.2's status column exists to prevent. When real parental
+    # termini land, delete the override and let m_pol_variance_check decide.
     terminal_windows = {seg: candidate_cds.get(seg, "")[:64] for seg in ("S", "M", "L")}
-    m_pol_value, m_pol_status = polymerase_compatibility(terminal_windows, terminal_windows)
+    m_pol_value, _m_pol_self_comparison_status = polymerase_compatibility(
+        terminal_windows, terminal_windows)
     result.update(compute_rpi(
         implicated_species=gate1.implicated_species,
         isolates=reference.isolates,
+        # DEFAULT "M" when gate1 named no discordant segment. Not arbitrary: M is the
+        # modal odd segment in both strata of the constellation prior, so it is the
+        # least surprising assumption -- and it keeps compute_rpi total for candidates
+        # that reach here with an unresolved segment (gate1 patterns other than a
+        # single-segment discordance) rather than raising mid-run. The consequence is
+        # that such a row's rpi_k_value and rpi_f are scored as an M-exchange without
+        # gate1 having identified one. The substitution is visible in the output: an
+        # empty gate1_discordant_segment on a row with M-valued rpi_f means the default
+        # fired. Check that column before quoting rpi_retention for such a row.
         odd_segment=gate1.discordant_segment or "M",
+        # SCAFFOLDING (K stratum): gate0.best_kmer_identity is PROTEIN k-mer novelty
+        # against the nearest reference, maximised over segments -- NOT the parental
+        # nucleotide divergence spec section 7 stratifies on, and on a different scale
+        # (~0.35-0.46 here vs the boundary's 0.548 / 0.707 / 0.85 calibration points).
+        # Every row is therefore marked rpi_k_stratum_provisional -- see
+        # RPI_K_STRATUM_PROVISIONAL. Computing real parental identity is a documented
+        # follow-up, deliberately out of scope for this wave.
         identity=gate0.best_kmer_identity,
+        # SCAFFOLDING (M_pack): fixed at 1.0, not computed. Scoring it needs RNAcofold
+        # (boltzmann_compatibility / rnacofold_dg are implemented and tested, but
+        # ViennaRNA is not installed here -- environment.yml DOES pin viennarna=2.7.2,
+        # and that pin has simply never been reconciled against a real environment
+        # build; see the README's limitation item 8 -- spec 6.1).
+        # rpi_generation is therefore currently E * K, not the four-factor product the
+        # schema advertises; stated as such in the README's limitations list.
         m_pack=1.0,
         m_pol=m_pol_value,
-        m_pol_status=m_pol_status,
+        m_pol_status="fixed_constant",
         structural_intact=not (
             gate2a.tmis_conserved is False
             or gate2a.ph_switch_conserved is False
@@ -1910,8 +2475,79 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--phylo-min-taxa", type=int, default=4)
     parser.add_argument("--phylo-seed", type=int, default=42)
     parser.add_argument("--phylo-threads", type=int, default=1)
+    parser.add_argument(
+        "--rpi-report", action="store_true",
+        help=("Also write rpi_validation_report.json (spec 11.1/11.2/11.3 and the "
+              "spec 12 sensitivity sweep) into the output directory. Off by default: "
+              "existing runs are byte-identical without it."))
     parser.add_argument("--verbose", action="store_true")
     return parser.parse_args(argv)
+
+
+# Filename for the --rpi-report artifact. Named here rather than inline so tests and
+# any downstream consumer agree on it.
+RPI_REPORT_FILENAME = "rpi_validation_report.json"
+
+
+def _json_safe(value: Any) -> Any:
+    """Replace non-finite floats with None, recursively, so the result is valid JSON.
+
+    nan and +/-inf have no JSON spelling. null is the honest one for "undefined"; 0.0
+    would be a claim. Dict keys are left alone -- they are strings throughout this
+    report.
+    """
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
+
+
+def write_rpi_report(scored_rows: Sequence[Dict[str, Any]], output_dir: Path) -> Path:
+    """Write the RPI validation report to `output_dir` and return its path.
+
+    Collects the validation entry points that previously had no caller outside the
+    tests: retrospective reproduction (spec 11.1) including one leave-one-pair-out run
+    per contributing pair, the rank-consistency sanity check (11.2), the veto-vs-
+    continuous-E cross-layer check (11.3), and the sensitivity sweep (12).
+
+    Written as JSON rather than CSV because these results are nested and heterogeneous;
+    flattening them into the candidate table would mix per-candidate observations with
+    whole-run diagnostics.
+    """
+    report: Dict[str, Any] = {
+        "rpi_weights_version": RPI_WEIGHTS_VERSION,
+        "rpi_k_stratum_provisional": RPI_K_STRATUM_PROVISIONAL,
+        "retrospective_reproduction": retrospective_reproduction(),
+        "leave_one_pair_out": {
+            name: retrospective_reproduction(holdout=name)
+            for name, record in RPI_INVITRO_BENCHMARK.items()
+            if record.get("contributes_to_prior")
+        },
+        "rank_consistency": rank_consistency(scored_rows),
+        "veto_vs_continuous_e": veto_vs_continuous_e(scored_rows),
+        "sensitivity_sweep": sensitivity_sweep(),
+    }
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / RPI_REPORT_FILENAME
+    with path.open("w", encoding="utf-8") as handle:
+        # allow_nan=False, with non-finite values mapped to null FIRST. Python's json
+        # emits bare `NaN`/`Infinity` tokens by default, which are not JSON: jq and
+        # JavaScript's JSON.parse both reject the file outright. Python's own json.loads
+        # accepts them, which is exactly why the round-trip test did not notice.
+        #
+        # This is a routine path, not an edge case: rank_consistency DELIBERATELY
+        # returns nan for auc and its confidence interval whenever a run has no
+        # positives or no negatives -- true of the documented single-candidate
+        # invocation -- and _worst_rank_correlation and _composition_distance are
+        # deliberately nan-returning too. null is the right JSON spelling of "this
+        # statistic is undefined"; it must not become 0.0, which would be a value.
+        json.dump(_json_safe(report), handle, indent=2, sort_keys=True,
+                  default=str, allow_nan=False)
+    return path
 
 
 def main(argv=None) -> int:
@@ -1942,6 +2578,10 @@ def main(argv=None) -> int:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+    if args.rpi_report:
+        report_path = write_rpi_report(rows, output_dir)
+        print(f"RPI validation report: {report_path}")
 
     for row in rows:
         print(f"{row['candidate_id']}: {row['verdict']}")
@@ -1977,11 +2617,48 @@ class LongestOrfProteinTest(unittest.TestCase):
         seq = short + "CCCCC" + long_
         self.assertEqual(longest_orf_protein(seq), "A" * 10)
 
-    def test_no_stop_codon_returns_empty(self):
-        self.assertEqual(longest_orf_protein("ATG" + "GCT" * 5), "")
+    def test_orf_running_off_the_end_is_kept_not_discarded(self):
+        """CHANGED BEHAVIOUR, deliberately. This used to assert "" -- an ORF with no
+        terminal stop was thrown away.
+
+        That is wrong for real data: GenBank records are routinely trimmed to (or just
+        inside) the CDS, so the stop codon is simply absent from the deposit. Tatenale
+        virus Upton Heath M (NC_055637.1) is a RefSeq record annotated coding-complete
+        with an 1118 aa glycoprotein, deposited at 3355 nt -- 5 nt short of the 3360 it
+        would need to carry its own stop. The real ORF was discarded, a spurious 62 aa
+        ORF elsewhere won, and gate1 then reported "too_divergent" for an ordinary
+        unmodified isolate."""
+        self.assertEqual(longest_orf_protein("ATG" + "GCT" * 5), "A" * 5)
+
+    def test_trailing_partial_codon_is_not_translated(self):
+        """A dangling 1-2 nt tail is not a codon and must not extend the protein."""
+        self.assertEqual(longest_orf_protein("ATG" + "GCT" * 5 + "GC"), "A" * 5)
+
+    def test_terminus_is_reported_so_callers_can_tell_the_two_cases_apart(self):
+        """A stop-terminated ORF must still be reported as terminated (and its stop
+        stripped from the protein); an open-ended one must be reported as open. Callers
+        that need a real CDS terminus can then check, rather than guessing from length."""
+        span, stopped = _longest_orf_span_with_terminus("ATG" + "GCT" * 7 + "TAA")
+        self.assertTrue(stopped)
+        self.assertTrue(span.endswith("TAA"))
+        span, stopped = _longest_orf_span_with_terminus("ATG" + "GCT" * 7)
+        self.assertFalse(stopped)
+        self.assertEqual(len(span) % 3, 0)
+
+    def test_open_ended_orfs_do_not_soften_junk_detection(self):
+        """The guard that matters: an open-ended span is only LONG when a frame runs
+        stop-free, which random sequence does not do. A stop appears roughly every 21
+        codons by chance."""
+        import random as _random
+        rng = _random.Random(1)
+        junk = "".join(rng.choice("ACGT") for _ in range(3600))
+        self.assertLess(len(longest_orf_protein(junk)), 200)
 
     def test_empty_sequence_returns_empty(self):
         self.assertEqual(longest_orf_protein(""), "")
+
+    def test_no_atg_at_all_returns_empty(self):
+        self.assertEqual(longest_orf_protein("CCCCCCCCCCCC"), "")
 
 
 class EmpiricalDerivationTest(unittest.TestCase):
@@ -2072,6 +2749,69 @@ class Gate0CheckTest(unittest.TestCase):
         result = gate0_check(candidate, self.protein_len_ranges, self.panhandle, far_reference)
         self.assertTrue(result.passed_structure)
         self.assertFalse(result.passed_identity_floor)
+
+    def _genomic_of_length(self, total_nt, aa_len):
+        """A segment carrying a real `aa_len` ORF, PADDED to exactly `total_nt`.
+
+        Padded, never clipped: clipping would cut the stop codon off and the segment
+        would fail the ORF check instead of the length check under test.
+        """
+        body = self._valid_orf_genomic(aa_len, "TAGTAGTAGAC", "GTCTACTACTA")
+        assert len(body) <= total_nt, (
+            f"a {aa_len} aa ORF needs {len(body)} nt, more than the requested {total_nt}")
+        return body + "A" * (total_nt - len(body))
+
+    def test_marginally_unusual_genomic_length_warns_instead_of_calling_it_junk(self):
+        """Regression: two REAL NCBI RefSeq complete genomes were being discarded as
+        junk_sequence for sitting just outside ICTV's segment-identification band --
+        Luxi virus LX309 S (NC_038530.1) at 2107 nt against 1200-2100, over by SEVEN
+        nucleotides, and Tatenale virus Upton Heath M (NC_055637.1) at 3355 nt against
+        3400-3800. junk_sequence is terminal, so a divergent novel hantavirus was
+        dropped unscored for being marginally off a band derived from its better-sampled
+        relatives."""
+        candidate = CandidateInput(
+            candidate_id="MARGINAL",
+            s_genomic=self._genomic_of_length(2107, 430),
+            m_genomic=self._genomic_of_length(3355, 1091),
+            l_genomic=self._genomic_of_length(6500, 2150),
+        )
+        result = gate0_check(candidate, self.protein_len_ranges, self.panhandle,
+                             self.reference_profiles)
+        self.assertTrue(result.passed_structure, result.failures)
+        self.assertTrue(any("within tolerance" in w for w in result.warnings),
+                        result.warnings)
+
+    def test_genuinely_truncated_segment_is_still_junk(self):
+        """The tolerance band must not swallow real truncation. This is the partial
+        PUUV record shape that motivated keeping the check at all: a 1014 nt M is 70%
+        below the band. Its longest ORF (43 aa) sits INSIDE the empirical protein range,
+        so the protein check alone would pass it -- genomic length is what catches it."""
+        candidate = CandidateInput(
+            candidate_id="TRUNCATED",
+            s_genomic=self._genomic_of_length(1302, 420),
+            m_genomic=self._genomic_of_length(1014, 40),
+            l_genomic=self._genomic_of_length(665, 40),
+        )
+        result = gate0_check(candidate, self.protein_len_ranges, self.panhandle,
+                             self.reference_profiles)
+        self.assertFalse(result.passed_structure)
+        self.assertTrue(any(f.startswith("M: genomic length 1014") for f in result.failures),
+                        result.failures)
+
+    def test_absurdly_long_segment_is_rejected_as_a_concatenation(self):
+        """all_hanta.py's SEGMENT_LENGTH_ABSURD_MAX stays a hard ceiling -- beyond it a
+        record 'is almost certainly a multi-segment concatenation or a mis-label'."""
+        candidate = CandidateInput(
+            candidate_id="CONCATENATED",
+            s_genomic=self._genomic_of_length(4000, 430),
+            m_genomic=self._genomic_of_length(3600, 1130),
+            l_genomic=self._genomic_of_length(6500, 2150),
+        )
+        result = gate0_check(candidate, self.protein_len_ranges, self.panhandle,
+                             self.reference_profiles)
+        self.assertFalse(result.passed_structure)
+        self.assertTrue(any("plausible maximum" in f for f in result.failures),
+                        result.failures)
 
 
 class NearestSpeciesByKmerTest(unittest.TestCase):
@@ -2198,25 +2938,6 @@ class Gate2TrackCTest(unittest.TestCase):
         self.assertEqual(result.receptor_class_note, "same_clade")
 
 
-def _make_ecology_isolate(species, country, host_order, year, lab=False, vaccine=False):
-    return ah.IsolateRecord(
-        isolate_key=f"{species}|{country}|{year}", species_name=species, species_taxid="999",
-        species_status="classified", biosample="", isolate="", strain="", host_name="Test host",
-        host_taxid="1", host_order=host_order, host_family="", host_role="reservoir_rodent",
-        collection_date=year, year=year, location="", country=country, region="",
-        grouping_tier="tier_2_species_isolate", grouping_confidence=1.0,
-        s_accession="", m_accession="", l_accession="",
-        s_completeness="", m_completeness="", l_completeness="",
-        s_nt_length=0, m_nt_length=0, l_nt_length=0,
-        s_protein_aa="", m_protein_aa="", l_protein_aa="", concatenated_protein_aa="",
-        segments_present=[], coding_complete_segments=[], triplet_status="", has_complete_triplet=False,
-        is_lab_derived=lab, is_vaccine_strain=vaccine, has_nss_orf=False,
-        metadata_conflict=False, taxonomic_incongruence=False, cross_species_partners=[],
-        kmer_cluster_id="", s_protein_accessions=[], m_protein_accessions=[],
-        l_protein_accessions=[], all_accessions=[], warnings=[],
-    )
-
-
 class Gate3CheckTest(unittest.TestCase):
     def test_single_implicated_species_needs_no_overlap_check(self):
         isolates = [_make_ecology_isolate("SpA", "Finland", "Rodentia", "2010")]
@@ -2336,6 +3057,31 @@ class BuildComparatorMembersTest(unittest.TestCase):
         self.assertEqual(members, [])
 
 
+def _write_fake_binary(directory: Path, name: str, source: str) -> Path:
+    """Write a fake mafft/iqtree stand-in and return a path the OS can actually exec.
+
+    The scripts are Python, and phylogeny.py invokes them through subprocess.run with
+    the script path as argv[0]. On POSIX the shebang plus the exec bit is enough. On
+    WINDOWS IT IS NOT: CreateProcess does not consult shebangs, so handing it a .py
+    raises `OSError: [WinError 193] %1 is not a valid Win32 application`, phylogeny.py
+    catches it, and every tree comes back phylo_status="failed".
+
+    That is a defect in this harness, not in the pipeline, and it was invisible for as
+    long as these tests died earlier on `import dendropy`. Fixing the import exposed it.
+    On Windows we therefore emit a .cmd shim that re-launches the script under the
+    CURRENT interpreter (sys.executable, so the shim cannot pick up a different Python
+    than the one running the suite) and forwards its arguments.
+    """
+    script = directory / name
+    script.write_text(source, encoding="utf-8")
+    script.chmod(0o755)
+    if os.name != "nt":
+        return script
+    shim = script.with_suffix(".cmd")
+    shim.write_text(f'@echo off\r\n"{sys.executable}" "{script}" %*\r\n', encoding="utf-8")
+    return shim
+
+
 class Gate4CheckEndToEndTest(unittest.TestCase):
     """Mirrors test_all_hanta.py's PhylogeneticsScopeEndToEndTest fake-binary pattern --
     mafft/iqtree are not installed in this environment (confirmed via `which` during
@@ -2388,12 +3134,8 @@ with open(f"{prefix}.treefile", "w") as f:
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         tmp_path = Path(self.tmpdir.name)
-        self.mafft_bin = tmp_path / "fake_mafft.py"
-        self.iqtree_bin = tmp_path / "fake_iqtree.py"
-        self.mafft_bin.write_text(self._FAKE_MAFFT)
-        self.iqtree_bin.write_text(self._FAKE_IQTREE)
-        self.mafft_bin.chmod(0o755)
-        self.iqtree_bin.chmod(0o755)
+        self.mafft_bin = _write_fake_binary(tmp_path, "fake_mafft.py", self._FAKE_MAFFT)
+        self.iqtree_bin = _write_fake_binary(tmp_path, "fake_iqtree.py", self._FAKE_IQTREE)
         self.output_dir = tmp_path / "output"
         self.output_dir.mkdir()
 
@@ -2650,15 +3392,13 @@ class EndToEndRealDataTest(unittest.TestCase):
 
         self.tmpdir = tempfile.TemporaryDirectory()
         tmp_path = Path(self.tmpdir.name)
-        self.mafft_bin = tmp_path / "fake_mafft.py"
-        self.iqtree_bin = tmp_path / "fake_iqtree.py"
+        self.mafft_bin = _write_fake_binary(
+            tmp_path, "fake_mafft.py", Gate4CheckEndToEndTest._FAKE_MAFFT)
+        self.iqtree_bin = _write_fake_binary(
+            tmp_path, "fake_iqtree.py", Gate4CheckEndToEndTest._FAKE_IQTREE)
         # Reuses the exact fake-binary scripts from Gate4CheckEndToEndTest above -- see
         # that class for the source. Both classes live in this same module now, so no
         # cross-module import is needed to reach it.
-        self.mafft_bin.write_text(Gate4CheckEndToEndTest._FAKE_MAFFT)
-        self.iqtree_bin.write_text(Gate4CheckEndToEndTest._FAKE_IQTREE)
-        self.mafft_bin.chmod(0o755)
-        self.iqtree_bin.chmod(0o755)
         self.output_dir = tmp_path / "output"
         self.output_dir.mkdir()
 
@@ -2861,16 +3601,6 @@ class DivergenceStratumTest(unittest.TestCase):
             divergence_stratum(-0.1)
 
 
-def _eco_isolate(species, country, year, host_order="Rodentia",
-                 host_family="Cricetidae", host_name="Peromyscus maniculatus"):
-    """IsolateRecord has host_name (a binomial), host_order and host_family -- but NO
-    host_genus and NO observed_host. Genus is derived from host_name."""
-    isolate = _make_ecology_isolate(species, country, host_order, year)
-    isolate.host_family = host_family
-    isolate.host_name = host_name
-    return isolate
-
-
 class EcologicalOpportunityTest(unittest.TestCase):
     def test_same_host_genus_same_country_same_years_scores_high(self):
         isolates = [
@@ -2997,6 +3727,19 @@ class BoltzmannCompatibilityTest(unittest.TestCase):
         exponentiating, not just the result afterward."""
         self.assertEqual(boltzmann_compatibility(-1000.0, 0.0), 1.0)
 
+    def test_extreme_positive_ddg_underflows_to_a_floor_not_to_zero(self):
+        """The other direction, and it is the one that bit. math.exp does NOT raise on
+        underflow the way it raises on overflow -- it silently returns 0.0, so a large
+        positive ddG produced exactly the hidden hard gate the docstring promises never
+        to produce: boltzmann_compatibility(500.0, 0.0) was 0.0.
+
+        Reachable, not exotic: rnacofold_dg is documented as taking whole-segment
+        duplexes, whose MFEs run to hundreds of kcal/mol. test_never_returns_zero only
+        probed ddG = 110."""
+        for ddg in (500.0, 1000.0, 1e6):
+            self.assertGreater(boltzmann_compatibility(ddg, 0.0), 0.0, ddg)
+            self.assertLess(boltzmann_compatibility(ddg, 0.0), 1.0, ddg)
+
 
 class RnacofoldDgParsingTest(unittest.TestCase):
     """Exercises _parse_rnacofold_dg, the stdout-parsing half of rnacofold_dg, against
@@ -3018,6 +3761,7 @@ class RnacofoldDgParsingTest(unittest.TestCase):
 
 class PolymeraseCompatibilityTest(unittest.TestCase):
     TAG = "AUCAUCAUCUGAGG"  # conserved across the genus AND across S/M/L
+    SNV_FOOTPRINT = 23  # Mir & Panganiban: SNV N requires the FIRST 23 nt
 
     def test_conserved_tag_is_excluded_from_scoring(self):
         """The terminal 14 nt are identical across S, M and L genus-wide. If M_pol
@@ -3025,13 +3769,15 @@ class PolymeraseCompatibilityTest(unittest.TestCase):
         same_tag_different_footprint = polymerase_compatibility(
             {"S": self.TAG + "GGGGGGGGG", "L": self.TAG + "GGGGGGGGG"},
             {"S": self.TAG + "CCCCCCCCC", "L": self.TAG + "CCCCCCCCC"},
+            footprint=self.SNV_FOOTPRINT,
         )[0]
         self.assertLess(same_tag_different_footprint, 1.0)
 
     def test_identical_footprints_score_one(self):
         seqs = {"S": self.TAG + "AAAAAAAAA", "L": self.TAG + "AAAAAAAAA"}
-        value, _ = polymerase_compatibility(seqs, seqs)
+        value, status = polymerase_compatibility(seqs, seqs, footprint=self.SNV_FOOTPRINT)
         self.assertAlmostEqual(value, 1.0, places=9)
+        self.assertEqual(status, "scored")
 
     def test_footprint_length_follows_mir_panganiban(self):
         """SNV N requires the first 23 nt; most hantavirus N needs only the terminal 9."""
@@ -3042,8 +3788,40 @@ class PolymeraseCompatibilityTest(unittest.TestCase):
         value, _ = polymerase_compatibility(
             {"S": self.TAG + "AAAAAAAAA", "L": self.TAG + "AAAAAAAAA"},
             {"S": self.TAG + "UUUUUUUUU", "L": self.TAG + "UUUUUUUUU"},
+            footprint=self.SNV_FOOTPRINT,
         )
         self.assertGreater(value, 0.0)
+
+    def test_scoring_window_is_measured_from_the_terminus(self):
+        """Mir & Panganiban's footprints are measured FROM THE TERMINUS -- "the first
+        23 nt", "the terminal 9". The scoring window is therefore the part of
+        sequence[0:footprint] that is not the invariant tag, i.e. sequence[14:footprint].
+
+        The previous slice was sequence[14:14+footprint], which for the 9-nt default
+        scored nt 15-23 -- entirely OUTSIDE a footprint that ends at nt 9, with no
+        source behind it."""
+        sequence = self.TAG + "ABCDEFGHI" + "ZZZZZZZZZZ"
+        self.assertEqual(_beyond_tag(sequence, 23), "ABCDEFGHI")
+        self.assertEqual(_beyond_tag(sequence, 18), "ABCD")
+
+    def test_default_footprint_leaves_no_window_beyond_the_tag(self):
+        """The 9-nt default footprint lies ENTIRELY inside the invariant 14-nt tag, so
+        there is nothing left to score. That must be reported as its own status, not as
+        a scored 1.0: a neutral value from an EMPTY comparison is not the same claim as
+        a neutral value from a perfect match. Only the SNV 23-vs-9 asymmetry -- the part
+        that actually varies between lineages -- can open a window at all."""
+        self.assertEqual(_beyond_tag(self.TAG + "GGGGGGGGG", RPI_N_FOOTPRINT_DEFAULT_NT), "")
+        value, status = polymerase_compatibility(
+            {"S": self.TAG + "GGGGGGGGG", "L": self.TAG + "GGGGGGGGG"},
+            {"S": self.TAG + "CCCCCCCCC", "L": self.TAG + "CCCCCCCCC"},
+        )
+        self.assertEqual(status, "no_signal_beyond_tag")
+        self.assertEqual(value, 1.0)
+
+    def test_empty_input_also_reports_no_signal(self):
+        value, status = polymerase_compatibility({}, {}, footprint=self.SNV_FOOTPRINT)
+        self.assertEqual(status, "no_signal_beyond_tag")
+        self.assertEqual(value, 1.0)
 
     def test_variance_check_fixes_constant_when_no_signal(self):
         """Spec 6.2: if M_pol shows negligible variance across real pairs, fix it at 1.0
@@ -3097,6 +3875,67 @@ class RpiAssemblyTest(unittest.TestCase):
                        "rpi_m_pol_status", "rpi_k_stratum", "rpi_k_value", "rpi_f",
                        "rpi_smoothing", "rpi_weights_version"):
             self.assertIn(column, row, column)
+
+    def test_reported_e_total_is_never_a_literal_zero(self):
+        """The no-literal-zeros guarantee has to hold in the ROW, not just in
+        ecological_opportunity's raw return. rpi_e_total is the product of three terms
+        each floored at eco_floor, so it bottoms out at floor**3 = 1e-6; reporting it at
+        4 dp alongside its own components collapsed ordinary candidates to 0.0. Two
+        implicated species, different host orders, different countries, three years
+        apart gives 3.33e-05 -- which the CSV showed as 0.0.
+
+        test_no_factor_is_ever_exactly_zero asserts on the raw dict and so cannot see
+        this."""
+        far_a = _eco_isolate("SpA", "USA", "2001", host_order="Rodentia",
+                             host_family="Cricetidae", host_name="Peromyscus maniculatus")
+        far_b = _eco_isolate("SpB", "Chile", "2004", host_order="Soricomorpha",
+                             host_family="Soricidae", host_name="Sorex araneus")
+        row = compute_rpi(["SpA", "SpB"], [far_a, far_b], "M", 0.9, 1.0, 1.0,
+                          "fixed_constant", True)
+        self.assertGreater(row["rpi_e_total"], 0.0)
+        self.assertGreater(row["rpi_generation"], 0.0)
+        self.assertGreater(row["rpi_retention"], 0.0)
+
+    def test_reported_retention_is_never_a_literal_zero_at_the_deepest_floor(self):
+        """rpi_retention carries one more floored factor than rpi_generation (F), so it
+        bottoms out at floor**5 = 1e-10. At 8 dp that rounded to 0.0."""
+        far_a = _eco_isolate("SpA", "USA", "2001", host_order="Rodentia",
+                             host_family="Cricetidae", host_name="Peromyscus maniculatus")
+        far_b = _eco_isolate("SpB", "Chile", "2004", host_order="Soricomorpha",
+                             host_family="Soricidae", host_name="Sorex araneus")
+        row = compute_rpi(["SpA", "SpB"], [far_a, far_b], "S", 0.5,
+                          RPI_WEIGHTS["eco_floor"], RPI_WEIGHTS["eco_floor"],
+                          "fixed_constant", False)
+        self.assertEqual(row["rpi_generation"], RPI_WEIGHTS["eco_floor"] ** 4)
+        self.assertGreater(row["rpi_retention"], 0.0)
+
+    def test_rounding_never_reports_retention_above_generation(self):
+        """F <= 1 makes rpi_retention <= rpi_generation an invariant of the model, but
+        rounding only preserves order at EQUAL precision. Reporting retention finer than
+        generation put 1.57233e-05 above 1.572e-05 -- an inversion created purely by
+        formatting."""
+        far_a = _eco_isolate("SpA", "USA", "2001", host_order="Rodentia",
+                             host_family="Cricetidae", host_name="Peromyscus maniculatus")
+        far_b = _eco_isolate("SpB", "Chile", "2004", host_order="Soricomorpha",
+                             host_family="Soricidae", host_name="Sorex araneus")
+        for odd_segment in ("S", "M", "L"):
+            for intact in (True, False):
+                row = compute_rpi(["SpA", "SpB"], [far_a, far_b], odd_segment, 0.9,
+                                  1.0, 1.0, "fixed_constant", intact)
+                self.assertLessEqual(row["rpi_retention"], row["rpi_generation"],
+                                     f"{odd_segment}/{intact}")
+
+    def test_k_stratum_carries_a_provisional_marker(self):
+        """The `identity` the production call site supplies is gate0.best_kmer_identity
+        -- PROTEIN k-mer novelty against the nearest reference, maximised over segments
+        -- not the parental NUCLEOTIDE divergence spec section 7 stratifies on, and on a
+        different scale (~0.35-0.46 vs the boundary's 0.548 / 0.707 / 0.85 calibration
+        points). Without an explicit marker a reader takes rpi_k_stratum for a real
+        divergence stratification. Computing real parental identity is a documented
+        follow-up; saying so on every row is not."""
+        row = self._row()
+        self.assertIn("rpi_k_stratum_provisional", row)
+        self.assertTrue(row["rpi_k_stratum_provisional"])
 
     def test_both_scores_are_within_unit_interval(self):
         # Exercise both the trivial F=1.0 default AND a row where F<1.0 -- the default
@@ -3199,11 +4038,74 @@ class RetrospectiveReproductionTest(unittest.TestCase):
         prior = report["pairs"]["SNV_NMR11_x_CC107"]["predicted_prior"]
         self.assertAlmostEqual(prior["M"], prior["S"], places=6)
 
-    def test_leave_one_pair_out_guards_circularity(self):
-        """A pair used to DERIVE K cannot serve as an independent test OF K."""
-        report = retrospective_reproduction(holdout="SNV_x_ANDV")
-        self.assertNotIn("SNV_x_ANDV", report["derived_from"])
-        self.assertIn("SNV_x_ANDV", report["pairs"])
+    def test_leave_one_pair_out_actually_changes_the_prior(self):
+        """A pair used to DERIVE K cannot serve as an independent test OF K.
+
+        The previous version only checked that the held-out name was absent from a
+        `derived_from` LIST, while the prediction was still produced by
+        constellation_prior reading the fixed RPI_WEIGHTS counts -- so the held-out
+        pair's own 10 M-odd observations still generated the prediction that supposedly
+        tested it, and the prior came back byte-identical either way. Holding out must
+        move the number, or it holds nothing out."""
+        baseline = retrospective_reproduction()
+        held_out = retrospective_reproduction(holdout="SNV_x_ANDV")
+
+        self.assertNotIn("SNV_x_ANDV", held_out["derived_from"])
+        self.assertIn("SNV_x_ANDV", held_out["pairs"])
+        self.assertTrue(held_out["holdout_changed_the_prior"])
+
+        base_prior = baseline["pairs"]["SNV_x_ANDV"]["predicted_prior"]
+        held_prior = held_out["pairs"]["SNV_x_ANDV"]["predicted_prior"]
+        self.assertNotEqual(base_prior, held_prior)
+        # SNV_x_ANDV contributes 10 of the distant stratum's 11 M-odd observations, so
+        # removing it must visibly weaken the M prediction it is being tested against.
+        self.assertLess(held_prior["M"], base_prior["M"] - 0.1)
+
+    def test_leave_one_pair_out_keeps_every_category_strictly_positive(self):
+        """Jeffreys smoothing is applied AFTER the subtraction, so a category the
+        subtraction empties still cannot reach zero -- a literal zero inside a
+        multiplicative model is the hidden hard gate spec section 7 forbids."""
+        held_out = retrospective_reproduction(holdout="SNV_NMR11_x_CC107")
+        prior = held_out["pairs"]["SNV_NMR11_x_CC107"]["predicted_prior"]
+        self.assertEqual(held_out["prior_counts_used"]["close"], {"M": 0, "S": 0, "L": 0})
+        for segment in ("S", "M", "L"):
+            self.assertGreater(prior[segment], 0.0, segment)
+        self.assertAlmostEqual(sum(prior.values()), 1.0, places=9)
+
+    def test_tier_three_pairs_are_not_listed_as_prior_contributors(self):
+        """PUUV_x_PHV and DOBV_Aa_x_DOBV_Af are NOT inside
+        RPI_WEIGHTS['constellation_counts'] -- close is Rodriguez's 12/12/1 alone and
+        distant is Rizvanov's 10 plus BCCV's 1. Listing all five as contributors
+        overstated the evidence base and made three of the five leave-one-out runs
+        silent no-ops that still claimed to hold something out."""
+        report = retrospective_reproduction()
+        self.assertEqual(sorted(report["derived_from"]),
+                         ["SNV_NMR11_x_CC107", "SNV_x_ANDV", "SNV_x_BCCV"])
+        for tier3 in ("PUUV_x_PHV", "DOBV_Aa_x_DOBV_Af"):
+            self.assertNotIn(tier3, report["derived_from"], tier3)
+            self.assertFalse(
+                retrospective_reproduction(holdout=tier3)["holdout_changed_the_prior"], tier3)
+
+    def test_composition_distance_exposes_what_modal_agrees_hides(self):
+        """modal_agrees CANNOT return False on this benchmark: the distant top set is
+        {M}, the close top set is {M, S}, and every observation's top set contains M.
+        DOBV_Aa_x_DOBV_Af is the case that proves the boolean is empty -- 65 M / 0 S /
+        0 L against a close prior that weights S EXACTLY as heavily as M. That is a
+        genuine disagreement, and modal_agrees reports it as a pass."""
+        report = retrospective_reproduction()
+        row = report["pairs"]["DOBV_Aa_x_DOBV_Af"]
+        self.assertTrue(row["modal_agrees"])
+        self.assertGreater(row["composition_distance"], 0.5)
+        # The pair the prior was actually derived from must, by contrast, sit close.
+        rodriguez = report["pairs"]["SNV_NMR11_x_CC107"]
+        self.assertLess(rodriguez["composition_distance"], 0.1)
+        self.assertEqual(report["primary_agreement_measure"], "composition_distance")
+
+    def test_composition_distance_is_total_variation_over_the_composition(self):
+        prior = {"S": 0.5, "M": 0.4, "L": 0.1}
+        self.assertAlmostEqual(_composition_distance(prior, {"S": 0, "M": 10, "L": 0}), 0.6)
+        self.assertAlmostEqual(_composition_distance(prior, {"S": 5, "M": 4, "L": 1}), 0.0)
+        self.assertTrue(math.isnan(_composition_distance(prior, {"S": 0, "M": 0, "L": 0})))
 
     def test_report_records_ecology_was_held_neutral(self):
         report = retrospective_reproduction()
@@ -3227,6 +4129,118 @@ class RetrospectiveReproductionTest(unittest.TestCase):
         self.assertIsNone(row["predicted_modal_segment"])
         self.assertEqual(row["predicted_top_segments"], ["M", "S"])
         self.assertTrue(row["modal_agrees"])
+
+
+class VetoVsContinuousETest(unittest.TestCase):
+    """Spec 11.3 cross-layer check. This function shipped once as a traceability-table
+    claim with no implementation behind it; it does not also get to ship untested."""
+
+    @staticmethod
+    def _row(candidate_id, gate3_status, e_total):
+        return {"candidate_id": candidate_id, "gate3_status": gate3_status,
+                "rpi_e_total": e_total}
+
+    def test_both_agreement_directions_are_counted_separately(self):
+        result = veto_vs_continuous_e([
+            self._row("veto_and_floored", "no_ecological_route", RPI_WEIGHTS["eco_floor"]),
+            self._row("route_and_scored", "ecology_plausible", 0.6),
+        ])
+        self.assertEqual(result["agree_veto_and_near_zero_e"], 1)
+        self.assertEqual(result["agree_route_and_nonzero_e"], 1)
+        self.assertEqual(result["n_disagree"], 0)
+        self.assertEqual(result["agreement_fraction"], 1.0)
+
+    def test_disagreement_names_the_candidates_in_both_directions(self):
+        """The counts alone are not actionable -- spec 10.2 says disagreement flags a
+        defect in one layer or the other, which cannot be investigated without knowing
+        WHICH candidate diverged."""
+        result = veto_vs_continuous_e([
+            self._row("vetoed_but_e_high", "no_ecological_route", 0.7),
+            self._row("floored_but_not_vetoed", "ecology_plausible", 0.001),
+        ])
+        self.assertEqual(result["disagree_veto_but_e_not_near_zero"], ["vetoed_but_e_high"])
+        self.assertEqual(result["disagree_near_zero_e_but_no_veto"], ["floored_but_not_vetoed"])
+        self.assertEqual(result["n_agree"], 0)
+
+    def test_rows_missing_either_key_are_skipped_not_scored_as_agreement(self):
+        """junk_sequence rows never reach compute_rpi, so they carry no rpi_e_total.
+        Counting them as agreement would inflate agreement_fraction with rows that were
+        never compared."""
+        result = veto_vs_continuous_e([
+            {"candidate_id": "junk", "gate3_status": "not_run"},
+            self._row("scored", "ecology_plausible", 0.6),
+        ])
+        self.assertEqual(result["n_skipped"], 1)
+        self.assertEqual(result["skipped_candidates"], ["junk"])
+        self.assertEqual(result["n_compared"], 1)
+
+    def test_agreement_fraction_is_nan_when_nothing_was_compared(self):
+        """0/0 is undefined. Reporting 0.0 or 1.0 for it would state a result about a
+        comparison that never happened."""
+        result = veto_vs_continuous_e([{"candidate_id": "junk"}])
+        self.assertTrue(math.isnan(result["agreement_fraction"]))
+
+
+class WriteRpiReportTest(unittest.TestCase):
+    """Spec 14 asks for these validation entry points to be RUN, not merely to exist.
+    Before --rpi-report they were unreachable from the CLI and wrote no artifact."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.output_dir = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+        self.rows = [
+            {"candidate_id": "c1", "gate3_status": "ecology_plausible",
+             "rpi_e_total": 0.5, "rpi_generation": 0.4,
+             "verdict": "supported_reassortment_candidate"},
+            {"candidate_id": "c2", "gate3_status": "no_ecological_route",
+             "rpi_e_total": 0.001, "rpi_generation": 0.001, "verdict": "no_call"},
+        ]
+
+    def test_report_is_written_and_carries_every_spec_14_section(self):
+        path = write_rpi_report(self.rows, self.output_dir)
+        self.assertEqual(path.name, RPI_REPORT_FILENAME)
+        report = json.loads(path.read_text(encoding="utf-8"))
+        for section in ("retrospective_reproduction", "leave_one_pair_out",
+                        "rank_consistency", "veto_vs_continuous_e", "sensitivity_sweep"):
+            self.assertIn(section, report, section)
+
+    def test_leave_one_pair_out_runs_once_per_contributing_pair_only(self):
+        """A pair outside the weight table cannot be held out of it. Including such a
+        pair here would report a leave-one-out run that held nothing out -- the exact
+        defect the count subtraction was added to fix."""
+        report = json.loads(
+            write_rpi_report(self.rows, self.output_dir).read_text(encoding="utf-8"))
+        expected = {name for name, record in RPI_INVITRO_BENCHMARK.items()
+                    if record.get("contributes_to_prior")}
+        self.assertEqual(set(report["leave_one_pair_out"]), expected)
+        for name, run in report["leave_one_pair_out"].items():
+            self.assertTrue(run["holdout_changed_the_prior"], name)
+
+    def test_report_is_strictly_valid_json_even_when_statistics_are_undefined(self):
+        """Python emits bare `NaN` tokens by default, which jq and JavaScript's
+        JSON.parse both reject -- while Python's own json.loads accepts them, which is
+        why a round-trip check does not catch it. nan is routine here, not exotic: a
+        single-candidate run (the documented default invocation) leaves rank_consistency
+        with no negatives, and it deliberately returns nan for auc and its interval."""
+        one_row = [{"candidate_id": "solo", "gate3_status": "ecology_plausible",
+                    "rpi_e_total": 0.5, "rpi_generation": 0.4,
+                    "verdict": "supported_reassortment_candidate"}]
+        raw = write_rpi_report(one_row, self.output_dir).read_text(encoding="utf-8")
+        self.assertNotIn("NaN", raw)
+        self.assertNotIn("Infinity", raw)
+        report = json.loads(raw)
+        # The undefined statistic must survive as null -- not as 0.0, which is a claim.
+        self.assertIsNone(report["rank_consistency"]["auc"])
+
+    def test_cli_flag_is_off_by_default(self):
+        """Existing invocations must stay byte-identical."""
+        args = parse_args(["--reference-input", "all_hanta", "--output", "output",
+                           "--candidate", "CAND01:s.fa,m.fa,l.fa"])
+        self.assertFalse(args.rpi_report)
+        args = parse_args(["--reference-input", "all_hanta", "--output", "output",
+                           "--candidate", "CAND01:s.fa,m.fa,l.fa", "--rpi-report"])
+        self.assertTrue(args.rpi_report)
 
 
 class SensitivityAndRankTest(unittest.TestCase):
@@ -3271,8 +4285,88 @@ class SensitivityAndRankTest(unittest.TestCase):
         rpi_retention on the fixed synthetic panel instead can, and does, on at least
         one perturbation direction for every parameter that actually varies scores."""
         report = sensitivity_sweep()
-        for key in ("host_decay", "retention_by_odd_segment", "stratum_identity_boundary"):
+        for key in ("host_decay", "retention_by_odd_segment", "stratum_identity_boundary",
+                    "jeffreys_alpha"):
             self.assertLess(report["varied"][key]["rank_correlation"], 1.0, key)
+
+    def test_jeffreys_alpha_is_swept_through_the_panel_not_against_itself(self):
+        """The original alpha entry Spearman-correlated [close_M_prior, distant_M_prior]
+        against itself under perturbation. distant-M exceeds close-M at EVERY alpha, so
+        the rank order was fixed by construction and the statistic returned 1.0
+        unconditionally -- a tautology, the same defect host_decay and
+        retention_by_odd_segment were already fixed for. alpha is reachable via
+        RPI_WEIGHTS['jeffreys_alpha'], so it routes through _score_panel like the other
+        three and the answer is now about real candidate reordering."""
+        report = sensitivity_sweep()
+        entry = report["varied"]["jeffreys_alpha"]
+        self.assertIn("panel", entry["note"])
+        # A two-element self-comparison can only ever return exactly 1.0 or -1.0; a
+        # value strictly between them proves the statistic came from the 12-candidate
+        # panel instead.
+        self.assertLess(entry["rank_correlation"], 1.0)
+        self.assertGreater(entry["rank_correlation"], -1.0)
+
+    def test_sweep_marks_its_panel_as_synthetic(self):
+        """Without a top-level marker the sweep's numbers can be quoted as a statement
+        about real candidates. They are not: the panel is twelve constructed rows."""
+        self.assertEqual(sensitivity_sweep()["panel"], "synthetic_fixed")
+
+    def test_host_decay_sweep_never_turns_missing_data_into_a_bonus(self):
+        """unknown_host_metadata is a NEUTRAL SENTINEL (1.0 = 'unknown, not separated'),
+        not an estimated decay weight. Scaling it above 1.0 made missing host taxonomy a
+        positive bonus, and scaling every weight above 1.0 saturated compute_rpi's
+        min(1.0, ...) so the whole upward direction became a no-op for the candidates it
+        should have moved."""
+        high = _perturbed_host_decay(1.5)
+        low = _perturbed_host_decay(0.5)
+        self.assertEqual(high["unknown_host_metadata"], RPI_WEIGHTS["host_decay"]
+                         ["unknown_host_metadata"])
+        self.assertEqual(low["unknown_host_metadata"], RPI_WEIGHTS["host_decay"]
+                         ["unknown_host_metadata"])
+        for perturbed in (high, low):
+            for key, value in perturbed.items():
+                self.assertLessEqual(value, 1.0, key)
+                self.assertGreater(value, 0.0, key)
+        # The upward direction must still move the weights it is allowed to move.
+        self.assertGreater(high["same_genus"], RPI_WEIGHTS["host_decay"]["same_genus"])
+        self.assertEqual(high["same_species"], 1.0)  # clamped, not 1.5
+
+    def test_host_decay_sweep_reports_what_it_held_fixed(self):
+        entry = sensitivity_sweep()["varied"]["host_decay"]
+        self.assertIn("unknown_host_metadata", entry["excluded_from_perturbation"])
+
+    def test_spearman_is_nan_where_the_statistic_is_undefined(self):
+        """Returning 1.0 for a degenerate input reports PERFECT RANK STABILITY from an
+        input that measured nothing -- the same class of defect as a constant factor
+        dressed as a measurement. nan matches rank_consistency's own discipline for its
+        undefined AUC."""
+        self.assertTrue(math.isnan(_spearman([1.0], [2.0])))
+        self.assertTrue(math.isnan(_spearman([], [])))
+        self.assertTrue(math.isnan(_spearman([1.0, 1.0, 1.0], [1.0, 2.0, 3.0])))
+        self.assertTrue(math.isnan(_spearman([1.0, 2.0, 3.0], [5.0, 5.0, 5.0])))
+        self.assertAlmostEqual(_spearman([1.0, 2.0, 3.0], [10.0, 20.0, 30.0]), 1.0)
+
+    def test_ties_share_a_midrank_rather_than_being_ordered_by_position(self):
+        """np.argsort(np.argsort(v)) -- the idiom this used to use -- breaks ties by
+        POSITION, so a constant vector ranks [0, 1, 2]: a perfect ordering manufactured
+        out of an input with no order in it. That defeated the zero-variance guard in
+        _spearman (the guard inspected ranks that were never constant) and let any tie
+        in a real score panel contribute a spurious ordering to the correlation."""
+        self.assertEqual(list(_tied_ranks([5.0, 5.0, 5.0])), [1.0, 1.0, 1.0])
+        self.assertEqual(list(_tied_ranks([3.0, 1.0, 3.0, 1.0])), [2.5, 0.5, 2.5, 0.5])
+        self.assertEqual(list(_tied_ranks([10.0, 20.0, 30.0])), [0.0, 1.0, 2.0])
+        # Two candidates tied on one axis and separated on the other: the tie must not
+        # be silently resolved into agreement with whichever order the other axis has.
+        self.assertLess(_spearman([1.0, 1.0, 2.0, 3.0], [1.0, 2.0, 3.0, 4.0]), 1.0)
+
+    def test_undefined_direction_is_surfaced_not_folded_away(self):
+        """builtin min() is order-dependent around nan (min(nan, 0.5) is nan;
+        min(0.5, nan) is 0.5), so an undefined perturbation direction could be silently
+        discarded depending on argument order. If a direction is undefined, the reported
+        answer is undefined."""
+        self.assertTrue(math.isnan(_worst_rank_correlation(float("nan"), 0.5)))
+        self.assertTrue(math.isnan(_worst_rank_correlation(0.5, float("nan"))))
+        self.assertEqual(_worst_rank_correlation(0.9, 0.4), 0.4)
 
     def test_stratum_identity_boundary_reports_which_candidates_move(self):
         """Spec: reclassification is a step change, not a smooth one -- the report must
