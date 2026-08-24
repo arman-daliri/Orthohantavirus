@@ -1321,6 +1321,65 @@ def retention_factor(odd_segment: str, structural_intact: bool) -> float:
     return max(RPI_WEIGHTS["eco_floor"], min(1.0, base))
 
 
+# Tag identifying which revision of RPI_WEIGHTS produced a given rpi_* row -- not itself
+# a weight, so it lives at module scope rather than inside RPI_WEIGHTS. Bump this any
+# time RPI_WEIGHTS changes so historical output rows remain attributable.
+RPI_WEIGHTS_VERSION = "2026-08-24.1"
+
+
+def compute_rpi(
+    implicated_species: List[str], isolates: List["ah.IsolateRecord"],
+    odd_segment: str, identity: float, m_pack: float, m_pol: float,
+    m_pol_status: str, structural_intact: bool,
+) -> Dict[str, Any]:
+    """Assemble the Reassortment Plausibility Index.
+
+        rpi_generation = E * M_pack * M_pol * K
+        rpi_retention  = rpi_generation * F
+
+    MULTIPLICATIVE, not additive -- a deliberate departure from surveillance_priority's
+    house style. Lowen (2018) Fig. 1 makes each stage a NECESSARY gate; McDonald's
+    cognate-competition result is inherently a ratio; and an additive score would let
+    molecular elegance compensate for ecological impossibility.
+
+    This index is RELATIVE. It is not a probability, and must never be reported as one.
+    """
+    floor = RPI_WEIGHTS["eco_floor"]
+    eco = ecological_opportunity(implicated_species, isolates)
+    stratum = divergence_stratum(identity)
+    k_value = constellation_prior(stratum)[odd_segment]
+    f_value = retention_factor(odd_segment, structural_intact)
+
+    generation = eco["rpi_e_total"] * max(m_pack, floor) * max(m_pol, floor) * k_value
+    # floor ** 4: the product of four factors each individually floored at `floor` can
+    # still underflow toward zero in float terms as the factors compound. Re-floor the
+    # PRODUCT at floor**4 (not floor) so the no-literal-zeros guarantee holds for the
+    # combined quantity too, not just for each input factor in isolation.
+    generation = max(floor ** 4, min(1.0, generation))
+
+    row = dict(eco)
+    row.update({
+        "rpi_m_pack": round(m_pack, 4),
+        "rpi_m_pol": round(m_pol, 4),
+        "rpi_m_pol_status": m_pol_status,
+        "rpi_k_stratum": stratum,
+        "rpi_k_value": round(k_value, 4),
+        "rpi_f": round(f_value, 4),
+        "rpi_smoothing": RPI_WEIGHTS["jeffreys_alpha"],
+        "rpi_weights_version": RPI_WEIGHTS_VERSION,
+        # 8 decimal places here, not 4: these two are a PRODUCT of up to four floored
+        # factors, so they can legitimately land as low as floor ** 4 (1e-8, see above).
+        # Rounding a value in that range to 4 decimals would collapse it to a literal
+        # 0.0 and quietly violate the no-literal-zeros guarantee this floor exists to
+        # uphold -- see test_no_factor_is_ever_exactly_zero.
+        "rpi_generation": round(generation, 8),
+        "rpi_retention": round(generation * f_value, 8),
+    })
+    for key in ("rpi_e_host", "rpi_e_geo", "rpi_e_time", "rpi_e_total"):
+        row[key] = round(row[key], 4)
+    return row
+
+
 # ---------------------------------------------------------------------------
 # CLI entry point.
 # ---------------------------------------------------------------------------
@@ -1398,7 +1457,7 @@ def score_candidate(
 
     verdict = combine_verdict(gate0, gate1, gate2a, gate2b, gate2c, gate3, gate4)
 
-    return {
+    result = {
         "candidate_id": candidate.candidate_id,
         "verdict": verdict,
         "gate0_warnings": ";".join(gate0.warnings),
@@ -1421,6 +1480,36 @@ def score_candidate(
         "gate4_discordant_segment": gate4.discordant_segment,
         "gate4_bootstrap_support": gate4.bootstrap_support,
     }
+
+    # RPI is computed for EVERY candidate that reaches this point, including ones gate3
+    # vetoed -- deliberate: it is what makes the veto-vs-continuous-E cross-check in
+    # Task 8 possible. It is assembled from the gate results above but never feeds BACK
+    # into verdict/combine_verdict -- see VerdictUnchangedRegressionTest.
+    #
+    # SCAFFOLDING: terminal_windows is built from the CANDIDATE's own CDS and passed as
+    # BOTH the candidate_termini and parent_termini arguments below, i.e. M_pol is
+    # scored against itself and is trivially 1.0 for every candidate. Real parental
+    # termini would need to be sourced from reference.genomic_index per implicated
+    # species -- deferred to a follow-up (see task brief). m_pol_variance_check (Task 5)
+    # exists precisely to catch this: run across a real sample of pairs it will report
+    # "fixed_constant" rather than pretending this measures anything yet.
+    terminal_windows = {seg: candidate_cds.get(seg, "")[:64] for seg in ("S", "M", "L")}
+    m_pol_value, m_pol_status = polymerase_compatibility(terminal_windows, terminal_windows)
+    result.update(compute_rpi(
+        implicated_species=gate1.implicated_species,
+        isolates=reference.isolates,
+        odd_segment=gate1.discordant_segment or "M",
+        identity=gate0.best_kmer_identity,
+        m_pack=1.0,
+        m_pol=m_pol_value,
+        m_pol_status=m_pol_status,
+        structural_intact=not (
+            gate2a.tmis_conserved is False
+            or gate2a.ph_switch_conserved is False
+            or gate2a.waasa_intact is False
+        ),
+    ))
+    return result
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -2605,3 +2694,75 @@ class RetentionFactorTest(unittest.TestCase):
     def test_bounded_above_by_one(self):
         for segment in ("S", "M", "L"):
             self.assertLessEqual(retention_factor(segment, True), 1.0)
+
+
+class RpiAssemblyTest(unittest.TestCase):
+    def _row(self, **kwargs):
+        defaults = dict(
+            implicated_species=["A", "B"],
+            isolates=[_eco_isolate("A", "USA", "2001"), _eco_isolate("B", "USA", "2002")],
+            odd_segment="M", identity=0.85,
+            m_pack=1.0, m_pol=1.0, m_pol_status="scored", structural_intact=True,
+        )
+        defaults.update(kwargs)
+        return compute_rpi(**defaults)
+
+    def test_emits_every_column_from_spec_section_9(self):
+        row = self._row()
+        for column in ("rpi_generation", "rpi_retention", "rpi_e_host", "rpi_e_geo",
+                       "rpi_e_time", "rpi_e_total", "rpi_m_pack", "rpi_m_pol",
+                       "rpi_m_pol_status", "rpi_k_stratum", "rpi_k_value", "rpi_f",
+                       "rpi_smoothing", "rpi_weights_version"):
+            self.assertIn(column, row, column)
+
+    def test_both_scores_are_within_unit_interval(self):
+        row = self._row()
+        for key in ("rpi_generation", "rpi_retention"):
+            self.assertGreater(row[key], 0.0)
+            self.assertLessEqual(row[key], 1.0)
+
+    def test_retention_never_exceeds_generation(self):
+        row = self._row()
+        self.assertLessEqual(row["rpi_retention"], row["rpi_generation"])
+
+    def test_m_exchange_outscores_s_exchange_in_distant_stratum(self):
+        m = self._row(odd_segment="M", identity=0.55)
+        s = self._row(odd_segment="S", identity=0.55)
+        self.assertGreater(m["rpi_generation"], s["rpi_generation"])
+
+    def test_ecological_impossibility_suppresses_the_score(self):
+        """Multiplicative, not additive: a perfect molecular profile must NOT rescue a
+        candidate whose parents never co-occurred."""
+        impossible = self._row(isolates=[
+            _eco_isolate("A", "USA", "1985"),
+            _eco_isolate("B", "Chile", "2020", host_order="Soricomorpha",
+                         host_family="Soricidae", host_name="Sorex araneus"),
+        ])
+        plausible = self._row()
+        self.assertLess(impossible["rpi_generation"], plausible["rpi_generation"] / 100)
+
+    def test_no_factor_is_ever_exactly_zero(self):
+        row = self._row(m_pack=1e-12, m_pol=1e-12)
+        self.assertGreater(row["rpi_generation"], 0.0)
+
+    def test_fixed_constant_m_pol_status_is_propagated(self):
+        row = self._row(m_pol=1.0, m_pol_status="fixed_constant")
+        self.assertEqual(row["rpi_m_pol_status"], "fixed_constant")
+
+
+class VerdictUnchangedRegressionTest(unittest.TestCase):
+    def test_combine_verdict_is_unaffected_by_rpi(self):
+        """Spec 10.1: the verdict is an OBSERVATIONAL REPORT; the RPI is a MECHANISTIC
+        MODEL. Merging a belief into a detection report corrupts the audit trail, and
+        the rank-consistency check in Task 8 is only a real test if the verdicts were
+        computed without reference to the index."""
+        gate0 = Gate0Result(passed_structure=True, passed_identity_floor=True)
+        gate1 = Gate1Result(pattern="single_segment_discordant", implicated_species=["A", "B"])
+        gate2a, gate2b, gate2c = Gate2TrackAResult(), Gate2TrackBResult(), Gate2TrackCResult()
+        gate3 = Gate3Result(status="ecological_overlap_plausible")
+        gate4 = Gate4Result(phylo_status="analyzed",
+                            reassortment_call="supported_reassortment_candidate")
+        self.assertEqual(
+            combine_verdict(gate0, gate1, gate2a, gate2b, gate2c, gate3, gate4),
+            "supported_reassortment_candidate",
+        )
