@@ -718,6 +718,48 @@ data, because segments from the same outbreak are near-identical to each other.
 - Grouping tiers 4 and 5 rarely fire, because the `strain` field is only populated from BioSample.
 - The pipeline resolves only the first BioSample accession in a record.
 
+## Reassortment Plausibility Index — limitations
+
+`reassortment_detector.py` computes a Reassortment Plausibility Index (RPI) —
+`rpi_generation` and `rpi_retention` — for candidates it scores. This section is
+deliberately first in the design spec it comes from, and any Methods paragraph describing
+it must reproduce it. Every number this index produces inherits these constraints:
+
+1. **The index is relative, not an absolute probability.** `rpi_generation = 0.4` does not
+   mean a 40% chance of anything. It means this constellation scores 0.4 on a bounded
+   index whose factors are anchored to published measurements. Ranking is meaningful;
+   the absolute value is not.
+2. **Every in vitro anchor is Vero E6** — an African green monkey kidney line, not
+   reservoir rodent cells. Strandin et al. (2020), already in the project library, exists
+   precisely because host-cell context changes hantavirus behaviour. Reassortment
+   frequencies measured in Vero E6 may not transfer to *Myodes*, *Peromyscus* or
+   *Apodemus* cells.
+3. **Total observed reassortants across all direct measurements ≈ 35.** Rodriguez et al.
+   (1998) contributed 25 + 1; Rizvanov et al. (2004) contributed 10 monoploid. The
+   constellation prior (§7) rests on this, and no amount of smoothing manufactures
+   statistical power that is not there.
+4. **MOI is confounded across studies.** Rizvanov used MOI 3; Rodriguez used MOI 1.
+   Rizvanov names this explicitly as the likely reason their cross-species frequency
+   (8.9%) exceeded Rodriguez's within-species frequency (8.5%). **Cross-study reassortment
+   frequencies are therefore not comparable**, and this spec never compares them. Only
+   Rodriguez's internal contrast (both arms MOI 1, shared NMR11 parent) is controlled.
+5. **Compatibility is directional; our metrics are largely symmetric.** McDonald et al.
+   (2016) report that φ13 packages φ6's M segment while φ6 cannot package φ13's M unless
+   φ6 packaging sequences are appended. Sequence- and ΔG-based metrics computed
+   symmetrically will lose this asymmetry. Documented, not solved.
+6. **No gold-standard label set exists.** The pipeline's own output contains 8
+   `supported_reassortment_candidate` calls out of 2,995 rows. Nothing can be fitted to 8
+   positives. This is the reason the index is literature-anchored rather than learned,
+   and it is also why §11 orders the validation evidence the way it does.
+7. **`rpi_retention` models immediate post-reassortment fitness only.** McDonald's Fig. 4
+   mode (c) — compensatory mutations restoring interaction interfaces after reassortment —
+   is **out of scope** and is a named limitation, not a term in the model. A reassortant
+   scored low may still emerge after adaptation.
+
+The full design spec, including the sensitivity sweep (`sensitivity_sweep`) and the
+rank-consistency sanity check (`rank_consistency`) that operationalize these limitations, is
+at `docs/superpowers/specs/2026-08-24-reassortment-plausibility-index-design.md`.
+
 ## Citations
 
 1. ICTV. Genus: *Orthohantavirus*. International Committee on Taxonomy of Viruses.

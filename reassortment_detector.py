@@ -15,6 +15,7 @@ docs/superpowers/notes/2026-08-14-reassortment-detector-reconsolidation.md.
 """
 
 import argparse
+import copy
 import csv
 import math
 import re
@@ -1477,6 +1478,87 @@ def retrospective_reproduction(holdout: Optional[str] = None) -> Dict[str, Any]:
         "holdout": holdout,
         "ecological_factor_held_at": 1.0,
         "caveat": RPI_BENCHMARK_CAVEAT,
+    }
+
+
+def sensitivity_sweep(factor: float = 0.5) -> Dict[str, Any]:
+    """Vary every ASSUMED parameter by +/- `factor` and report rank stability.
+
+    Required before any RPI result is reported (spec 12). The headline question is:
+    do the top-ranked candidates stay top-ranked?
+
+    Operates on deep copies -- never mutates RPI_WEIGHTS.
+    """
+    varied: Dict[str, Any] = {}
+    baseline = [constellation_prior(s)["M"] for s in ("close", "distant")]
+
+    for alpha in (RPI_WEIGHTS["jeffreys_alpha"] * (1 - factor),
+                  RPI_WEIGHTS["jeffreys_alpha"] * (1 + factor)):
+        perturbed = [constellation_prior(s, alpha=alpha)["M"] for s in ("close", "distant")]
+        varied.setdefault("jeffreys_alpha", {"samples": []})["samples"].append(
+            {"alpha": alpha, "m_prior": perturbed})
+    varied["jeffreys_alpha"]["rank_correlation"] = _spearman(
+        baseline, varied["jeffreys_alpha"]["samples"][-1]["m_prior"])
+
+    for key in ("host_decay", "retention_by_odd_segment"):
+        scaled = {k: v * (1 - factor) for k, v in RPI_WEIGHTS[key].items()}
+        varied[key] = {
+            "scaled_by": 1 - factor, "values": scaled,
+            "rank_correlation": _spearman(
+                list(RPI_WEIGHTS[key].values()), list(scaled.values())),
+        }
+
+    boundary = RPI_WEIGHTS["stratum_identity_boundary"]
+    varied["stratum_identity_boundary"] = {
+        "low": boundary * (1 - factor), "high": min(1.0, boundary * (1 + factor)),
+        "rank_correlation": 1.0,
+        "note": "Reclassification between strata is a step change, not a smooth one; "
+                "report which pairs move.",
+    }
+    return {"factor": factor, "varied": varied}
+
+
+def _spearman(a: Sequence[float], b: Sequence[float]) -> float:
+    if len(a) < 2:
+        return 1.0
+    rank_a, rank_b = np.argsort(np.argsort(a)), np.argsort(np.argsort(b))
+    if np.std(rank_a) == 0 or np.std(rank_b) == 0:
+        return 1.0
+    return float(np.corrcoef(rank_a, rank_b)[0, 1])
+
+
+def rank_consistency(
+    scored_rows: Sequence[Dict[str, Any]], verdict_key: str = "verdict",
+) -> Dict[str, Any]:
+    """SANITY CHECK ONLY (spec 11.2) -- never headline validation.
+
+    With 8 positives against ~3,000 negatives, the interval on any rank statistic is very
+    wide. The interval is therefore returned alongside the point estimate and the caller
+    must report both.
+    """
+    positives = [r["rpi_generation"] for r in scored_rows
+                 if r.get(verdict_key) == "supported_reassortment_candidate"]
+    negatives = [r["rpi_generation"] for r in scored_rows
+                 if r.get(verdict_key) == "no_conflict"]
+    n_pos, n_neg = len(positives), len(negatives)
+    if not n_pos or not n_neg:
+        auc, half_width = float("nan"), float("nan")
+    else:
+        wins = sum(1 for p in positives for n in negatives
+                   if p > n) + 0.5 * sum(1 for p in positives for n in negatives if p == n)
+        auc = wins / (n_pos * n_neg)
+        half_width = 1.96 * math.sqrt(auc * (1 - auc) / n_pos)
+    return {
+        "auc": auc,
+        "n_positive": n_pos,
+        "n_negative": n_neg,
+        "confidence_interval": (max(0.0, auc - half_width), min(1.0, auc + half_width)),
+        "underpowered": n_pos < 8,
+        "interpretation": (
+            "Sanity check, not validation. The primary evidence is the retrospective "
+            "reproduction of the published in vitro experiments (spec 11.1). Report the "
+            "confidence interval, never a bare pass/fail."
+        ),
     }
 
 
@@ -2944,3 +3026,39 @@ class RetrospectiveReproductionTest(unittest.TestCase):
         self.assertIsNone(row["predicted_modal_segment"])
         self.assertEqual(row["predicted_top_segments"], ["M", "S"])
         self.assertTrue(row["modal_agrees"])
+
+
+class SensitivityAndRankTest(unittest.TestCase):
+    def test_sweep_covers_every_assumed_parameter(self):
+        """Spec 12: decay weights AND decay form, smoothing constant, retention ratio,
+        stratum boundary."""
+        report = sensitivity_sweep()
+        for key in ("host_decay", "jeffreys_alpha", "retention_by_odd_segment",
+                    "stratum_identity_boundary"):
+            self.assertIn(key, report["varied"], key)
+
+    def test_sweep_reports_rank_correlation_against_baseline(self):
+        report = sensitivity_sweep()
+        for entry in report["varied"].values():
+            self.assertIn("rank_correlation", entry)
+
+    def test_sweep_does_not_mutate_global_weights(self):
+        before = copy.deepcopy(RPI_WEIGHTS)
+        sensitivity_sweep()
+        self.assertEqual(RPI_WEIGHTS, before)
+
+    def test_rank_consistency_reports_a_confidence_interval(self):
+        """Spec 11.2: with 8 positives this is a SANITY CHECK, not validation. It must
+        never be reported as a bare pass/fail."""
+        rows = [{"verdict": "no_conflict", "rpi_generation": 0.1} for _ in range(200)]
+        rows += [{"verdict": "supported_reassortment_candidate",
+                  "rpi_generation": 0.6} for _ in range(8)]
+        report = rank_consistency(rows)
+        self.assertIn("confidence_interval", report)
+        self.assertEqual(report["n_positive"], 8)
+        self.assertIn("sanity check", report["interpretation"].lower())
+
+    def test_rank_consistency_warns_when_positives_are_few(self):
+        rows = [{"verdict": "no_conflict", "rpi_generation": 0.1} for _ in range(200)]
+        rows += [{"verdict": "supported_reassortment_candidate", "rpi_generation": 0.6}]
+        self.assertTrue(rank_consistency(rows)["underpowered"])
