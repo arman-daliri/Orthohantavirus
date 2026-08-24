@@ -1381,6 +1381,92 @@ def compute_rpi(
 
 
 # ---------------------------------------------------------------------------
+# Retrospective in vitro reproduction harness -- the PRIMARY validation
+# evidence for the RPI (spec 11.1), ranking above the sensitivity sweep in
+# Task 9 because the pipeline carries only 8 positive labels, far too few to
+# validate anything statistically.
+#
+# Ecology is held at 1.0 throughout: every experiment below FORCED
+# co-infection by co-inoculating cells, so ecological opportunity was never a
+# variable in them. That is exactly why this data can calibrate the
+# molecular factors (constellation_prior) but cannot calibrate Factor E --
+# Factor E is never computed here.
+# ---------------------------------------------------------------------------
+
+# Published in vitro coinfection experiments, used as the PRIMARY validation evidence
+# (spec 11.1). Ecology is held at 1.0: these experiments forced coinfection.
+RPI_INVITRO_BENCHMARK: Dict[str, Dict[str, Any]] = {
+    "SNV_NMR11_x_CC107": {
+        "source": "Rodriguez et al. 1998, Virology 242:99-106",
+        "stratum": "close", "moi": "1.0-1.5", "genotyping": "plaque-level, no amplification",
+        "observed": {"M": 12, "S": 12, "L": 1},
+    },
+    "SNV_x_BCCV": {
+        "source": "Rodriguez et al. 1998, Virology 242:99-106",
+        "stratum": "distant", "moi": "1.0-1.5", "genotyping": "plaque-level, no amplification",
+        "observed": {"M": 1, "S": 0, "L": 0},
+    },
+    "SNV_x_ANDV": {
+        "source": "Rizvanov et al. 2004, Virology 327:225-232",
+        "stratum": "distant", "moi": "3", "genotyping": "plaque-level, then passaged",
+        "observed": {"M": 10, "S": 0, "L": 0},
+    },
+    "PUUV_x_PHV": {
+        "source": "Handke et al. 2010, J Gen Virol 91:2351-2359 (TIER 3 -- read the "
+                  "library PDF and promote before relying on this row)",
+        "stratum": "distant", "moi": "unrecorded", "genotyping": "unrecorded",
+        "observed": {"M": 1, "S": 0, "L": 0},
+    },
+    "DOBV_Aa_x_DOBV_Af": {
+        "source": "Kirsanovs et al. 2010, Virus Genes 41:319-328, via Klempa 2018 "
+                  "(TIER 3 SECONDHAND)",
+        "stratum": "close", "moi": "unrecorded", "genotyping": "unrecorded",
+        "observed": {"M": 65, "S": 0, "L": 0},
+    },
+}
+
+RPI_BENCHMARK_CAVEAT = (
+    "Divergence is confounded with pair identity AND with MOI: every distant observation "
+    "involves a different virus pair from the close observation, and no distant-pair MOI-1 "
+    "experiment exists in the literature. This stratification is UNTESTABLE with current "
+    "data. Trans-complementation bias applies asymmetrically -- Rizvanov's design passages "
+    "plaques before genotyping, Rodriguez's does not."
+)
+
+
+def retrospective_reproduction(holdout: Optional[str] = None) -> Dict[str, Any]:
+    """Primary validation: does the index reproduce the published constellation profiles?
+
+    Pass `holdout` to exclude a pair from prior derivation, so it becomes an independent
+    test rather than a restatement of its own input.
+    """
+    derived_from = [name for name in RPI_INVITRO_BENCHMARK if name != holdout]
+    pairs: Dict[str, Any] = {}
+    for name, record in RPI_INVITRO_BENCHMARK.items():
+        prior = constellation_prior(record["stratum"])
+        modal = max(prior, key=prior.get)
+        observed_modal = max(record["observed"], key=record["observed"].get)
+        pairs[name] = {
+            "source": record["source"],
+            "stratum": record["stratum"],
+            "moi": record["moi"],
+            "genotyping": record["genotyping"],
+            "observed": record["observed"],
+            "predicted_prior": prior,
+            "predicted_modal_segment": modal,
+            "observed_modal_segment": observed_modal,
+            "modal_agrees": modal == observed_modal,
+        }
+    return {
+        "pairs": pairs,
+        "derived_from": derived_from,
+        "holdout": holdout,
+        "ecological_factor_held_at": 1.0,
+        "caveat": RPI_BENCHMARK_CAVEAT,
+    }
+
+
+# ---------------------------------------------------------------------------
 # CLI entry point.
 # ---------------------------------------------------------------------------
 
@@ -2800,3 +2886,32 @@ class VerdictUnchangedRegressionTest(unittest.TestCase):
         )
         self.assertNotIn("verdict", row)
         self.assertTrue(set(row.keys()).isdisjoint({"verdict"}))
+
+
+class RetrospectiveReproductionTest(unittest.TestCase):
+    def test_predicts_m_odd_for_every_distant_pair(self):
+        report = retrospective_reproduction()
+        for pair in ("SNV_x_ANDV", "SNV_x_BCCV"):
+            self.assertEqual(report["pairs"][pair]["predicted_modal_segment"], "M", pair)
+
+    def test_close_pair_does_not_predict_m_only(self):
+        """Rodriguez saw 12 M-odd and 12 S-odd. Klempa's abstract says 'only M', but his
+        own Table 2 lists an L-odd genotype for this same pair. The close stratum must
+        NOT inherit the M-only rule."""
+        report = retrospective_reproduction()
+        prior = report["pairs"]["SNV_NMR11_x_CC107"]["predicted_prior"]
+        self.assertAlmostEqual(prior["M"], prior["S"], places=6)
+
+    def test_leave_one_pair_out_guards_circularity(self):
+        """A pair used to DERIVE K cannot serve as an independent test OF K."""
+        report = retrospective_reproduction(holdout="SNV_x_ANDV")
+        self.assertNotIn("SNV_x_ANDV", report["derived_from"])
+        self.assertIn("SNV_x_ANDV", report["pairs"])
+
+    def test_report_records_ecology_was_held_neutral(self):
+        report = retrospective_reproduction()
+        self.assertEqual(report["ecological_factor_held_at"], 1.0)
+
+    def test_report_carries_the_confound_warning(self):
+        report = retrospective_reproduction()
+        self.assertIn("untestable", report["caveat"].lower())
