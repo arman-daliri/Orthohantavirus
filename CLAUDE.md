@@ -1,5 +1,45 @@
 # Orthohantavirus pipeline — working notes for Claude sessions
 
+## RESUME HERE (last session: 2026-08-25)
+
+**State: everything green and committed.** HEAD `76f68ed`. Suite **169 tests, all pass**
+(~14 min). Validation harness **PASS** (sensitivity 18/18, specificity 27/27, blind spot
+5/5, adversarial 4/4). `main` and `03-pipeline-phylogeny-reassortment` are identical;
+the feature branch can be deleted with `-D` (`-d` refuses only because its upstream is
+stale — everything is reachable from `main` and from `origin/main`).
+
+**FIRST ACTION TOMORROW: `git push`** — 1 commit (`76f68ed`) is unpushed.
+
+**Just resolved (do not redo):**
+- ViennaRNA **2.7.2 installed from PyPI** — matches the `environment.yml` pin exactly.
+  That pin is no longer unverified.
+- `_parse_rnacofold_dg`'s regex is **validated** — parses `( -5.30)`, `(-12.30)` and
+  FASTA-header forms correctly. Remove the "ASSUMED FORMAT, NOT VALIDATED" caveat in its
+  docstring when convenient.
+
+**Open, in priority order:**
+1. **M_pack is not usable as scaled** (new finding, blocks enabling it). Real cofold
+   energies: cognate panhandle dG ≈ -22.4, non-cognate ≈ -3.6 to 0.0, so realistic
+   ddG ≈ 20 kcal/mol. With RT ≈ 0.616, `exp(-ddG/RT)` gives M_pack ≈ **1e-14**. Because
+   `rpi_generation` is multiplicative, switching M_pack on as written would annihilate
+   the index for every non-cognate pair. Needs a rescaling decision before it can ship.
+   Harmless today: M_pack is hardcoded to 1.0.
+2. **Gate 4 still unvalidated.** `mafft` and `iqtree` are NOT on PyPI (`pymafft` is an
+   unrelated package — do not install it). Needs conda or manual Windows binaries, which
+   requires the user's go-ahead. Gate 4 is the only layer that can catch intra-species
+   reassortment — the class Rodriguez 1998, Klempa 2018 and Park 2025 all describe, and
+   the one Ortiz 2025 shows is dense (nine named genotypes inside *O. andesense*, which
+   has 45 complete triplets here).
+3. **`dendropy` reconciliation.** pip 5.0.13 in system Python, not the conda env.
+   Options discussed: add a `requirements-pip.txt` documenting the system-Python path so
+   `environment.yml` is not silently contradicted.
+4. Unfixed review findings N4/N5/N6 (all LOW) — see the review notes: nan-ddG behaviour
+   flip, `_json_safe` np.float32 hole, and the thin ordering test.
+
+**User asked at sign-off:** pick between (a) `requirements-pip.txt` reconciliation or
+(b) the M_pack scaling question. That choice is still open.
+
+
 ## Repository policy
 
 **This repo stays PRIVATE.** It is the single working repo: code, data, docs, notes and
