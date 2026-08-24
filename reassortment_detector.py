@@ -2716,14 +2716,26 @@ class RpiAssemblyTest(unittest.TestCase):
             self.assertIn(column, row, column)
 
     def test_both_scores_are_within_unit_interval(self):
-        row = self._row()
-        for key in ("rpi_generation", "rpi_retention"):
-            self.assertGreater(row[key], 0.0)
-            self.assertLessEqual(row[key], 1.0)
+        # Exercise both the trivial F=1.0 default AND a row where F<1.0 -- the default
+        # alone can't show rpi_retention staying in-bounds once it's actually scaled
+        # down rather than merely equal to rpi_generation.
+        for row in (self._row(), self._row(structural_intact=False)):
+            for key in ("rpi_generation", "rpi_retention"):
+                self.assertGreater(row[key], 0.0)
+                self.assertLessEqual(row[key], 1.0)
 
     def test_retention_never_exceeds_generation(self):
         row = self._row()
         self.assertLessEqual(row["rpi_retention"], row["rpi_generation"])
+
+    def test_retention_strictly_below_generation_when_f_bites(self):
+        """The non-strict test above passes trivially at the M/intact default, where
+        retention_factor returns exactly 1.0 and rpi_retention == rpi_generation -- a
+        regression that dropped F from the retention computation entirely would still
+        pass it. Force F < 1.0 (structural damage) so the ceiling actually bites, and
+        assert the inequality is STRICT."""
+        row = self._row(structural_intact=False)
+        self.assertLess(row["rpi_retention"], row["rpi_generation"])
 
     def test_m_exchange_outscores_s_exchange_in_distant_stratum(self):
         m = self._row(odd_segment="M", identity=0.55)
@@ -2751,11 +2763,14 @@ class RpiAssemblyTest(unittest.TestCase):
 
 
 class VerdictUnchangedRegressionTest(unittest.TestCase):
-    def test_combine_verdict_is_unaffected_by_rpi(self):
+    def test_combine_verdict_itself_is_unaffected_by_rpi_inputs(self):
         """Spec 10.1: the verdict is an OBSERVATIONAL REPORT; the RPI is a MECHANISTIC
-        MODEL. Merging a belief into a detection report corrupts the audit trail, and
-        the rank-consistency check in Task 8 is only a real test if the verdicts were
-        computed without reference to the index."""
+        MODEL. This exercises combine_verdict directly -- it duplicates part of the
+        pre-existing CombineVerdictTest coverage and is retained only to document that
+        combine_verdict's signature/behaviour takes no RPI input at all. It does NOT
+        exercise score_candidate's own wiring; see
+        test_compute_rpi_output_cannot_overwrite_the_verdict_key below for the
+        assertion that actually covers what Task 7 built."""
         gate0 = Gate0Result(passed_structure=True, passed_identity_floor=True)
         gate1 = Gate1Result(pattern="single_segment_discordant", implicated_species=["A", "B"])
         gate2a, gate2b, gate2c = Gate2TrackAResult(), Gate2TrackBResult(), Gate2TrackCResult()
@@ -2766,3 +2781,22 @@ class VerdictUnchangedRegressionTest(unittest.TestCase):
             combine_verdict(gate0, gate1, gate2a, gate2b, gate2c, gate3, gate4),
             "supported_reassortment_candidate",
         )
+
+    def test_compute_rpi_output_cannot_overwrite_the_verdict_key(self):
+        """score_candidate wires RPI in via `result.update(compute_rpi(...))`, AFTER
+        `result["verdict"]` is already set from combine_verdict (spec 10.2). dict.update
+        overwrites any key compute_rpi's return value shares with `result` -- so the
+        guarantee that RPI can never silently clobber the verdict rests entirely on
+        compute_rpi's key set staying disjoint from {"verdict"}. This is what a future
+        change that folds RPI into the reported verdict inside score_candidate's own
+        post-processing (i.e. NOT inside combine_verdict, so CombineVerdictTest and the
+        test above would both stay green) would actually break. Asserted directly,
+        without needing full score_candidate fixtures/reference data."""
+        row = compute_rpi(
+            implicated_species=["A", "B"],
+            isolates=[_eco_isolate("A", "USA", "2001"), _eco_isolate("B", "USA", "2002")],
+            odd_segment="M", identity=0.85,
+            m_pack=1.0, m_pol=1.0, m_pol_status="scored", structural_intact=True,
+        )
+        self.assertNotIn("verdict", row)
+        self.assertTrue(set(row.keys()).isdisjoint({"verdict"}))
