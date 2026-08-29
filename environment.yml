@@ -8,17 +8,30 @@ dependencies:
   - numpy>=2.4
   - biopython>=1.87
   - dendropy>=5.0
+  # THIS FILE DESCRIBES THE LINUX/CONDA MACHINE ONLY. The Windows machine runs on the
+  # system interpreter with manually pinned binaries -- see requirements-pip.txt and
+  # tools/VERSIONS.txt. EnvironmentReconciliationTest asserts the two do not contradict.
+  #
+  # MAFFT VERSION SPLIT (design doc D14): 7.525 here, 7.526 on Windows. Not a choice --
+  # MAFFT publishes no 7.525 Windows build and no 7.526 source release, so no single
+  # version is obtainable on both. Cross-machine MAFFT agreement is therefore asserted
+  # at alignment-content level by the reproducibility fixture, not by byte-identity.
   - mafft=7.525
+  # iqtree 3.1.3 on conda. On Windows this comes from github.com/iqtree/iqtree3 (NOT
+  # iqtree2, which has no 3.x release), and the executable there is named iqtree3.exe.
   - iqtree=3.1.3
-  # Exact pin required: RNAcofold's reported free energies (dG) are dependent on the
-  # ViennaRNA version's energy-parameter set, so an unpinned version would silently
-  # change every downstream Reassortment Plausibility Index score. This pin could not
-  # be reconciled against a real environment build in the authoring environment (no
-  # conda/mamba/micromamba available, no network access to resolve or verify it).
-  # NOTHING IN THE PIPELINE CALLS RNAcofold YET: boltzmann_compatibility and
-  # rnacofold_dg are implemented and unit-tested, but the production call site holds
-  # M_pack at 1.0 (see the README's RPI limitations, item 8). The pin is here so the
-  # dependency lands with its rationale rather than being added ad hoc later; the first
-  # real build must confirm bioconda actually serves 2.7.2 and that rnacofold_dg's
-  # stdout regex matches this version's output.
+  # Exact pin required: cofold free energies (dG) are dependent on the ViennaRNA
+  # version's energy-parameter set, so an unpinned version would silently change every
+  # downstream Reassortment Plausibility Index score.
+  #
+  # RESOLVED 2026-08-29 (was: "could not be reconciled against a real environment
+  # build"). ViennaRNA 2.7.2 is installed and exercised on the Windows machine via the
+  # PYTHON BINDINGS, which is now the production mechanism (design doc D2b) -- the pip
+  # package ships no RNAcofold executable, and the subprocess/CLI path has been removed
+  # from the codebase rather than left as a divergent second mechanism. The stdout regex
+  # that this comment used to flag no longer exists.
+  #
+  # STILL OPEN for this file specifically: whether bioconda serves 2.7.2 on Linux has
+  # not been checked -- that machine is not yet provisioned. M_pack also still holds at
+  # 1.0 at the production call site until WS3.3 lands.
   - viennarna=2.7.2

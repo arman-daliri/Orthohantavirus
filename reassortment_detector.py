@@ -1356,9 +1356,10 @@ def boltzmann_compatibility(
     # still being far below any physically meaningful ddg.
     #
     # SCOPE NOTE (D2, 2026-08-29): this comment previously justified the clamp by saying
-    # rnacofold_dg takes WHOLE-SEGMENT duplexes whose MFEs run to hundreds of kcal/mol.
-    # That is no longer true and was never runnable -- RNAcofold is O(n^3), so an L x M
-    # duplex (~10 kb) will not complete. The scored window is the 50-nt panhandle, where
+    # cofolding took WHOLE-SEGMENT duplexes whose MFEs run to hundreds of kcal/mol.
+    # That is no longer true and was never runnable -- cofolding is O(n^3), so an L x M
+    # duplex (~10 kb) will not complete. The scored window is the 50-nt panhandle
+    # (RPI_PANHANDLE_WINDOW_NT), where
     # observed ddg runs ~0-22 kcal/mol and the clamp is never reached in practice. The
     # clamp is retained anyway: it is cheap, and it is what keeps the no-literal-zeros
     # guarantee true for adversarial input rather than merely true for expected input.
@@ -1366,41 +1367,77 @@ def boltzmann_compatibility(
     return min(1.0, math.exp(exponent))
 
 
-def _parse_rnacofold_dg(stdout_text: str) -> float:
-    """Parse the minimum free energy (kcal/mol) from RNAcofold's stdout.
+# Panhandle cofold window, in nt, per design doc D2. Swept 25 / 50 / 75 in the
+# sensitivity analysis. 50 comfortably contains the invariant 14-nt tag plus the
+# lineage-variable region beyond it (RPI_N_FOOTPRINT_NT runs to 23), folds in ~7 ms, and
+# keeps the fold tractable -- whole-segment duplexes are O(n^3) and do not complete.
+RPI_PANHANDLE_WINDOW_NT = 50
 
-    ASSUMED FORMAT, NOT VALIDATED AGAINST A REAL RUN: no ViennaRNA binary was available
-    in the authoring environment (no conda/mamba, no network access), so this regex is
-    inferred from documented RNAcofold usage -- a dot-bracket structure line followed by
-    the minimum free energy in parentheses, e.g. "...(((...))). ( -12.30)" -- rather than
-    captured from an actual invocation. Verify against a live RNAcofold run before
-    relying on this in production; see RnacofoldDgParsingTest.
 
-    Raises RuntimeError rather than returning a sentinel: a silently-defaulted dG would
-    propagate a fabricated energy into every downstream score.
+def panhandle_window(genomic_seq: str, end: str, n: int = RPI_PANHANDLE_WINDOW_NT) -> str:
+    """The terminal `n` nt of one end of a segment, for panhandle cofolding (D2).
+
+    `end` is "5" or "3". The hantavirus panhandle is formed by the complementary 5' and
+    3' termini, so a duplex is scored as one segment's 5' window against another's 3'
+    window.
+
+    WHY A WINDOW AND NOT THE WHOLE SEGMENT: RNAcofold is O(n^3) in time and O(n^2) in
+    memory. S is ~1.8 kb, M ~3.6 kb and L ~6.5 kb, so an L x M duplex is a ~10 kb fold --
+    on the order of 1e12 operations. It does not complete. It is also the wrong quantity:
+    packaging compatibility is a terminal interaction, not a distributed one.
     """
-    match = re.search(r"\(\s*(-?\d+\.\d+)\)\s*$", stdout_text.strip())
-    if not match:
-        raise RuntimeError(f"could not parse RNAcofold output: {stdout_text!r}")
-    return float(match.group(1))
+    if end not in ("5", "3"):
+        raise ValueError(f"end must be '5' or '3', got {end!r}")
+    sequence = genomic_seq.strip().upper()
+    return sequence[:n] if end == "5" else sequence[-n:]
 
 
-def rnacofold_dg(seq_a: str, seq_b: str, binary: str = "RNAcofold") -> float:
-    """Minimum free energy of the seq_a/seq_b duplex, in kcal/mol, via RNAcofold.
+def cofold_dg(seq_a: str, seq_b: str) -> float:
+    """Minimum free energy of the seq_a/seq_b duplex, in kcal/mol, via ViennaRNA.
 
-    Raises RuntimeError specifically when RNAcofold's output cannot be parsed, rather
-    than returning a sentinel: a silently-defaulted dG would propagate a fabricated
-    energy into every downstream score. See _parse_rnacofold_dg for the output-format
-    caveat. That does NOT cover invocation failure: a missing binary raises
-    FileNotFoundError, and a nonzero RNAcofold exit raises CalledProcessError, both from
-    subprocess.run(..., check=True) -- those propagate as-is rather than being wrapped,
-    since silencing them would be its own kind of silent failure.
+    USES THE VIENNARNA PYTHON BINDINGS, NOT A SUBPROCESS (design doc D2b). This replaced
+    an `RNAcofold` CLI call, and the replacement is deliberate on three counts:
+
+      1. The pip `viennarna` package ships the BINDINGS ONLY. There is no RNAcofold
+         executable in the interpreter tree and none on PATH, so the subprocess form
+         could not run here at all -- it raised FileNotFoundError.
+      2. One pinned version governs the energy-parameter set. dG is parameter-set
+         dependent, so a separately-installed CLI could drift from the bindings and
+         silently change every downstream score. There is exactly one pin to check:
+         viennarna==2.7.2, asserted by EnvironmentReconciliationTest.
+      3. No process spawn. The WS-API scorer calls this in a loop over thousands of
+         triplets; a spawn per fold would dominate the measured ~7 ms fold cost.
+
+    THERE IS DELIBERATELY NO CLI FALLBACK. A half-working alternative path could diverge
+    from this one without announcing it, which is the failure the single-mechanism rule
+    exists to prevent.
+
+    Raises rather than returning a sentinel on unusable input: a silently-defaulted dG
+    would propagate a fabricated energy into every downstream score.
     """
-    completed = subprocess.run(
-        [binary, "--noPS"], input=f"{seq_a}&{seq_b}\n",
-        capture_output=True, text=True, check=True,
-    )
-    return _parse_rnacofold_dg(completed.stdout)
+    import RNA
+    for name, seq in (("seq_a", seq_a), ("seq_b", seq_b)):
+        if not seq:
+            raise ValueError(f"{name} is empty -- cannot cofold")
+    _structure, energy = RNA.fold_compound(f"{seq_a}&{seq_b}").mfe_dimer()
+    energy = float(energy)
+    if not math.isfinite(energy):
+        raise RuntimeError(
+            f"ViennaRNA returned a non-finite dG ({energy!r}) for a "
+            f"{len(seq_a)}nt x {len(seq_b)}nt duplex"
+        )
+    return energy
+
+
+def viennarna_provenance() -> Dict[str, str]:
+    """Mechanism and version, for the calibration artifact to record (D2b).
+
+    The entire tau derivation depends on WHICH implementation produced the energies, so
+    the artifact records the mechanism alongside the version rather than the version
+    alone -- a bare "2.7.2" would not distinguish these energies from CLI-produced ones.
+    """
+    import RNA
+    return {"mechanism": "ViennaRNA Python bindings", "version": str(RNA.__version__)}
 
 
 # The terminal 14 nt of S, M and L are highly conserved across the genus AND shared
@@ -2525,7 +2562,7 @@ def score_candidate(
         # follow-up, deliberately out of scope for this wave.
         identity=gate0.best_kmer_identity,
         # SCAFFOLDING (M_pack): fixed at 1.0, not computed. Scoring it needs RNAcofold
-        # (boltzmann_compatibility / rnacofold_dg are implemented and tested, but
+        # (boltzmann_compatibility / cofold_dg are implemented and tested, but
         # ViennaRNA is not installed here -- environment.yml DOES pin viennarna=2.7.2,
         # and that pin has simply never been reconciled against a real environment
         # build; see the README's limitation item 8 -- spec 6.1).
@@ -3906,22 +3943,66 @@ class BoltzmannCompatibilityTest(unittest.TestCase):
         self.assertGreater(boltzmann_compatibility(5000.0, 0.0), 0.0)
 
 
-class RnacofoldDgParsingTest(unittest.TestCase):
-    """Exercises _parse_rnacofold_dg, the stdout-parsing half of rnacofold_dg, against
-    literal sample strings -- no RNAcofold binary is available in this environment, so
-    these samples are an ASSUMED output format (inferred from documented RNAcofold
-    usage: a dot-bracket structure line followed by the minimum free energy in
-    parentheses), NOT output captured from a real run. See _parse_rnacofold_dg's
-    docstring and rnacofold_dg's docstring for the same caveat.
-    """
+class CofoldDgTest(unittest.TestCase):
+    """Replaces RnacofoldDgParsingTest, which exercised a stdout regex against
+    hand-written sample strings. Per D2b the production path uses the ViennaRNA Python
+    bindings, so there is no stdout to parse and no CLI to invoke -- the regex and its
+    long-standing "ASSUMED FORMAT, NOT VALIDATED" caveat are both gone rather than left
+    in place as a second, divergent mechanism."""
 
-    def test_well_formed_output_parses_to_expected_float(self):
-        sample = "AGUAGUAGUAGU&ACUACUACUACU\n((((((((((((&)))))))))))) (-15.20)"
-        self.assertAlmostEqual(_parse_rnacofold_dg(sample), -15.20, places=9)
+    def test_returns_a_finite_negative_energy_for_a_complementary_duplex(self):
+        dg = cofold_dg("GCGCGCGCGCAUAUAUAUAU", "AUAUAUAUAUGCGCGCGCGC")
+        self.assertTrue(math.isfinite(dg))
+        self.assertLess(dg, 0.0)
 
-    def test_malformed_output_raises_runtime_error(self):
-        with self.assertRaises(RuntimeError):
-            _parse_rnacofold_dg("RNAcofold: command not found")
+    def test_a_complementary_pair_binds_more_tightly_than_a_mismatched_one(self):
+        """The property M_pack rests on: a cognate-like duplex must score a LOWER (more
+        negative) dG than a non-cognate-like one. If this direction were ever inverted,
+        the whole index would invert with it."""
+        stem = "GGGGGGGGGGCCCCCCCCCC"
+        self.assertLess(cofold_dg(stem, "GGGGGGGGGGCCCCCCCCCC"),
+                        cofold_dg(stem, "AAAAAAAAAAAAAAAAAAAA"))
+
+    def test_empty_input_raises_rather_than_returning_a_sentinel(self):
+        with self.assertRaises(ValueError):
+            cofold_dg("", "GCGC")
+        with self.assertRaises(ValueError):
+            cofold_dg("GCGC", "")
+
+    def test_is_deterministic_across_repeated_calls(self):
+        """WS-API requires a deterministic scorer, and the fold is the one step that
+        calls into a C library -- so its stability is asserted, not assumed."""
+        a, b = "GCAUGCAUGCAUGCAUGCAU", "AUGCAUGCAUGCAUGCAUGC"
+        self.assertEqual(len({cofold_dg(a, b) for _ in range(5)}), 1)
+
+    def test_provenance_records_mechanism_and_version(self):
+        """D2b: the calibration artifact must record WHICH implementation produced the
+        energies, because the whole tau derivation depends on it. A bare version string
+        would not distinguish these from CLI-produced energies."""
+        provenance = viennarna_provenance()
+        self.assertEqual(provenance["mechanism"], "ViennaRNA Python bindings")
+        self.assertEqual(provenance["version"], "2.7.2")
+
+
+class PanhandleWindowTest(unittest.TestCase):
+    def test_takes_the_terminal_n_nt_from_the_requested_end(self):
+        seq = "AAAAACCCCCGGGGGTTTTT"
+        self.assertEqual(panhandle_window(seq, "5", 5), "AAAAA")
+        self.assertEqual(panhandle_window(seq, "3", 5), "TTTTT")
+
+    def test_default_window_is_the_swept_constant(self):
+        self.assertEqual(RPI_PANHANDLE_WINDOW_NT, 50)
+        self.assertEqual(len(panhandle_window("A" * 400, "5")), 50)
+
+    def test_window_longer_than_the_sequence_returns_the_whole_sequence(self):
+        """Short segments must not raise or pad -- a padded window would fabricate
+        base-pairing that is not in the data."""
+        self.assertEqual(panhandle_window("ACGT", "5", 50), "ACGT")
+        self.assertEqual(panhandle_window("ACGT", "3", 50), "ACGT")
+
+    def test_rejects_an_end_that_is_not_5_or_3(self):
+        with self.assertRaises(ValueError):
+            panhandle_window("ACGT", "middle")
 
 
 class PolymeraseCompatibilityTest(unittest.TestCase):
