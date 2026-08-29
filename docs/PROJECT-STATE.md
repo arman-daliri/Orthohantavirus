@@ -11,12 +11,12 @@ A fresh session should need this file, `CLAUDE.md`, and the two documents in
 | | |
 |---|---|
 | **Branch** | `04-rpi-fitness-validation`, pushed, tracking `origin/` |
-| **HEAD** | `6fb2813` (WS3.4) |
+| **HEAD** | `6a62c77` (WS4 Task 12) |
 | **`main`** | `e7d9f44`, pushed (was 4 commits behind at session start) |
 | **Test suite** | **228 tests, all pass**, ~14 min (`python -m unittest reassortment_detector`) + **39 tests, <1 s** (`python -m unittest rpi_calibration`) |
 | **Validation harness** | **PASS** — sensitivity 19/19 (added SNV x BCCV, WS4 Task 12), specificity 27/27, blind spot 5/5, adversarial 4/4 |
 | **Working tree** | Clean except `Mydocs/My Library.csv`, deleted by an external process; user said leave it |
-| **Unpushed** | `3947f1c`..`6fb2813` — WS3.1 through WS3.4, committed locally, **not pushed** |
+| **Unpushed** | `3947f1c`..`6a62c77` — WS3.1 through WS4 Task 12, committed locally, **not pushed** |
 
 **Current goal:** make the Reassortment Plausibility Index (RPI) work end-to-end and
 demonstrate it separates real reassortants from shuffled fakes, reproducibly on Windows
