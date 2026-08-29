@@ -797,7 +797,16 @@ def gate1_check(
                 discordant_hits[1].distance - discordant_hits[0].distance) <= undetectable_floor:
             pattern = "undetectable_by_design"
 
-    implicated_species = list({s for s in best_species.values() if s})
+    # sorted(), not list(): this was list({...}) over a SET, and Python randomises string
+    # hashing per process, so the order varied between runs of identical input. That was
+    # not cosmetic -- gate3_check reads implicated_species[:2], so WHICH two species gate
+    # 3 examined was chosen by the hash seed. Measured on three real species, 2 of the 6
+    # orderings returned "ecological_overlap_plausible" where the rest returned
+    # "no_ecological_route", and combine_verdict returns that status directly.
+    #
+    # Alphabetical order carries no meaning and is not claimed to; it is simply stable.
+    # See the KNOWN LIMITATION on gate3_check for the 2-of-N question this does not fix.
+    implicated_species = sorted({s for s in best_species.values() if s})
     return Gate1Result(top_hits=top_hits, implicated_species=implicated_species,
                         discordant_segment=discordant_segment, pattern=pattern)
 
@@ -924,6 +933,23 @@ def gate3_check(implicated_species: List[str], isolates: List["ah.IsolateRecord"
     host_orders = {s: {i.host_order for i in members if i.host_order} for s, members in by_species.items()}
     countries = {s: {i.country for i in members if i.country} for s, members in by_species.items()}
 
+    # KNOWN LIMITATION -- gate 3 judges only the FIRST TWO of N implicated species.
+    #
+    # With three implicated species the other two pairings are never examined, and they
+    # can disagree. Measured on Orthohantavirus hantanense / sinnombreense / luxiense:
+    #     hantanense    + sinnombreense -> no_ecological_route
+    #     hantanense    + luxiense      -> ecological_overlap_plausible
+    #     sinnombreense + luxiense      -> no_ecological_route
+    # so the reported status depends on which pair happens to sort first. Until
+    # 2026-08-29 that choice was made by the hash seed and varied run to run; gate1_check
+    # now sorts, which makes the choice STABLE but does not make it PRINCIPLED.
+    #
+    # DELIBERATELY NOT FIXED HERE. The right answer is the worst-pair-over-all-pairs
+    # treatment that ecological_opportunity already implements for Factor E, and moving
+    # gate 3 onto it changes a verdict-bearing gate -- out of scope for the RPI work.
+    # Deferred to the Factor E rebuild. Until then: a "no_ecological_route" verdict on a
+    # 3-species candidate means "the alphabetically first two do not overlap", not "no
+    # pair overlaps". Check gate1_implicated_species before quoting such a row.
     species_list = implicated_species[:2]
     a, b = species_list[0], species_list[1]
     host_overlap = bool(host_orders[a] & host_orders[b])
@@ -2901,6 +2927,50 @@ class Gate1CheckTest(unittest.TestCase):
         result = gate1_check(orf_proteins, self.reference)
         self.assertEqual(result.discordant_segment, "S")
         self.assertEqual(result.pattern, "s_or_l_involving")
+
+    def test_implicated_species_come_back_in_a_stable_order(self):
+        """implicated_species was list({...}) -- a SET. Python randomises string hashing
+        per process, so the order varied run to run, and gate3_check reads
+        implicated_species[:2]: which two species gate 3 examined was chosen by the hash
+        seed. Measured on three real species, 2 of the 6 orderings returned
+        'ecological_overlap_plausible' where the others returned 'no_ecological_route'.
+
+        Sorting fixes WHICH pair is examined. It does NOT address the deeper issue that
+        gate 3 only ever examines 2 of N -- see the KNOWN LIMITATION note on
+        gate3_check, deferred to the Factor E rebuild."""
+        reference = {
+            "S": [("SpA", "M" * 50), ("SpB", "W" * 50), ("SpC", "Y" * 50)],
+            "M": [("SpA", "M" * 50), ("SpB", "W" * 50), ("SpC", "Y" * 50)],
+            "L": [("SpA", "M" * 50), ("SpB", "W" * 50), ("SpC", "Y" * 50)],
+        }
+        result = gate1_check({"S": "M" * 50, "M": "W" * 50, "L": "Y" * 50}, reference)
+        # Guard the guard: a fixture that stopped implicating 3 species would make the
+        # ordering assertion below trivially true.
+        self.assertEqual(len(result.implicated_species), 3, result.implicated_species)
+        self.assertEqual(result.implicated_species,
+                         sorted(result.implicated_species))
+
+    def test_implicated_species_order_survives_a_changed_hash_seed(self):
+        """The assertion above cannot observe the actual defect: PYTHONHASHSEED is fixed
+        for the life of a process, so an in-process test sees one arbitrary order and
+        cannot tell a sorted list from a luckily-ordered one. This runs the same call in
+        subprocesses under different seeds, which is the only way to see it."""
+        source = (
+            "import json, reassortment_detector as rd\n"
+            "ref = {seg: [('SpA','M'*50), ('SpB','W'*50), ('SpC','Y'*50)]\n"
+            "       for seg in ('S','M','L')}\n"
+            "r = rd.gate1_check({'S':'M'*50,'M':'W'*50,'L':'Y'*50}, ref)\n"
+            "print(json.dumps(r.implicated_species))\n"
+        )
+        seen = set()
+        for seed in ("0", "1", "12345"):
+            env = dict(os.environ, PYTHONHASHSEED=seed)
+            completed = subprocess.run(
+                [sys.executable, "-c", source], capture_output=True, text=True,
+                cwd=str(Path(__file__).parent), env=env, check=True)
+            seen.add(completed.stdout.strip())
+        self.assertEqual(len(seen), 1,
+                         f"gate1 implicated_species varies with PYTHONHASHSEED: {seen}")
 
 
 class Gate2TrackATest(unittest.TestCase):
