@@ -549,9 +549,23 @@ Gated on WS3.
 
 ### Task 12: SNV × BCCV cross spec (D5)
 
-- [ ] Resolve BCCV's ICTV species name against the reference index (it is absent from
-  `PUBLISHED_CROSSES`; only counts exist in `RPI_INVITRO_BENCHMARK`).
-- [ ] Add the cross spec. If no complete triplet exists, **log a skip — do not silently drop.**
+**Lookup already done (2026-08-29), start from this:**
+
+- BCCV = Black Creek Canal virus → **`Orthohantavirus bayoui`** (ICTV 2021 folded BCCV into the
+  Bayou virus species; `Orthohantavirus bayoui` is present in the reference index).
+- BCCV sequences confirmed present in `all_hanta/ncbi_dataset/data/genomic.fna`:
+  `Black Creek Canal virus S segment`, `M segment`, `partial L segment`,
+  `strain SPB 9408076 segment L`.
+- **Unresolved and blocking:** one L is labelled *partial*. Whether any BCCV strain satisfies
+  `has_complete_triplet` (coding-complete on all three) is not yet established.
+
+- [ ] Confirm a coding-complete BCCV triplet exists via `PanelBuilder._usable`. **If none does,
+  log a skip — do not silently drop, and do not substitute a Bayou-virus isolate for a
+  Black-Creek-Canal one just because they share a species.** They are different member viruses;
+  the Rodriguez 1998 cross used BCCV specifically.
+- [ ] Add the cross spec: backbone `Orthohantavirus sinnombreense`, donor
+  `Orthohantavirus bayoui`, donated segment M, `donor_strain_hint` targeting Black Creek Canal
+  (not Bayou), `observed {M: 1, S: 0, L: 0}` per `RPI_INVITRO_BENCHMARK["SNV_x_BCCV"]`.
 
 ### Task 13: `rpi_discrimination.py` — the four groups (D7)
 
