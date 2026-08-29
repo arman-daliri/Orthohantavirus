@@ -81,7 +81,7 @@ necessarily.
 | **D10** | `score_triplet` returns RPI columns + status flags only — **never a verdict, never `gate4_*`**. |
 | **D11** | Single source of truth: WS-API serialises WS4's group builder and `PanelBuilder`; `_score_panel` must not mutate the global — done. |
 | **D12** | Install route: **Windows = manual pinned binaries + SHA-256**; **Linux = conda**. |
-| **D13** | **τ ≈ 4.86 is PROVISIONAL** pending WS3.1. **Do not quote as settled anywhere.** |
+| **D13** | ~~τ ≈ 4.86 provisional~~ — **SUPERSEDED 2026-08-29 by the WS3.1 measurement: τ = 3.914** (robust p5–p95 span, N = 50). Quote τ = 3.914, never 4.86. |
 | **D14** | MAFFT split: **Windows 7.526 / Linux 7.525** — forced, not chosen. |
 
 ---
@@ -159,28 +159,70 @@ ViennaRNA 2.7.2 (bindings), MAFFT `v7.526 (2024/Apr/26)`, IQ-TREE `3.1.3 ... bui
 
 ---
 
-## 7. NEXT ACTION — WS3.1 calibration panel
+## 7. WS3.1 — DONE. The D1 branch is decided: **Option A, τ-scaled Boltzmann**
 
-**Approved and ready to start. No open questions.**
+`rpi_calibration.py` + `data/rpi_calibration.json` are built, tested (39 tests) and
+deterministic (artifact byte-identical under `PYTHONHASHSEED` 1 vs 999, md5
+`3c08d9e960847bfb68459fe4cf71c0d1`).
 
-Build `rpi_calibration.py` → `data/rpi_calibration.json`.
+```bash
+python rpi_calibration.py              # rebuilds data/rpi_calibration.json
+python rpi_calibration.py --stability  # re-runs the branch across seeds x windows
+python -m unittest rpi_calibration     # 39 tests, <1 s
+```
 
-**Cognate definition (user-approved this session):**
-- **Cognate = within-isolate** — S/M/L from the *same* isolate. The one reading nobody
-  disputes: segments that demonstrably travelled together in a real virion.
-- **Non-cognate = across species**, at matched sampling depth.
-- **Both restricted to isolates not used in any WS4 group**, so the disjointness
-  guarantee is real and τ is not tuned on the validation set.
+**Panel.** 314 wild terminally-complete isolates → 302 after WS4 exclusion → **42 selected
+across 14 species** (cap 8/species), **1,008 folds** (252 cognate, 756 non-cognate),
+ViennaRNA Python bindings 2.7.2, N = 50 nt, seed 20260829.
 
-**Then:**
-1. Fold via `cofold_dg` (bindings, D2b) over the 50-nt panhandle windows.
-2. Record **mechanism + version** via `viennarna_provenance()` — the whole τ derivation
-   depends on which implementation produced the energies.
-3. Test bimodality (dip statistic or 2-component GMM BIC) and report the gap.
-4. **Branch (D1):** bimodal with a clean gap → logistic; otherwise τ-scaled Boltzmann.
-5. **Report the branch outcome to the user before implementing WS3.2.**
+**Measured ΔΔG:** n = 756, mean **+1.99**, sd 5.58, p5 −6.80, median +1.60, p95 +11.22,
+range −15.60 … +21.90.
 
-**Then WS3.2/3.3/3.4 → WS4 → WS-API → WS5.** WS2 Task 7 (cross-OS fixture) also remains.
+**The D1 rule failed 3 of 4 pre-registered checks — NOT bimodal.** BIC prefers one
+component (Δ = **+15.1**); means **1.24 SD** apart against a 2.0 requirement; the mixture
+density has **one** local maximum. Sarle's BC = 0.344 (below the 5/9 flag).
+
+**τ = 3.914**, from the robust p5–p95 span (18.03). Raw min–max span (37.50) would give
+8.14; both ship in the artifact. **This supersedes D13's provisional τ ≈ 4.86.** Stable:
+Option A on all three seeds at N = 50, τ = 3.90 / 4.28 / 3.90, and τ = 3.93…4.39 across
+per-species caps 2/4/8/16/none.
+
+### Three things WS3.1 turned up that were not in the plan
+
+1. **The plan's "reverse-complemented" 3′ window is wrong.** RNAcofold takes both strands
+   5′→3′ and pairs them antiparallel; the genomic 5′ and 3′ windows as the FASTA stores
+   them already ARE reverse complements — that is what a panhandle is. As-is folds
+   −30.9…−45.3 vs −7.3…−15.4 reverse-complemented. Pinned by `CofoldOrientationTest`.
+2. **48% of deposits are missing their true termini** and `SEGMENT_LENGTH_RANGE` does not
+   catch it. A truncated "panhandle window" is arbitrary internal coding sequence
+   (−10.0 vs −42.2 kcal/mol). Since τ comes from the ΔΔG *span*, folding those would have
+   inflated τ with sequencing artefacts. Hence `has_terminal_panhandle`.
+3. **⚠ ΔΔG carries real but SMALL signal — weigh this before WS3.3.** Non-cognate duplexes
+   are weaker in the expected direction in only **62%** of observations; **38% have
+   ΔΔG ≤ 0**, so **M_pack clamps to exactly 1.0 and contributes nothing** on more than a
+   third of the panel. Cliff's δ = **+0.222**, "small". The genus's terminal 14 nt are
+   invariant across species *and* across S/M/L, which caps what a terminal duplex can
+   distinguish. The *rescaling* is fine (M_pack median 0.66, p5 0.057, min 0.0037) — but
+   **M_pack alone should not be expected to separate the b2 group.** Do not respond to
+   this by retuning τ.
+
+## 7b. NEXT ACTION — WS3.2 (Task 9), gated on the user's sign-off
+
+**WS3.1 Step 5 requires reporting the branch outcome before Task 9 is implemented.** That
+report is above. Once approved:
+
+1. Add **τ = 3.914** and **N = 50** to `RPI_WEIGHTS`; **bump `RPI_WEIGHTS_VERSION` in the
+   same commit.**
+2. Assert the four required properties: bounded (0, 1], monotonic decreasing in ΔΔG, no
+   exact zeros at extremes, ±50% sweepable (τ ∈ {1.96, 3.91, 5.87}).
+3. Then WS3.3 (Task 10, M_pack for real) → WS3.4 (Task 11, M_pol) → WS4 → WS-API → WS5.
+   WS2 Task 7 (cross-OS fixture) also remains.
+
+**Binding constraint on WS4 Task 13:** the b1/b2/random group builders **MUST exclude the
+42 isolate keys in `data/rpi_calibration.json` → `reserved_for_calibration.isolate_keys`.**
+τ is derived from this panel's ΔΔG span, so any overlap tunes the scale parameter on the
+validation set and makes the WS4 result circular. The WS4 side is the only place this half
+of the disjointness guarantee can be enforced.
 
 ### Gate 4 blockers to handle when it is first run
 - The executable is **`iqtree3.exe`**, not `iqtree`. `parse_args` defaults

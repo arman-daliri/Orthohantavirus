@@ -1,0 +1,211 @@
+{
+  "bimodality": {
+    "bic_delta_two_minus_one": 15.077856748481281,
+    "bimodal_with_clean_gap": false,
+    "bimodality_coefficient": 0.34386164365655547,
+    "bimodality_coefficient_threshold": 0.5555555555555556,
+    "checks": {
+      "bic_improves": false,
+      "both_components_substantial": true,
+      "density_has_two_modes": false,
+      "means_separated": false
+    },
+    "density_local_maxima": 1,
+    "density_valley_ddg": null,
+    "mean_separation_sd": 1.2421055629501074,
+    "min_component_weight": 0.45128393573525055,
+    "one_component": {
+      "bic": 4757.198083766117,
+      "loglik": -2371.9710005068787,
+      "mean": 1.9863756283250436,
+      "sd": 5.57665561881553
+    },
+    "pooled_sd": 4.743650981778226,
+    "rule": {
+      "min_component_weight": 0.1,
+      "min_mean_separation_sd": 2.0,
+      "pre_registered": "declared in rpi_calibration.py above the measurement; asserted by BimodalityDecisionRuleTest",
+      "requires_bic_improvement": true
+    },
+    "two_component": {
+      "bic": 4772.275940514598,
+      "loglik": -2369.5678668168503,
+      "mean_high": 5.219473931207879,
+      "mean_low": -0.6726413419525952,
+      "sd_high": 5.070914899493954,
+      "sd_low": 4.456523095123984,
+      "weight_high": 0.45128393573525055,
+      "weight_low": 0.5487160642647495
+    }
+  },
+  "ddg": {
+    "max": 21.900001525878906,
+    "mean": 1.9863756283250436,
+    "median": 1.6000003814697266,
+    "min": -15.600000381469727,
+    "n": 756,
+    "p25": -1.6999993324279785,
+    "p5": -6.799999237060547,
+    "p75": 5.700000762939453,
+    "p95": 11.224998950958252,
+    "sd": 5.580347546144003
+  },
+  "decision": "D1 -- M_pack rescaling, branched on the measured ddG distribution",
+  "dg_cognate": {
+    "max": -18.0,
+    "mean": -31.19682544375223,
+    "median": -31.0,
+    "min": -45.29999923706055,
+    "n": 252,
+    "p25": -33.900001525878906,
+    "p5": -40.4450008392334,
+    "p75": -27.22499942779541,
+    "p95": -23.899999618530273,
+    "sd": 5.171735103506873
+  },
+  "dg_non_cognate": {
+    "max": -14.300000190734863,
+    "mean": -29.210449815427186,
+    "median": -29.0,
+    "min": -47.70000076293945,
+    "n": 756,
+    "p25": -31.799999237060547,
+    "p5": -36.625,
+    "p75": -26.299999237060547,
+    "p95": -22.600000381469727,
+    "sd": 4.264255814777189
+  },
+  "discrimination": {
+    "cliffs_delta_noncognate_vs_cognate": 0.22229570840681953,
+    "cliffs_delta_reading": "P(non-cognate dG > cognate dG) - P(<). Positive means non-cognate duplexes are WEAKER (less negative), the direction M_pack assumes. |d| < 0.147 negligible, < 0.33 small, < 0.474 medium (Romano et al. 2006).",
+    "fraction_ddg_positive": 0.6203703703703703,
+    "fraction_mpack_saturated": 0.37962962962962965,
+    "m_pack_under_chosen_form": {
+      "max": 1.0,
+      "mean": 0.6114555544185886,
+      "median": 0.6644598337068401,
+      "min": 0.0037157047299305897,
+      "n": 756,
+      "p25": 0.23310142477748322,
+      "p5": 0.056824298465310064,
+      "p75": 1.0,
+      "p95": 1.0,
+      "sd": 0.3740755777344031
+    },
+    "saturated_meaning": "ddG <= 0: the non-cognate duplex is at least as strong as the cognate one, so M_pack clamps to 1.0 and the observation carries no packaging signal"
+  },
+  "fold_provenance": {
+    "mechanism": "ViennaRNA Python bindings",
+    "version": "2.7.2"
+  },
+  "panel": {
+    "cognate_folds": 252,
+    "eligible_after_ws4_exclusion": 302,
+    "excluded_as_ws4_reserved": 12,
+    "foreign_partners_per_focal": 3,
+    "isolates_per_species": {
+      "Orthohantavirus andesense": 2,
+      "Orthohantavirus brugesense": 1,
+      "Orthohantavirus chocloense": 1,
+      "Orthohantavirus dobravaense": 1,
+      "Orthohantavirus hantanense": 8,
+      "Orthohantavirus jejuense": 1,
+      "Orthohantavirus khabarovskense": 4,
+      "Orthohantavirus luxiense": 2,
+      "Orthohantavirus mamorense": 1,
+      "Orthohantavirus puumalaense": 8,
+      "Orthohantavirus seoulense": 8,
+      "Orthohantavirus sinnombreense": 1,
+      "Orthohantavirus tigrayense": 1,
+      "Orthohantavirus tulaense": 3
+    },
+    "max_isolates_per_species": 8,
+    "non_cognate_folds": 756,
+    "observations": 756,
+    "segment_duplexes": [
+      "S5'xM3'",
+      "S5'xL3'",
+      "M5'xS3'",
+      "M5'xL3'",
+      "L5'xS3'",
+      "L5'xM3'"
+    ],
+    "selected": 42,
+    "species_selected": 14,
+    "total_folds": 1008,
+    "wild_full_length_terminally_complete": 314,
+    "window_nt": 50,
+    "ws4_reserved_accessions": 96
+  },
+  "provisional": {
+    "tau_4_86_superseded": "D13's provisional tau ~= 4.86 was derived from a ddG span of 22.4 measured before the N = 50 window was chosen. This artifact supersedes it."
+  },
+  "rescaling": {
+    "form": "tau_scaled_boltzmann",
+    "formula": "M_pack = exp(-ddG / tau)",
+    "option": "A",
+    "parameters": {
+      "ddg_span_raw_min_max": 37.50000190734863,
+      "ddg_span_robust_p5_p95": 18.0249981880188,
+      "span_percentiles": [
+        5.0,
+        95.0
+      ],
+      "target_dynamic_range": 100.0,
+      "tau": 3.914078624686338,
+      "tau_raw_span": 8.143021949861463
+    },
+    "reason": "the pre-registered D1 rule failed on: bic_improves, density_has_two_modes, means_separated -- the ddG distribution is not bimodal with a clean gap, so a logistic would impose a threshold the data does not show"
+  },
+  "reserved_for_calibration": {
+    "count": 42,
+    "isolate_keys": [
+      "t1|Orthohantavirus andesense|SAMEA122916161|chile 9717869",
+      "t1|Orthohantavirus luxiense|SAMN45108004|ljgc ynsf73",
+      "t1|Orthohantavirus luxiense|SAMN45108040|dlyl ynsf87",
+      "t2|Orthohantavirus andesense|areb14 p2",
+      "t2|Orthohantavirus brugesense|de wandlitz te 2013 1",
+      "t2|Orthohantavirus chocloense|588",
+      "t2|Orthohantavirus dobravaense|grw aa",
+      "t2|Orthohantavirus hantanense|aa05 246",
+      "t2|Orthohantavirus hantanense|aa05 775",
+      "t2|Orthohantavirus hantanense|aa09 410",
+      "t2|Orthohantavirus hantanense|aa18 195",
+      "t2|Orthohantavirus hantanense|aa19 36 minion",
+      "t2|Orthohantavirus hantanense|js3",
+      "t2|Orthohantavirus hantanense|roka17 15",
+      "t2|Orthohantavirus hantanense|roka17 2",
+      "t2|Orthohantavirus jejuense|cu09 33",
+      "t2|Orthohantavirus khabarovskense|fuyuan mm 228",
+      "t2|Orthohantavirus khabarovskense|fuyuan mm 250",
+      "t2|Orthohantavirus khabarovskense|fuyuan mm 254",
+      "t2|Orthohantavirus khabarovskense|fuyuan mm 312",
+      "t2|Orthohantavirus mamorense|htn 007",
+      "t2|Orthohantavirus puumalaense|11 1",
+      "t2|Orthohantavirus puumalaense|11 4",
+      "t2|Orthohantavirus puumalaense|11 5",
+      "t2|Orthohantavirus puumalaense|cr13 1",
+      "t2|Orthohantavirus puumalaense|cr15 1",
+      "t2|Orthohantavirus puumalaense|cr16 3",
+      "t2|Orthohantavirus puumalaense|puuv pieksamaki human kidney 2008",
+      "t2|Orthohantavirus puumalaense|samara 49 cg 2005",
+      "t2|Orthohantavirus seoulense|93hbq4",
+      "t2|Orthohantavirus seoulense|93hbx12",
+      "t2|Orthohantavirus seoulense|hbcd13 2019",
+      "t2|Orthohantavirus seoulense|hbcd8 2017",
+      "t2|Orthohantavirus seoulense|hbcd9 2017",
+      "t2|Orthohantavirus seoulense|hbq47 2021",
+      "t2|Orthohantavirus seoulense|hunan2019c041 88",
+      "t2|Orthohantavirus seoulense|l99",
+      "t2|Orthohantavirus sinnombreense|new york 1",
+      "t2|Orthohantavirus tigrayense|et2121",
+      "t2|Orthohantavirus tulaense|magdef02 1",
+      "t2|Orthohantavirus tulaense|marchel42",
+      "t2|Orthohantavirus tulaense|marczgr07"
+    ],
+    "note": "WS4's b1/b2/random group builders MUST exclude these isolate keys. tau is derived from this panel's ddG span, so any overlap would tune the scale parameter on the validation set."
+  },
+  "schema_version": 1,
+  "seed": 20260829,
+  "window_nt": 50
+}

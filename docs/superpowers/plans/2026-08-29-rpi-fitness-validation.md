@@ -580,10 +580,22 @@ Gated on WS1. Implements D1, D2, D3.
 - Produces: `panhandle_window(genomic_seq, segment, end, n=50) -> str`;
   `calibrate(reference, n=50, seed=...) -> Dict[str, Any]` writing the artifact.
 
-- [ ] **Step 1: Implement the 50-nt panhandle window (D2)** — terminal 50 nt of the 5′ end of one
-  segment against the terminal 50 nt of the 3′ end of the other, reverse-complemented.
-  `_reverse_complement` already exists at `reassortment_detector.py:415`.
-- [ ] **Step 2: Build cognate and non-cognate pair sets** from the reference index.
+- [x] **Step 1: Implement the 50-nt panhandle window (D2)** — terminal 50 nt of the 5′ end of one
+  segment against the terminal 50 nt of the 3′ end of the other, ~~reverse-complemented~~.
+  **CORRECTION: the 3′ window is NOT reverse-complemented.** RNAcofold takes both strands 5′→3′
+  and pairs them antiparallel, and the genomic 5′ and 3′ terminal windows — both written 5′→3′
+  as the FASTA stores them — already are reverse complements of each other; that is what a
+  panhandle is. Reverse-complementing destroys the duplex rather than forming it: measured
+  across all nine segment pairings of a terminally complete isolate, as-is −30.9…−45.3 kcal/mol
+  vs reverse-complemented −7.3…−15.4. Pinned by `CofoldOrientationTest`.
+- [x] **Step 1b (NOT IN THE PLAN — required by the data): filter to terminally complete deposits.**
+  Only 1,190 of 2,622 segments (45%) in the wild complete-triplet pool carry both conserved
+  termini; 1,261 (48%) carry neither. `SEGMENT_LENGTH_RANGE` does not catch this — a segment
+  trimmed of 30 nt at each end is still inside the ICTV band. A truncated "panhandle window" is
+  arbitrary internal coding sequence: −10.0 kcal/mol on one such deposit against −42.2 on a
+  terminally complete one. Since τ is derived from the ΔΔG **span**, folding those would have
+  inflated τ with sequencing artefacts. See `has_terminal_panhandle`.
+- [x] **Step 2: Build cognate and non-cognate pair sets** from the reference index.
 
   **APPROVED DEFINITION (2026-08-29) — do not re-litigate:**
   - **Cognate = WITHIN-ISOLATE**: S/M/L drawn from the *same* isolate. The one reading nobody
@@ -593,20 +605,68 @@ Gated on WS1. Implements D1, D2, D3.
   - **Non-cognate = ACROSS SPECIES**, at matched sampling depth.
   - **Both restricted to isolates NOT used in any WS4 group.**
 
+  **HOW DISJOINTNESS WAS MADE REAL (WS3.1, 2026-08-29).** The WS4 b1/b2/random groups do not
+  exist yet, so "not used in any WS4 group" could not be enforced against them directly. Both
+  halves are now covered: `ws4_reserved_accessions` builds the **actual** WS4 panel through
+  `vd.build_panel` (D11 single-source-of-truth — the specs are not re-derived, because
+  `find_backbone`/`find_donor` tie-breaks are order dependent) and excludes every isolate
+  sharing any accession with it (12 isolates, 96 accessions); and the artifact's
+  `reserved_for_calibration.isolate_keys` lists the **42 isolates the panel consumed**, which
+  **WS4 Task 13's group builders MUST exclude.** That second list is the half that can only be
+  enforced from the WS4 side.
+
   **This panel must be disjoint from the WS4 validation groups** — otherwise τ is tuned on the
   validation set and the whole result is circular. That disjointness is the reason for the
   restriction above, not an afterthought: τ is derived from the observed ΔΔG span, so the
   panel's composition directly sets the scale parameter every downstream score depends on.
-- [ ] **Step 3: Fold the panel via the ViennaRNA PYTHON BINDINGS** (`RNA.fold_compound(a+"&"+b)`,
+- [x] **Step 3: Fold the panel via the ViennaRNA PYTHON BINDINGS** (`RNA.fold_compound(a+"&"+b)`,
   `mfe_dimer()`) -- **not** the CLI. Per D2b the pip package ships no RNAcofold executable, and the
   subprocess path is removed from the API surface entirely; there is deliberately no fallback.
   **The artifact must record the MECHANISM (`"ViennaRNA Python bindings"`) alongside
   `RNA.__version__`**, because the whole tau derivation depends on which produced the energies.
-- [ ] **Step 4: Test bimodality and branch (D1).** Report the ddG distribution, a dip-statistic or
+- [x] **Step 4: Test bimodality and branch (D1).** Report the ddG distribution, a dip-statistic or
   two-component Gaussian-mixture BIC comparison, and the gap width. **Bimodal with a clean gap →
   logistic (Option C). Otherwise → τ-scaled Boltzmann with `τ = ddG_span / ln(100)`.**
   Write the chosen form and its parameters into `data/rpi_calibration.json`.
-- [ ] **Step 5: Report the branch outcome before implementing Task 9.**
+- [x] **Step 5: Report the branch outcome before implementing Task 9.**
+
+### WS3.1 RESULT (measured 2026-08-29) — **Option A, τ-scaled Boltzmann**
+
+Panel: 314 wild terminally-complete isolates → 302 after WS4 exclusion → **42 selected across
+14 species** (cap 8/species, matched sampling depth), **1,008 folds** (252 cognate, 756
+non-cognate), ViennaRNA Python bindings 2.7.2, N = 50 nt, seed 20260829. Artifact
+byte-identical under `PYTHONHASHSEED` 1 vs 999 (md5 `3c08d9e960847bfb68459fe4cf71c0d1`).
+
+| Distribution | n | mean | sd | min | p5 | med | p95 | max |
+|---|---|---|---|---|---|---|---|---|
+| dG cognate | 252 | −31.20 | 5.17 | −45.30 | −40.45 | −31.00 | −23.90 | −18.00 |
+| dG non-cognate | 756 | −29.21 | 4.26 | −47.70 | −36.62 | −29.00 | −22.60 | −14.30 |
+| **ΔΔG** | 756 | **+1.99** | 5.58 | −15.60 | −6.80 | +1.60 | +11.22 | +21.90 |
+
+**The D1 rule failed 3 of its 4 pre-registered checks — the distribution is NOT bimodal:**
+BIC prefers one component (1-comp 4757.2 vs 2-comp 4772.3, Δ = **+15.1**); component means are
+**1.24 SD** apart against a 2.0 requirement; the fitted mixture density has **one** local
+maximum. Sarle's BC = 0.344, below the 5/9 flag. Only "both components substantial" passed.
+
+**Branch: Option A — `M_pack = exp(−ΔΔG / τ)`, τ = 3.914.**
+τ from the robust p5–p95 span (18.03) rather than raw min–max (37.50, which would give
+τ = 8.14); both are in the artifact. **This supersedes D13's provisional τ ≈ 4.86**, which came
+from a span of 22.4 measured before N = 50 was chosen.
+
+**Stability (`python rpi_calibration.py --stability`).** At the chosen N = 50 the branch is
+Option A on **all three seeds**, τ = 3.90 / 4.28 / 3.90, and τ = 3.93…4.39 across per-species
+caps 2/4/8/16/none. One cell of nine flips (N = 25, seed 1) — at a window D2 did not choose,
+and the two other seeds there stay unimodal, so it reads as a sampling artifact.
+
+**⚠ FINDING FOR WS3.3 — ΔΔG carries real but SMALL signal.** Non-cognate duplexes are weaker
+in the expected direction in only **62%** of observations; **38% have ΔΔG ≤ 0**, meaning the
+foreign duplex is at least as strong as the cognate one and **M_pack clamps to exactly 1.0,
+contributing nothing**. Cliff's δ = **+0.222** — "small" by the conventional bands. The genus's
+terminal 14 nt are invariant across species *and* across S/M/L, which caps how much a terminal
+duplex can distinguish. M_pack's dynamic range under τ is healthy (median 0.66, p5 0.057, min
+0.0037), so the *rescaling* works — but **M_pack alone should not be expected to separate the
+b2 cross-species sympatric group.** This is evidence to weigh before WS3.3/WS3.4, not a reason
+to retune τ.
 
 ### Task 9: Implement the chosen rescaling
 

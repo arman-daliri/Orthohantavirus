@@ -10,10 +10,26 @@ and the exact next action. This section is only a pointer.
 Suite **194 tests, all pass** (~13.5 min). Validation harness **PASS**. `main` at
 `e7d9f44`, pushed. Nothing unpushed.
 
-**NEXT ACTION: WS3.1 — build `rpi_calibration.py`.** Fully approved, no open questions.
-Cognate = within-isolate; non-cognate = across species; both disjoint from the WS4
-groups. Fold via `cofold_dg` (ViennaRNA bindings), record mechanism + version, test
-bimodality, then **report the D1 branch outcome before implementing WS3.2**.
+**WS3.1 IS DONE.** `rpi_calibration.py` + `data/rpi_calibration.json` built, 39 tests,
+artifact byte-identical under `PYTHONHASHSEED` 1 vs 999. **The D1 branch resolved to
+Option A — τ-scaled Boltzmann, τ = 3.914.** The ΔΔG distribution is NOT bimodal (failed 3
+of 4 pre-registered checks; BIC prefers one component by 15.1, means 1.24 SD apart against
+a 2.0 requirement).
+
+**NEXT ACTION: WS3.2 (Task 9) — add τ = 3.914 and N = 50 to `RPI_WEIGHTS` and bump
+`RPI_WEIGHTS_VERSION` in the same commit.** Gated on the user signing off the WS3.1 branch
+report (plan Step 5 requires it). See `docs/PROJECT-STATE.md` §7 and §7b.
+
+**⚠ Weigh before WS3.3:** ΔΔG carries real but SMALL signal. Only 62% of non-cognate
+duplexes are weaker than cognate; **38% have ΔΔG ≤ 0, so M_pack clamps to exactly 1.0 and
+contributes nothing.** Cliff's δ = +0.222 ("small"). The genus's terminal 14 nt are
+invariant across species *and* across S/M/L, capping what a terminal duplex can
+distinguish. **M_pack alone should not be expected to separate the b2 group** — and the
+answer to that is not to retune τ.
+
+**Binding on WS4 Task 13:** the b1/b2/random builders MUST exclude the 42 isolate keys in
+`data/rpi_calibration.json` → `reserved_for_calibration.isolate_keys`, or τ is tuned on
+the validation set.
 
 **The finding that shapes everything:** E, K and F are species/segment-level priors and
 cannot see which particular S+M+L assembly is being scored. Only M_pack and M_pol can,
@@ -31,8 +47,18 @@ and IQ-TREE 3.1.3 installed and checksummed in `tools/`.
 implicated species. Sorting made that choice stable, not principled. Deferred to the
 Factor E rebuild — see the KNOWN LIMITATION comment in `gate3_check`.
 
-**Do not quote τ ≈ 4.86 as settled** — it is provisional pending the WS3.1 measurement
-under the N = 50 nt window (D13).
+**τ ≈ 4.86 is DEAD — quote τ = 3.914.** WS3.1 measured it under N = 50 (D13 superseded).
+The old figure came from a ΔΔG span of 22.4 taken before the window was chosen; the
+measured robust p5–p95 span is 18.03.
+
+**Two corrections WS3.1 forced, do not reintroduce:**
+- **The 3′ panhandle window is NOT reverse-complemented** (the plan said it was).
+  RNAcofold pairs both 5′→3′ strands antiparallel, and the genomic 5′/3′ windows already
+  are reverse complements — that is what a panhandle is. As-is folds −30.9…−45.3 vs
+  −7.3…−15.4 reverse-complemented. Pinned by `CofoldOrientationTest`.
+- **48% of deposits lack their true termini** and `SEGMENT_LENGTH_RANGE` does not catch
+  it. Any panhandle work must filter on `has_terminal_panhandle` or it folds arbitrary
+  internal coding sequence (−10.0 vs −42.2 kcal/mol).
 
 ## Repository policy
 
@@ -81,6 +107,9 @@ Full detail in `tools/VERSIONS.txt` and `requirements-pip.txt`. Summary:
 ## Running things
 
 ```bash
+python -m unittest rpi_calibration                # 39 tests, <1 s
+python rpi_calibration.py                         # rebuilds data/rpi_calibration.json (~12 s)
+python rpi_calibration.py --stability             # branch across seeds x windows (~2 min)
 python -m unittest reassortment_detector          # 194 tests, ~13.5 min (gate 4 is slow)
 python validate_reassortment_detector.py --json output/validation/validation_report.json
 python reassortment_detector.py --rpi-report ...  # writes rpi_validation_report.json

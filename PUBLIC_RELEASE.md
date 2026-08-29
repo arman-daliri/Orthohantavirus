@@ -35,6 +35,13 @@ private. It is the reason public release must be a copy, not a visibility change
 
 - `reassortment_detector.py`, `all_hanta.py`, `phylogeny.py` — the pipeline
 - `validate_reassortment_detector.py` — validation harness
+- `rpi_calibration.py` and `data/rpi_calibration.json` — the pinned ΔΔG calibration panel
+  and the τ derived from it. **Both, not just the script.** The spec's defence of τ is
+  that it comes from a versioned panel shipped in the repo rather than being picked by
+  eye, and a reviewer cannot check that without the artifact. It records the fold
+  mechanism and ViennaRNA version, the panel's composition, and the pre-registered D1
+  decision rule with every input to it. Contains no sequence data — only public
+  GenBank-derived accessions and isolate keys.
 - `README.md` — including the RPI limitations and validation sections
 - `environment.yml`
 - `Mydocs/*.md` — reader-facing docs (`MyReport.md`, `Orthohantavirus_01.md`,
