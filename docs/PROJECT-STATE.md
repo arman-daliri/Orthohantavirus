@@ -13,7 +13,7 @@ A fresh session should need this file, `CLAUDE.md`, and the two documents in
 | **Branch** | `04-rpi-fitness-validation`, pushed, tracking `origin/` |
 | **HEAD** | `7cb913c` (WS3.3) |
 | **`main`** | `e7d9f44`, pushed (was 4 commits behind at session start) |
-| **Test suite** | **217 tests, all pass**, ~14 min (`python -m unittest reassortment_detector`) + **39 tests, <1 s** (`python -m unittest rpi_calibration`) |
+| **Test suite** | **228 tests, all pass**, ~14 min (`python -m unittest reassortment_detector`) + **39 tests, <1 s** (`python -m unittest rpi_calibration`) |
 | **Validation harness** | **PASS** — sensitivity 18/18, specificity 27/27, blind spot 5/5, adversarial 4/4 |
 | **Working tree** | Clean except `Mydocs/My Library.csv`, deleted by an external process; user said leave it |
 | **Unpushed** | `3947f1c`..`7cb913c` — WS3.1 + WS3.2 + WS3.3, committed locally, **not pushed** |
@@ -44,23 +44,35 @@ Read both before touching code. This file summarises; they are authoritative.
 they do not read the nucleotides of the particular S+M+L assembly being scored. Only
 **M_pack** and **M_pol** do.
 
-**UPDATE 2026-08-29 (WS3.3): M_pack is real.** `score_m_pack` cofolds the candidate's
-own cross-segment panhandle duplex against the backbone species' own reference
-consensus (D3) and rescales via `M_pack = exp(-ΔΔG / τ)`, τ = 3.914 (WS3.1). It is
-**not** the self-comparison bug — see `score_m_pack`'s docstring for why the
-donor==backbone (concordant) case looks similar but isn't. `m_pol` is still computed by
-passing `terminal_windows` as **both** arguments — a self-comparison, so it is exactly
-1.0 on every candidate. `divergence_stratum` is a binary threshold at 0.80 and
-production identities run 0.35–0.46, so every row lands `distant` and the stratum never
-varies.
+**UPDATE 2026-08-29 (WS3.3 + WS3.4): both M_pack and M_pol are now real.** Both call
+`rpi_species_assignment(gate1, odd_segment)` — one shared donor/backbone determination,
+not one per factor, so the two can't silently disagree about who the backbone is.
+- `score_m_pack` cofolds the candidate's own cross-segment panhandle duplex against the
+  backbone species' own reference consensus (D3) and rescales via
+  `M_pack = exp(-ΔΔG / τ)`, τ = 3.914 (WS3.1).
+- `score_m_pol` compares the candidate's own N-recognition footprint (beyond the
+  invariant tag) against the backbone species' own reference consensus CDS window
+  (`species_consensus_cds_window`). The old
+  `polymerase_compatibility(terminal_windows, terminal_windows)` self-comparison is
+  gone. **Bundled into WS3.4, not separately scoped:** `footprint` now reads
+  `n_recognition_footprint(backbone_species)` instead of the always-default 9 nt —
+  wiring that existed but was never called from production before this task.
 
-**Consequence, now partially resolved:** for a fixed species set and odd segment,
-`rpi_generation` no longer has exactly one possible value — M_pack now varies with the
-candidate's actual sequence (0.10–1.0 observed on the real WS4 panel, smoke-tested
-2026-08-29). It is still true that M_pol contributes nothing, and WS3.1's own
-measurement shows M_pack's signal is real but small (Cliff's δ = +0.222; 38% of the
-calibration panel saturates M_pack at 1.0). Two assemblies matching on species/place/
-year and folding to a similar duplex can still land close together.
+Neither is the self-comparison bug that predated it — see `score_m_pack`'s docstring
+for why the donor==backbone (concordant) case looks similar but isn't.
+`divergence_stratum` is still a binary threshold at 0.80 and production identities run
+0.35–0.46, so every row still lands `distant` and the K stratum never varies.
+
+**Consequence, now substantially resolved for M_pack, narrowly for M_pol:**
+`rpi_generation` is now the genuine four-factor product `E × M_pack × M_pol × K`.
+Smoke-tested 2026-08-29 on the real WS4 panel (12 cases): M_pack varies 0.10–1.0 on
+every candidate. **M_pol varies only when the backbone species is *Orthohantavirus
+sinnombreense*** (Mir & Panganiban's SNV-23-vs-genus-9 asymmetry is the only wired
+footprint length) — SNV-backbone candidates scored 0.74–0.96 (`status="scored"`); the
+other 9 of 12 honestly reported `no_signal_beyond_tag` (footprint 9 falls entirely
+inside the invariant 14-nt tag) rather than a fake constant. WS3.1's own measurement
+also showed M_pack's signal is real but small (Cliff's δ = +0.222; 38% of the
+calibration panel saturates M_pack at 1.0).
 
 **But a tie is only a defect for some comparisons** (corrected by the user, decision D7):
 
@@ -68,12 +80,15 @@ year and folding to a similar duplex can still land close together.
   RPI measures **plausibility, not occurrence**; separating b1 from real reassortants is
   the **tree detector's** job, not the index's. `reals ≈ b1` is an **expected tie**.
 - **Cross-species sympatric shuffles (b2)** are where the index must earn its keep. With
-  M_pack alone (M_pol still scaffolded), it is **expected to discriminate weakly, not
-  yet strongly** — the user's 2026-08-29 decision was to proceed with M_pack as scoped
-  and let WS3.4's M_pol carry more of that weight, not to retune τ.
+  both factors real but each carrying only partial signal (M_pack weakly for everyone,
+  M_pol strongly but only for one species), it is **expected to discriminate somewhat,
+  not fully** — the user's 2026-08-29 decision was to proceed with both factors as
+  scoped, not to retune τ or invent additional footprint lengths without a literature
+  source.
 
-**This is why WS3.4 is still needed** — M_pack alone was never expected to fully resolve
-b2; WS4 will measure how much of the gap M_pack alone closes before M_pol lands.
+**WS4 is where this gets measured for real** — whether M_pack + M_pol together close
+enough of the b2 gap, or whether the Factor E rebuild (deferred, see gate3's KNOWN
+LIMITATION) ends up mattering more than either molecular factor.
 
 ---
 
@@ -230,20 +245,33 @@ guard that τ never drifts back to the dead 4.86 provisional. **τ is not yet co
 anywhere**: `m_pack=1.0` at the `score_candidate` call site is untouched. That wiring is
 Task 10 (WS3.3), scoped separately on purpose. Full suite 194+6 tests, all pass.
 
-## NEXT ACTION — WS3.3 (Task 10, D3): score M_pack for real
+## WS3.3 + WS3.4 — DONE (2026-08-29). Both M_pack and M_pol score for real.
 
-1. Replace `m_pack=1.0` (`reassortment_detector.py` — search `SCAFFOLDING (M_pack)`) with
-   a cognate-vs-non-cognate `cofold_dg` comparison against the **implicated parent/donor
-   consensus**, sourced from `reference.genomic_index`. **Never self-comparison** — this
-   is the same defect class M_pol currently has (`terminal_windows` passed as both
-   arguments).
-2. Call `boltzmann_compatibility(ddg, 0.0, rt=RPI_WEIGHTS["m_pack_tau"])`, not the RT
-   default — that is the whole point of Task 9.
-3. Add `rpi_m_pack_status`: `scored` / `fixed_constant` / `undefined_energy` /
-   `no_parental_sequence`. `undefined_energy` is where `boltzmann_compatibility`'s
-   `ValueError` (N4) is caught — log and continue.
-4. Then WS3.4 (Task 11, M_pol) → WS4 → WS-API → WS5. WS2 Task 7 (cross-OS fixture) also
-   remains.
+- `score_m_pack` (Task 10, D3): candidate's own cross-segment panhandle duplex vs the
+  backbone species' own reference consensus (`species_consensus_panhandle_window`),
+  rescaled via `boltzmann_compatibility(ddg, 0.0, rt=RPI_WEIGHTS["m_pack_tau"])`.
+  `rpi_m_pack_status`: `scored` / `undefined_energy` (N4's `ValueError`, caught) /
+  `no_parental_sequence` / `fixed_constant` (declared, not yet produced — see
+  `score_m_pack`'s docstring).
+- `score_m_pol` (Task 11, D3): candidate's own CDS-derived N-recognition footprint
+  (beyond the invariant tag) vs the backbone species' own reference consensus CDS
+  window (`species_consensus_cds_window`). `footprint` now reads
+  `n_recognition_footprint(backbone_species)` — SNV's real 23-nt asymmetry is exercised
+  at a production call site for the first time. `rpi_m_pol_status`: whatever
+  `polymerase_compatibility` returns (`scored` / `no_signal_beyond_tag`), or
+  `no_parental_sequence`.
+- Both share **one** donor/backbone determination: `rpi_species_assignment(gate1,
+  odd_segment)` (renamed from `mpack_species_assignment` — it is no longer M_pack-only).
+- Smoke-tested on the real WS4 panel (12 cases): M_pack 0.10–1.0 on every candidate;
+  M_pol 0.74–0.96 on the 3 SNV-backbone candidates, `no_signal_beyond_tag` (neutral 1.0)
+  on the other 9 — honest, not a fake constant.
+- `m_pol_variance_check` is still NOT wired in anywhere — it is spec 6.2's RUN-LEVEL
+  check over a representative sample of lineage pairs, not a per-candidate computation.
+  Building that aggregation is future work, never in either task's stated checklist.
+
+## NEXT ACTION — WS4 (Task 12+): validation, the core deliverable
+
+Gated on WS3 (done). WS2 Task 7 (cross-OS fixture) also remains, independently.
 
 **Binding constraint on WS4 Task 13:** the b1/b2/random group builders **MUST exclude the
 42 isolate keys in `data/rpi_calibration.json` → `reserved_for_calibration.isolate_keys`.**
@@ -251,12 +279,17 @@ Task 10 (WS3.3), scoped separately on purpose. Full suite 194+6 tests, all pass.
 validation set and makes the WS4 result circular. The WS4 side is the only place this half
 of the disjointness guarantee can be enforced.
 
-**Weak-M_pack finding, user-acknowledged 2026-08-29 — proceed as planned.** ΔΔG separates
-cognate/non-cognate only weakly (Cliff's δ = +0.222; 38% of the panel has ΔΔG ≤ 0, where
-M_pack saturates at 1.0). Decision: implement M_pack per D3 as scoped, note the limitation
-in `RATIONALE.md`/README, and let WS3.4's M_pol carry more of the b2-discrimination
-weight. Revisit only if WS4 shows b2 still does not separate — **do not respond by
-retuning τ.**
+**Weak-signal findings, user-acknowledged 2026-08-29 — proceed as planned, do not retune.**
+- M_pack: ΔΔG separates cognate/non-cognate only weakly (Cliff's δ = +0.222; 38% of the
+  calibration panel has ΔΔG ≤ 0, where M_pack saturates at 1.0).
+- M_pol: real signal exists only for an SNV backbone (the only species with a non-default
+  `RPI_N_FOOTPRINT_NT` entry); every other backbone reports `no_signal_beyond_tag`.
+
+Both are named limitations of what the underlying biology supports measuring, not bugs to
+fix by retuning τ or by inventing additional footprint lengths without a literature
+source. **WS4 is where it gets decided whether M_pack + M_pol together are enough** to
+separate the b2 cross-species sympatric group, or whether the deferred Factor E rebuild
+(gate3's KNOWN LIMITATION) turns out to matter more.
 
 ### Gate 4 blockers to handle when it is first run
 - The executable is **`iqtree3.exe`**, not `iqtree`. `parse_args` defaults

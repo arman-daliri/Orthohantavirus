@@ -1523,6 +1523,15 @@ RPI_N_FOOTPRINT_DEFAULT_NT = 9
 # Below this variance across sampled pairs, M_pol is declared uninformative and fixed.
 RPI_M_POL_MIN_VARIANCE = 1e-4
 
+# CDS-relative window length M_pol compares, on both the candidate and the reference
+# consensus side (D3, WS3.4). Comfortably contains HANTAVIRUS_TERMINAL_TAG_NT (14) plus
+# every entry in RPI_N_FOOTPRINT_NT (23 at most), so _beyond_tag's slice never runs off
+# the end of either window. A NAMED constant rather than an inline 64 at both call
+# sites -- score_candidate's candidate-side window and species_consensus_cds_window's
+# reference-side window MUST agree on this number, or the two windows being compared
+# would not even be the same length.
+RPI_MPOL_CDS_WINDOW_NT = 64
+
 
 def n_recognition_footprint(species_name: str) -> int:
     """Length of the N-recognition window for a species, in nucleotides."""
@@ -1599,19 +1608,48 @@ def m_pol_variance_check(
     return float(np.mean(values)), "scored"
 
 
+def _wild_isolates_of_species(
+        isolates: List["ah.IsolateRecord"], species: str) -> List["ah.IsolateRecord"]:
+    """Real (not lab-derived, not vaccine-strain) isolates of one species (D3).
+
+    Shared by every "implicated parent/donor consensus" builder -- M_pack's genomic
+    termini and M_pol's CDS windows both start from this same wild-isolate pool, they
+    just do different things to each sequence afterward.
+    """
+    return [i for i in isolates if i.species_name == species
+            and not i.is_lab_derived and not i.is_vaccine_strain]
+
+
 def _wild_species_genomic_sequences(
         reference: ReferenceData, species: str, segment: str) -> List[str]:
-    """Terminally complete wild genomic sequences for one species' segment (D3).
+    """Terminally complete wild genomic sequences for one species' segment (D3, M_pack).
 
     Filters on `has_genomic_panhandle_termini` for the same reason WS3.1's calibration
     panel does: a trimmed deposit's terminal window is arbitrary internal sequence, and
     folding it would corrupt the consensus this feeds into M_pack.
     """
-    isolates = [i for i in reference.isolates
-                if i.species_name == species and not i.is_lab_derived
-                and not i.is_vaccine_strain]
+    isolates = _wild_isolates_of_species(reference.isolates, species)
     sequences = genomic_sequences_by_segment(isolates, reference.genomic_index)[segment]
     return [seq for seq in sequences if has_genomic_panhandle_termini(seq)]
+
+
+def _wild_species_cds_windows(
+        reference: ReferenceData, species: str, segment: str, window: int) -> List[str]:
+    """CDS-derived terminal windows for one species' segment (D3, M_pol) -- the ORF's
+    own nucleotide span (`candidate_cds_from_orf`), same as `terminal_windows` is built
+    from on the candidate side in score_candidate.
+
+    NOT filtered on `has_genomic_panhandle_termini`: that predicate is about the
+    GENOMIC 5'/3' UTR termini M_pack folds, which is a different region from the CDS/ORF
+    this scores. A deposit trimmed of its UTR can still carry a fully intact ORF, so
+    applying that filter here would exclude good CDS candidates for the wrong reason.
+    Isolates whose segment has no findable ORF at all are dropped (`candidate_cds_from_orf`
+    returns "" in that case).
+    """
+    isolates = _wild_isolates_of_species(reference.isolates, species)
+    sequences = genomic_sequences_by_segment(isolates, reference.genomic_index)[segment]
+    windows = [candidate_cds_from_orf(seq)[:window] for seq in sequences]
+    return [w for w in windows if w]
 
 
 def species_consensus_panhandle_window(
@@ -1636,9 +1674,38 @@ def species_consensus_panhandle_window(
     return five if end == "5" else three
 
 
-def mpack_species_assignment(
+def species_consensus_cds_window(
+        reference: ReferenceData, species: str, segment: str,
+        window: int = RPI_MPOL_CDS_WINDOW_NT) -> str:
+    """Majority-vote consensus CDS-start window for one species' segment (D3, M_pol) --
+    the "implicated parent/donor consensus" score_m_pol compares the candidate against.
+
+    Same species-level-substitute reasoning as species_consensus_panhandle_window, but
+    over ORF-anchored windows (`_wild_species_cds_windows`) rather than genomic-terminus
+    ones: correctly annotated ORFs across isolates of one species start at the same
+    relative position (barring rare indels), so majority-voting per column is just as
+    meaningful here as it is over genomic termini.
+
+    Returns "" if the species has no usable wild reference sequence for this segment --
+    the caller MUST treat that as `no_parental_sequence`, never compare against an
+    empty window.
+    """
+    windows = _wild_species_cds_windows(reference, species, segment, window)
+    if not windows:
+        return ""
+    five, _three = empirical_panhandle_consensus(windows, n=window)
+    return five
+
+
+def rpi_species_assignment(
         gate1: "Gate1Result", odd_segment: str) -> Tuple[str, str]:
-    """(donor_species, backbone_species) for M_pack (D3).
+    """(donor_species, backbone_species) for the candidate's odd segment (D3).
+
+    SHARED by score_m_pack and score_m_pol: both need the same answer to "which
+    species is this candidate's odd segment implicated against, and which species is
+    its backbone" -- there is exactly one such assignment per candidate, not one per
+    factor, so both call the same function rather than risk the two factors silently
+    disagreeing about who the backbone is.
 
     donor_species is gate1's own top hit for `odd_segment` -- the species whose
     reference consensus stands in for "the segment this candidate's odd segment
@@ -1681,7 +1748,7 @@ def score_m_pack(
       "scored"               -- at least one candidate-vs-backbone-consensus duplex pair
                                 was folded successfully.
       "no_parental_sequence" -- the donor/backbone species could not be determined
-                                unambiguously (mpack_species_assignment), or neither has
+                                unambiguously (rpi_species_assignment), or neither has
                                 a usable wild reference sequence for the relevant
                                 segment (species_consensus_panhandle_window).
       "undefined_energy"     -- ViennaRNA (or boltzmann_compatibility, N4) could not
@@ -1701,7 +1768,7 @@ def score_m_pack(
     identically 1.0 for every candidate) -- and it is avoided here because the two sides
     of every fold come from genuinely different sources: the "actual" side is the
     CANDIDATE's own genomic sequence; the "reference" side is the BACKBONE SPECIES' OWN
-    CONSENSUS, sourced from `reference.genomic_index`. The mpack_species_assignment
+    CONSENSUS, sourced from `reference.genomic_index`. The rpi_species_assignment
     donor==backbone case (gate1 pattern "concordant") looks superficially similar but is
     NOT the same bug: both sides still come from different sources (this candidate's
     actual sequence vs that species' independently-built reference consensus), and a
@@ -1716,7 +1783,7 @@ def score_m_pack(
     averaging over all of them avoids an arbitrary choice of just one.
     """
     table = _weights(weights)
-    donor_species, backbone_species = mpack_species_assignment(gate1, odd_segment)
+    donor_species, backbone_species = rpi_species_assignment(gate1, odd_segment)
     if not donor_species or not backbone_species:
         return 1.0, "no_parental_sequence"
 
@@ -1776,6 +1843,65 @@ def score_m_pack(
     except ValueError:
         return 1.0, "undefined_energy"
     return value, "scored"
+
+
+def score_m_pol(
+        candidate_cds: Dict[str, str], reference: ReferenceData, gate1: "Gate1Result",
+        odd_segment: str, window: int = RPI_MPOL_CDS_WINDOW_NT,
+) -> Tuple[float, str]:
+    """Factor M_pol (D3, WS3.4): does the candidate's actual N-recognition footprint,
+    beyond the genus-invariant tag, match what the BACKBONE species' own reference
+    consensus looks like?
+
+    Returns (value, status). Status is whatever `polymerase_compatibility` itself
+    returns ("scored" or "no_signal_beyond_tag" -- see its docstring), UNLESS the
+    backbone species or its reference sequence cannot be determined at all, in which
+    case this returns "no_parental_sequence" -- the same vocabulary score_m_pack uses
+    for the same reason: this function never got as far as attempting a comparison.
+
+    "fixed_constant" is DELIBERATELY NOT produced here. Spec 6.2's mandatory variance
+    check (`m_pol_variance_check`) is a RUN-LEVEL check over "a representative sample of
+    lineage pairs" -- it decides once, for a whole deployment, whether M_pol is
+    informative enough to admit to the product; it is not a per-candidate computation,
+    and score_candidate scores exactly one candidate. Wiring that run-level check in is
+    future work (spec 6.2 also notes "no real sample of lineage pairs to run over in
+    production" existed until this task's real parental termini did), not something
+    Task 11 asked for -- Task 11's own checklist is "stop self-comparison" and "stop
+    forcing status", both of which this function does.
+
+    NEVER SELF-COMPARISON (D3), for the exact reason this factor existed as a
+    self-comparison bug before this task: `candidate_termini` is built from the
+    CANDIDATE's own CDS; `parent_termini` is built from the BACKBONE SPECIES' OWN
+    REFERENCE CONSENSUS (`species_consensus_cds_window`), sourced from
+    `reference.genomic_index` -- two genuinely different sources.
+
+    ONE backbone species covers all three segments here, same reasoning as
+    score_m_pack: the question is "does the candidate look like a genuine backbone
+    genome," so the yardstick for every segment -- including the truly-donated one --
+    is what the backbone's OWN native segment would look like, not the donor's. Using
+    the donor's own consensus for the donated segment would make M_pol insensitive to
+    reassortment by construction (a genuinely-donated segment would always match its
+    own true species closely).
+
+    `footprint` is sourced from `n_recognition_footprint(backbone_species)` -- the
+    species-specific N-recognition length (Mir & Panganiban's SNV-23-vs-genus-9
+    asymmetry) that was previously never wired to any real species at any production
+    call site, because no real backbone species existed to look it up for.
+    """
+    _donor, backbone_species = rpi_species_assignment(gate1, odd_segment)
+    if not backbone_species:
+        return 1.0, "no_parental_sequence"
+
+    candidate_termini = {seg: candidate_cds.get(seg, "")[:window] for seg in ("S", "M", "L")}
+    parent_termini = {
+        seg: species_consensus_cds_window(reference, backbone_species, seg, window=window)
+        for seg in ("S", "M", "L")
+    }
+    if not any(parent_termini.values()):
+        return 1.0, "no_parental_sequence"
+
+    footprint = n_recognition_footprint(backbone_species)
+    return polymerase_compatibility(candidate_termini, parent_termini, footprint=footprint)
 
 
 def retention_factor(odd_segment: str, structural_intact: bool,
@@ -2773,37 +2899,31 @@ def score_candidate(
     # Task 8 possible. It is assembled from the gate results above but never feeds BACK
     # into verdict/combine_verdict -- see VerdictUnchangedRegressionTest.
     #
-    # SCAFFOLDING (M_pol): terminal_windows is built from the CANDIDATE's own CDS and
-    # passed as BOTH the candidate_termini and parent_termini arguments below, i.e.
-    # M_pol is scored against itself and is identically 1.0 for every candidate. Real
-    # parental termini would need to be sourced from reference.genomic_index per
-    # implicated species -- deferred to a follow-up (see task brief).
+    # M_PACK and M_POL (D3, Task 10/11, WS3.3/WS3.4) BOTH now score for real, and both
+    # share the SAME odd_segment default and the SAME donor/backbone species assignment
+    # (rpi_species_assignment) -- see score_m_pack's and score_m_pol's docstrings for
+    # the full method, the status vocabularies, and why the donor==backbone (concordant)
+    # case is the correct neutral answer rather than the self-comparison bug both used
+    # to have (M_pol via `polymerase_compatibility(terminal_windows, terminal_windows)`;
+    # M_pack via the hardcoded 1.0).
     #
-    # The status is therefore FORCED to "fixed_constant" here, discarding the status
-    # polymerase_compatibility returns. That function has no way to know it is being
-    # handed the same dict twice, and m_pol_variance_check -- the mechanism spec 6.2
-    # provides for making this call -- has no real sample of lineage pairs to run over
-    # in production, so it is never invoked on this path. Reporting the "scored" it
-    # returns would put a constant in the output dressed as a measurement, which is the
-    # exact thing spec 6.2's status column exists to prevent. When real parental
-    # termini land, delete the override and let m_pol_variance_check decide.
-    terminal_windows = {seg: candidate_cds.get(seg, "")[:64] for seg in ("S", "M", "L")}
-    m_pol_value, _m_pol_self_comparison_status = polymerase_compatibility(
-        terminal_windows, terminal_windows)
-    # M_PACK (D3, Task 10 / WS3.3): scored for real via score_m_pack -- the candidate's
-    # own cross-segment panhandle duplex, cofolded against the BACKBONE SPECIES' OWN
-    # reference consensus (reference.genomic_index), never against the candidate
-    # itself. See score_m_pack's docstring for the full method, the four possible
-    # statuses, and why the donor==backbone (concordant) case is not the self-comparison
-    # bug M_pol still has below.
+    # WS3.1's calibration measured M_pack's ddG as REAL but SMALL signal (Cliff's
+    # delta = +0.222; 38% of the calibration panel has ddG <= 0, where M_pack saturates
+    # at exactly 1.0). User-acknowledged 2026-08-29: proceed as scoped, let M_pol carry
+    # more of the b2 cross-species discrimination weight. See
+    # data/rpi_calibration.json -> "discrimination" for the measurement this call site
+    # now depends on.
     #
-    # WS3.1's calibration measured ddG as REAL but SMALL signal (Cliff's delta = +0.222;
-    # 38% of the calibration panel has ddG <= 0, where M_pack saturates at exactly 1.0).
-    # User-acknowledged 2026-08-29: proceed as scoped here, let M_pol (WS3.4) carry more
-    # of the b2 cross-species discrimination weight. See data/rpi_calibration.json ->
-    # "discrimination" for the measurement this call site now depends on.
+    # m_pol_status is now whatever polymerase_compatibility (or "no_parental_sequence")
+    # actually reports, no longer the forced "fixed_constant" lie. It will NOT report
+    # "fixed_constant" itself -- that comes only from m_pol_variance_check, a RUN-LEVEL
+    # check over a representative sample of lineage pairs (spec 6.2), not a
+    # per-candidate one; wiring that in is future work, not Task 11's stated scope. See
+    # score_m_pol's docstring.
     m_pack_value, m_pack_status = score_m_pack(
         candidate, reference, gate1, gate1.discordant_segment or "M")
+    m_pol_value, m_pol_status = score_m_pol(
+        candidate_cds, reference, gate1, gate1.discordant_segment or "M")
     result.update(compute_rpi(
         implicated_species=gate1.implicated_species,
         isolates=reference.isolates,
@@ -2832,7 +2952,7 @@ def score_candidate(
         m_pack=m_pack_value,
         m_pack_status=m_pack_status,
         m_pol=m_pol_value,
-        m_pol_status="fixed_constant",
+        m_pol_status=m_pol_status,
         structural_intact=not (
             gate2a.tmis_conserved is False
             or gate2a.ph_switch_conserved is False
@@ -4535,13 +4655,13 @@ class SpeciesConsensusPanhandleWindowTest(unittest.TestCase):
             species_consensus_panhandle_window(reference, "Nobody", "M", "5"), "")
 
 
-class MpackSpeciesAssignmentTest(unittest.TestCase):
+class RpiSpeciesAssignmentTest(unittest.TestCase):
     def test_two_implicated_species_gives_donor_and_backbone(self):
         gate1 = Gate1Result(
             top_hits={"M": [SpeciesHit(species="Donor", distance=0.1)]},
             implicated_species=["Backbone", "Donor"], discordant_segment="M",
             pattern="m_only")
-        donor, backbone = mpack_species_assignment(gate1, "M")
+        donor, backbone = rpi_species_assignment(gate1, "M")
         self.assertEqual((donor, backbone), ("Donor", "Backbone"))
 
     def test_concordant_pattern_returns_the_same_species_for_both(self):
@@ -4551,7 +4671,7 @@ class MpackSpeciesAssignmentTest(unittest.TestCase):
         gate1 = Gate1Result(
             top_hits={"M": [SpeciesHit(species="OnlySpecies", distance=0.1)]},
             implicated_species=["OnlySpecies"], discordant_segment="", pattern="concordant")
-        donor, backbone = mpack_species_assignment(gate1, "M")
+        donor, backbone = rpi_species_assignment(gate1, "M")
         self.assertEqual((donor, backbone), ("OnlySpecies", "OnlySpecies"))
 
     def test_three_or_more_implicated_species_is_unresolved(self):
@@ -4561,12 +4681,12 @@ class MpackSpeciesAssignmentTest(unittest.TestCase):
             top_hits={"M": [SpeciesHit(species="Donor", distance=0.1)]},
             implicated_species=["Backbone1", "Backbone2", "Donor"],
             discordant_segment="M", pattern="m_only")
-        self.assertEqual(mpack_species_assignment(gate1, "M"), ("Donor", ""))
+        self.assertEqual(rpi_species_assignment(gate1, "M"), ("Donor", ""))
 
     def test_no_hits_for_the_odd_segment_is_unresolved(self):
         gate1 = Gate1Result(top_hits={"M": []}, implicated_species=["Backbone"],
                             discordant_segment="M", pattern="m_only")
-        self.assertEqual(mpack_species_assignment(gate1, "M"), ("", ""))
+        self.assertEqual(rpi_species_assignment(gate1, "M"), ("", ""))
 
 
 class ScoreMPackTest(unittest.TestCase):
@@ -4686,6 +4806,163 @@ class ScoreMPackTest(unittest.TestCase):
             m_genomic=_tagged_seq("GG", "AA"), l_genomic=_tagged_seq("AA", "TT"))
         value, _status = score_m_pack(candidate, reference, gate1, "M",
                                       weights=self._weights())
+        self.assertGreater(value, 0.0)
+        self.assertLessEqual(value, 1.0)
+
+
+def _orf_seq(distinguishing_run: str) -> str:
+    """A minimal genomic sequence whose longest ORF is ATG + 11 A's + `distinguishing_run`
+    + 10 G's + TAA. Indices 0-13 of the CDS are the invariant-tag region (14 nt);
+    indices 14-22 are exactly `_beyond_tag`'s scoring window at footprint=23 (SNV's
+    footprint, per n_recognition_footprint) -- so `distinguishing_run` (9 nt) is the
+    ONLY thing polymerase_compatibility can see differ between two sequences built from
+    this helper."""
+    return "ATG" + "A" * 11 + distinguishing_run + "G" * 10 + "TAA"
+
+
+class SpeciesConsensusCdsWindowTest(unittest.TestCase):
+    def test_majority_vote_across_isolates_of_one_species(self):
+        seqs = {
+            "SpA:i1_M": _orf_seq("CCCCCCCCC"),
+            "SpA:i2_M": _orf_seq("CCCCCCCCC"),
+            "SpA:i3_M": _orf_seq("TTTTTTTTT"),
+        }
+        isolates = [_genomic_isolate("SpA", f"i{n}", m_seq=seqs[f"SpA:i{n}_M"])
+                   for n in (1, 2, 3)]
+        reference = _genomic_reference(isolates, seqs)
+        window = species_consensus_cds_window(reference, "SpA", "M", window=30)
+        self.assertEqual(_beyond_tag(window, 23), "CCCCCCCCC")
+
+    def test_isolates_with_no_findable_orf_are_excluded(self):
+        seqs = {
+            "SpA:i1_M": _orf_seq("CCCCCCCCC"),
+            "SpA:i2_M": "GGGGGGGGGGGGGGGGGGGGGGGG",  # no ATG at all -- no ORF
+        }
+        isolates = [_genomic_isolate("SpA", "i1", m_seq=seqs["SpA:i1_M"]),
+                   _genomic_isolate("SpA", "i2", m_seq=seqs["SpA:i2_M"])]
+        reference = _genomic_reference(isolates, seqs)
+        window = species_consensus_cds_window(reference, "SpA", "M", window=30)
+        self.assertEqual(_beyond_tag(window, 23), "CCCCCCCCC")
+
+    def test_not_filtered_on_genomic_panhandle_termini(self):
+        """A deposit missing its UTR panhandle tags can still have a perfectly good
+        ORF -- has_genomic_panhandle_termini must NOT gate this function the way it
+        gates species_consensus_panhandle_window."""
+        seq = _orf_seq("CCCCCCCCC")
+        self.assertFalse(has_genomic_panhandle_termini(seq))
+        isolates = [_genomic_isolate("SpA", "i1", m_seq=seq)]
+        reference = _genomic_reference(isolates, {"SpA:i1_M": seq})
+        window = species_consensus_cds_window(reference, "SpA", "M", window=30)
+        self.assertEqual(_beyond_tag(window, 23), "CCCCCCCCC")
+
+    def test_returns_empty_string_when_species_has_no_usable_sequence(self):
+        reference = _genomic_reference([], {})
+        self.assertEqual(
+            species_consensus_cds_window(reference, "Nobody", "M", window=30), "")
+
+
+class ScoreMPolTest(unittest.TestCase):
+    """D3/Task 11 (WS3.4). Backbone species is the REAL "Orthohantavirus sinnombreense"
+    (footprint 23, via the real n_recognition_footprint lookup) so these tests exercise
+    the actual species-specific footprint wiring rather than a fake standing in for it."""
+
+    BACKBONE = "Orthohantavirus sinnombreense"
+    DONOR = "Orthohantavirus andesense"
+
+    def _reference_and_gate1(self, m_run: str = "AAAAAAAAA"):
+        seqs = {
+            f"{self.BACKBONE}:i1_S": _orf_seq("AAAAAAAAA"),
+            f"{self.BACKBONE}:i1_M": _orf_seq("AAAAAAAAA"),
+            f"{self.BACKBONE}:i1_L": _orf_seq("AAAAAAAAA"),
+            f"{self.DONOR}:i1_M": _orf_seq(m_run),
+        }
+        isolates = [
+            _genomic_isolate(self.BACKBONE, "i1", s_seq=seqs[f"{self.BACKBONE}:i1_S"],
+                            m_seq=seqs[f"{self.BACKBONE}:i1_M"],
+                            l_seq=seqs[f"{self.BACKBONE}:i1_L"]),
+            _genomic_isolate(self.DONOR, "i1", m_seq=seqs[f"{self.DONOR}:i1_M"]),
+        ]
+        reference = _genomic_reference(isolates, seqs)
+        gate1 = Gate1Result(
+            top_hits={"M": [SpeciesHit(species=self.DONOR, distance=0.1)]},
+            implicated_species=[self.BACKBONE, self.DONOR], discordant_segment="M",
+            pattern="m_only")
+        return reference, gate1
+
+    def test_candidate_matching_the_backbone_scores_one(self):
+        reference, gate1 = self._reference_and_gate1()
+        candidate_cds = {
+            "S": _orf_seq("AAAAAAAAA"), "M": _orf_seq("AAAAAAAAA"),
+            "L": _orf_seq("AAAAAAAAA"),
+        }
+        value, status = score_m_pol(candidate_cds, reference, gate1, "M", window=30)
+        self.assertEqual(status, "scored")
+        self.assertEqual(value, 1.0)
+
+    def test_candidate_with_a_mismatched_odd_segment_scores_below_one(self):
+        """The candidate's ACTUAL M footprint (beyond the tag) does not match what the
+        backbone species' own M would look like -- this is the signal M_pol exists to
+        carry."""
+        reference, gate1 = self._reference_and_gate1()
+        candidate_cds = {
+            "S": _orf_seq("AAAAAAAAA"), "M": _orf_seq("TTTTTTTTT"),
+            "L": _orf_seq("AAAAAAAAA"),
+        }
+        value, status = score_m_pol(candidate_cds, reference, gate1, "M", window=30)
+        self.assertEqual(status, "scored")
+        self.assertLess(value, 1.0)
+        self.assertGreater(value, 0.0)
+
+    def test_never_self_comparison(self):
+        """D3: mutating the candidate's own CDS after scoring must not retroactively
+        change an already-computed result -- the reference side is structurally
+        independent, sourced from reference.genomic_index, not aliased to the
+        candidate's own dict the way the pre-WS3.4 bug aliased it."""
+        reference, gate1 = self._reference_and_gate1()
+        candidate_cds = {"S": _orf_seq("AAAAAAAAA"), "M": _orf_seq("AAAAAAAAA"),
+                         "L": _orf_seq("AAAAAAAAA")}
+        value_before, _ = score_m_pol(candidate_cds, reference, gate1, "M", window=30)
+        candidate_cds["M"] = _orf_seq("TTTTTTTTT")
+        value_after, _ = score_m_pol(candidate_cds, reference, gate1, "M", window=30)
+        self.assertNotEqual(value_before, value_after)
+
+    def test_uses_the_backbone_species_own_footprint_length(self):
+        """Confirms the footprint is actually keyed on the BACKBONE species (23 nt,
+        sinnombreense) and not silently defaulted to 9 -- at the 9-nt default this
+        candidate's mismatch would fall entirely inside the invariant tag and score
+        1.0 regardless of the real difference."""
+        reference, gate1 = self._reference_and_gate1()
+        candidate_cds = {"S": _orf_seq("AAAAAAAAA"), "M": _orf_seq("TTTTTTTTT"),
+                         "L": _orf_seq("AAAAAAAAA")}
+        value, _status = score_m_pol(candidate_cds, reference, gate1, "M", window=30)
+        self.assertLess(value, 1.0)
+
+    def test_no_parental_sequence_when_backbone_is_unresolved(self):
+        reference, gate1 = self._reference_and_gate1()
+        gate1.implicated_species = [self.BACKBONE, "SomeOtherSpecies", self.DONOR]
+        candidate_cds = {"S": _orf_seq("AAAAAAAAA"), "M": _orf_seq("AAAAAAAAA"),
+                         "L": _orf_seq("AAAAAAAAA")}
+        value, status = score_m_pol(candidate_cds, reference, gate1, "M", window=30)
+        self.assertEqual(status, "no_parental_sequence")
+        self.assertEqual(value, 1.0)
+
+    def test_no_parental_sequence_when_species_has_no_reference_sequence(self):
+        reference = _genomic_reference([], {})
+        gate1 = Gate1Result(
+            top_hits={"M": [SpeciesHit(species=self.DONOR, distance=0.1)]},
+            implicated_species=[self.BACKBONE, self.DONOR], discordant_segment="M",
+            pattern="m_only")
+        candidate_cds = {"S": _orf_seq("AAAAAAAAA"), "M": _orf_seq("AAAAAAAAA"),
+                         "L": _orf_seq("AAAAAAAAA")}
+        value, status = score_m_pol(candidate_cds, reference, gate1, "M", window=30)
+        self.assertEqual(status, "no_parental_sequence")
+        self.assertEqual(value, 1.0)
+
+    def test_never_produces_a_literal_zero(self):
+        reference, gate1 = self._reference_and_gate1()
+        candidate_cds = {"S": _orf_seq("TTTTTTTTT"), "M": _orf_seq("TTTTTTTTT"),
+                         "L": _orf_seq("TTTTTTTTT")}
+        value, _status = score_m_pol(candidate_cds, reference, gate1, "M", window=30)
         self.assertGreater(value, 0.0)
         self.assertLessEqual(value, 1.0)
 

@@ -710,13 +710,33 @@ to retune τ.
   `SpeciesConsensusPanhandleWindowTest`, `MpackSpeciesAssignmentTest`, `ScoreMPackTest`),
   ~26 tests. README limitation item 8 and `PROJECT-STATE.md` §3 updated to match.
 
-### Task 11: Score M_pol for real (D3)
+### Task 11: Score M_pol for real (D3) — DONE (2026-08-29)
 
-- [ ] Stop passing `terminal_windows` as both arguments to `polymerase_compatibility`
-  (`reassortment_detector.py:2431`). Source real parental termini.
-- [ ] Delete the forced `m_pol_status="fixed_constant"` override so `m_pol_variance_check` can do
-  its job.
-- [ ] **`VerdictUnchangedRegressionTest` must stay green** — RPI must not feed back into verdicts.
+- [x] Stop passing `terminal_windows` as both arguments to `polymerase_compatibility`.
+  Source real parental termini. `score_m_pol` builds `parent_termini` from the
+  **backbone species' own reference consensus** (`species_consensus_cds_window`,
+  majority-vote over that species' wild isolates' `candidate_cds_from_orf` windows —
+  NOT filtered on `has_genomic_panhandle_termini`, since a UTR-trimmed deposit can
+  still carry a fully intact ORF). Backbone/donor species assignment is **shared with
+  M_pack** via the renamed `rpi_species_assignment` (was `mpack_species_assignment`) —
+  one assignment per candidate, not one per factor, so the two can't silently disagree
+  about who the backbone is. **Bonus wiring, directly enabled by this task and not
+  separately scoped:** `footprint` is now `n_recognition_footprint(backbone_species)`
+  instead of the always-default 9 nt — SNV's real 23-nt asymmetry is exercised for the
+  first time at a production call site. Smoke-tested on the real WS4 panel: SNV-backbone
+  candidates score 0.74–0.96 (`status="scored"`), everything else honestly reports
+  `no_signal_beyond_tag` (footprint 9 falls entirely inside the invariant 14-nt tag).
+- [x] Delete the forced `m_pol_status="fixed_constant"` override so `m_pol_variance_check` can do
+  its job. `rpi_m_pol_status` now reports whatever `polymerase_compatibility` actually
+  returns (`scored` / `no_signal_beyond_tag`), or `no_parental_sequence` when the backbone
+  can't be determined or has no reference sequence — the same vocabulary `score_m_pack`
+  uses, for the same reason. **`m_pol_variance_check` itself is still NOT invoked** — it
+  is a RUN-LEVEL check over "a representative sample of lineage pairs" (spec 6.2), not a
+  per-candidate computation, and wiring that run-level aggregation is future work, not
+  this task's stated checklist.
+- [x] **`VerdictUnchangedRegressionTest` stays green** — RPI still does not feed back into
+  verdicts. Full suite **228 tests** (217 + 11 new: `SpeciesConsensusCdsWindowTest`,
+  `ScoreMPolTest`), all pass, 845s.
 
 ---
 

@@ -755,32 +755,44 @@ it must reproduce it. Every number this index produces inherits these constraint
    mode (c) — compensatory mutations restoring interaction interfaces after reassortment —
    is **out of scope** and is a named limitation, not a term in the model. A reassortant
    scored low may still emerge after adaptation.
-8. **One of the four generation factors is not measured in the shipped code; the other was
-   weakly discriminating even when measured (WS3.1, 2026-08-29).** The design defines
-   `rpi_generation = E × K × M_pack × M_pol`, but as shipped:
-   - `M_pack` is now scored for real (`score_m_pack`, D3): the candidate's own
-     cross-segment panhandle duplex, cofolded via the ViennaRNA Python bindings and
-     rescaled `M_pack = exp(-ΔΔG / τ)` against the **backbone species' own reference
-     consensus** (never the candidate compared to itself). τ = 3.914 is *derived*, not
-     chosen — the robust p5–p95 span of ΔΔG over a 42-isolate, 14-species, 756-fold
-     calibration panel disjoint from every validation group below (`rpi_calibration.py`,
-     `data/rpi_calibration.json`). **The signal is real but small**: only 62% of the
-     calibration panel's observations have non-cognate duplexes weaker than cognate ones
-     in the expected direction, and 38% have ΔΔG ≤ 0, where M_pack saturates at exactly
-     1.0 and contributes nothing (Cliff's δ = +0.222, conventionally "small"). The genus's
-     terminal 14 nt are invariant across species *and* across S/M/L, which structurally
-     caps what a terminal duplex can distinguish. **M_pack alone should not be expected to
-     separate cross-species sympatric shuffles (the WS4 b2 group)** — `rpi_m_pol` is
-     expected to carry more of that weight once it is real (below).
-   - `M_pol` is still scored by comparing each candidate's terminal windows **against
-     themselves**, so it is identically 1.0 for every candidate. `rpi_m_pol_status` is
-     therefore still forced to `fixed_constant` on every row rather than reporting the
-     `scored` that `polymerase_compatibility` returns — a constant must not appear in a
-     Methods table dressed as a measurement.
+8. **Both molecular generation factors are now measured (WS3.1–WS3.4, 2026-08-29), and
+   both are weaker signals than the design hoped.** The design defines
+   `rpi_generation = E × K × M_pack × M_pol`. As shipped:
+   - `M_pack` (`score_m_pack`, D3): the candidate's own cross-segment panhandle duplex,
+     cofolded via the ViennaRNA Python bindings and rescaled `M_pack = exp(-ΔΔG / τ)`
+     against the **backbone species' own reference consensus** (never the candidate
+     compared to itself). τ = 3.914 is *derived*, not chosen — the robust p5–p95 span of
+     ΔΔG over a 42-isolate, 14-species, 756-fold calibration panel disjoint from every
+     validation group below (`rpi_calibration.py`, `data/rpi_calibration.json`). **The
+     signal is real but small**: only 62% of the calibration panel's observations have
+     non-cognate duplexes weaker than cognate ones in the expected direction, and 38%
+     have ΔΔG ≤ 0, where M_pack saturates at exactly 1.0 and contributes nothing (Cliff's
+     δ = +0.222, conventionally "small"). The genus's terminal 14 nt are invariant across
+     species *and* across S/M/L, which structurally caps what a terminal duplex can
+     distinguish.
+   - `M_pol` (`score_m_pol`, D3): the candidate's own N-recognition footprint beyond the
+     invariant tag, compared against the **backbone species' own reference consensus**
+     CDS window (never the candidate compared to itself — the earlier
+     `polymerase_compatibility(terminal_windows, terminal_windows)` self-comparison is
+     gone). `rpi_m_pol_status` reports whatever `polymerase_compatibility` actually
+     returns — `scored` or `no_signal_beyond_tag` — rather than the forced
+     `fixed_constant` shipped before this task. **The signal exists only for one
+     species.** Mir & Panganiban's genus-9-vs-SNV-23 asymmetry is the only wired
+     footprint length (`RPI_N_FOOTPRINT_NT`); every other species defaults to 9 nt, which
+     falls *entirely inside* the invariant 14-nt tag, so `M_pol` reports
+     `no_signal_beyond_tag` (neutral 1.0) for any backbone species that is not
+     *Orthohantavirus sinnombreense*. Measured on the WS4 panel: SNV-backbone candidates
+     score 0.74–0.96 (`scored`); the other 9 of 12 candidates in that sample report
+     `no_signal_beyond_tag`. **`m_pol_variance_check` (spec 6.2's mandatory "fix at 1.0 if
+     uninformative" gate) is declared but not invoked** — it is a run-level check over a
+     representative sample of lineage pairs, not a per-candidate computation, and wiring
+     that aggregation is future work.
 
-   **`rpi_generation` is therefore currently `E × M_pack × K`, not the four-factor
-   product.** `M_pol` becomes real once real parental termini are sourced the same way
-   `M_pack` now is — deliberately out of scope for the current work (WS3.4).
+   **`rpi_generation` is therefore now the full four-factor product `E × M_pack × M_pol
+   × K`**, but two of those four factors carry real signal for only a minority of
+   candidates — M_pack weakly for all, M_pol only for an SNV backbone. Neither gap is
+   closed by retuning a parameter; both are named limitations of what the underlying
+   biology currently supports measuring.
 9. **The K stratum is derived from a proxy, and every row says so.** `identity` is fed from
    `gate0.best_kmer_identity` — **protein** k-mer novelty against the nearest reference,
    maximised over segments — not the **parental nucleotide** divergence §7 stratifies on,
