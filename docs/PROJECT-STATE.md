@@ -14,7 +14,7 @@ A fresh session should need this file, `CLAUDE.md`, and the two documents in
 | **HEAD** | `6fb2813` (WS3.4) |
 | **`main`** | `e7d9f44`, pushed (was 4 commits behind at session start) |
 | **Test suite** | **228 tests, all pass**, ~14 min (`python -m unittest reassortment_detector`) + **39 tests, <1 s** (`python -m unittest rpi_calibration`) |
-| **Validation harness** | **PASS** — sensitivity 18/18, specificity 27/27, blind spot 5/5, adversarial 4/4 |
+| **Validation harness** | **PASS** — sensitivity 19/19 (added SNV x BCCV, WS4 Task 12), specificity 27/27, blind spot 5/5, adversarial 4/4 |
 | **Working tree** | Clean except `Mydocs/My Library.csv`, deleted by an external process; user said leave it |
 | **Unpushed** | `3947f1c`..`6fb2813` — WS3.1 through WS3.4, committed locally, **not pushed** |
 

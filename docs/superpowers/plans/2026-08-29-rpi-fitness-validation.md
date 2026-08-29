@@ -744,25 +744,44 @@ to retune τ.
 
 Gated on WS3.
 
-### Task 12: SNV × BCCV cross spec (D5)
+### Task 12: SNV × BCCV cross spec (D5) — DONE (2026-08-29)
 
-**Lookup already done (2026-08-29), start from this:**
+**The 2026-08-29 "lookup already done" note above was WRONG and is superseded.** It
+claimed BCCV was ICTV-folded into `Orthohantavirus bayoui`. This project's OWN curated
+species table (`all_hanta.py`'s `SPECIES_INFO`, cross-checked against
+`output/ortho_species_table.csv`) already resolves BCCV to its own separate species,
+**`Orthohantavirus nigrorivense`** (abbrev `"BCCV"`) — distinct from `bayoui` (Bayou
+virus). Verified directly against `all_hanta/`: every one of the 7 isolate records
+under `Orthohantavirus nigrorivense` (`NC_043073-075.1`, `L39949-51.1`, `GU997097.1`,
+`AB689163.1`) is a Black Creek Canal virus deposit — no Bayou virus sequence is lumped
+in under this name, so no species-level risk of accidentally picking a Bayou isolate
+exists (unlike what the wrong lookup assumed).
 
-- BCCV = Black Creek Canal virus → **`Orthohantavirus bayoui`** (ICTV 2021 folded BCCV into the
-  Bayou virus species; `Orthohantavirus bayoui` is present in the reference index).
-- BCCV sequences confirmed present in `all_hanta/ncbi_dataset/data/genomic.fna`:
-  `Black Creek Canal virus S segment`, `M segment`, `partial L segment`,
-  `strain SPB 9408076 segment L`.
-- **Unresolved and blocking:** one L is labelled *partial*. Whether any BCCV strain satisfies
-  `has_complete_triplet` (coding-complete on all three) is not yet established.
-
-- [ ] Confirm a coding-complete BCCV triplet exists via `PanelBuilder._usable`. **If none does,
-  log a skip — do not silently drop, and do not substitute a Bayou-virus isolate for a
-  Black-Creek-Canal one just because they share a species.** They are different member viruses;
-  the Rodriguez 1998 cross used BCCV specifically.
-- [ ] Add the cross spec: backbone `Orthohantavirus sinnombreense`, donor
-  `Orthohantavirus bayoui`, donated segment M, `donor_strain_hint` targeting Black Creek Canal
-  (not Bayou), `observed {M: 1, S: 0, L: 0}` per `RPI_INVITRO_BENCHMARK["SNV_x_BCCV"]`.
+- [x] Confirm a coding-complete BCCV triplet exists via `PanelBuilder._usable`. **It does
+  not** — every BCCV deposit in this dataset is single-segment (no isolate carries S+M+L
+  together). **This does not block the cross**: `find_donor` only needs the ONE donated
+  segment (M), not a triplet, by its own docstring — the same situation `Orthohantavirus
+  prospectense` (referenced in this same checklist item) is already in. `NC_043073.1`
+  (3668 nt) is a full-length, ICTV-band M segment on its own and is used as the donor.
+- [x] Added the cross spec to `PUBLISHED_CROSSES` in `validate_reassortment_detector.py`:
+  `RODRIGUEZ1998_SNV_NMR11sl_x_BCCVm` — backbone `Orthohantavirus sinnombreense`
+  (`nm r11`), donor `Orthohantavirus nigrorivense`, donated segment M. No
+  `donor_strain_hint` needed (the species is BCCV-only in this dataset; the field is
+  blank on every candidate isolate anyway, so a hint would silently match nothing).
+  Builds cleanly via `build_panel` (not skipped).
+- [x] **New finding, not anticipated by the plan:** gate1 reports `undetectable_by_design`
+  for this cross, not `m_only` — BCCV's M protein sits closer to the `Orthohantavirus
+  bayoui` reference profile than to any nigrorivense-distinguishing signal, and the gap
+  between top-2 candidate species falls inside `undetectable_floor`. gate1 STILL names
+  the correct segment (`discordant_segment == "M"`), so the case passes the harness's
+  PRIMARY criterion and lands in `summarise()`'s existing `localized_but_parents_
+  unresolvable` bucket. **`expect_pattern` is kept at `"m_only"`** — the module's own
+  docstring requires expectations to be an independent literature-based prediction,
+  "NOT from the detector's output"; baking the measured quirk into the expectation would
+  violate that. This is a genuinely new blind-spot flavour, distinct from class B's
+  same-species blind spot: a species pair that IS taxonomically distinct in this
+  project's own table but is NOT reliably distinguishable at the protein level from a
+  third, related species.
 
 ### Task 13: `rpi_discrimination.py` — the four groups (D7)
 

@@ -169,6 +169,58 @@ PUBLISHED_CROSSES: List[Dict[str, Any]] = [
         "blind_spot": True,
     },
     {
+        # D5 / Task 12. donor_species is "Orthohantavirus nigrorivense", NOT
+        # "Orthohantavirus bayoui" -- an earlier lookup for this task assumed ICTV had
+        # folded Black Creek Canal virus (BCCV) into the Bayou virus species, but
+        # this project's own curated species table (all_hanta.py's SPECIES_INFO,
+        # confirmed against output/ortho_species_table.csv) already resolves BCCV to
+        # its own species, "Orthohantavirus nigrorivense" (abbrev "BCCV"), separate
+        # from "Orthohantavirus bayoui". Verified directly: every isolate under
+        # "Orthohantavirus nigrorivense" in all_hanta/ is a Black Creek Canal virus
+        # deposit (NC_043073-075.1, L39949-51.1, GU997097.1, AB689163.1) -- no Bayou
+        # virus sequence is lumped in under this name, so no donor_strain_hint is
+        # needed to steer away from one (unlike the plan's original assumption).
+        #
+        # No BCCV isolate has a coding-complete S+M+L triplet in this dataset (every
+        # deposit above is single-segment). That does NOT block this cross: the donor
+        # only contributes the M segment, and find_donor does not require a triplet
+        # (see its own docstring) -- NC_043073.1 (3668 nt) is a full-length,
+        # ICTV-band M segment on its own.
+        "case_id": "RODRIGUEZ1998_SNV_NMR11sl_x_BCCVm",
+        "klass": "A_published_inter_species",
+        "paper": "Rodriguez, Owens, Peters & Nichol (1998) Virology 242:99-106, "
+                 "doi:10.1006/viro.1997.8990",
+        "reported": "Coinfection of Sin Nombre virus strain NM R11 with Black Creek "
+                    "Canal virus (a distinct ICTV species, not a same-species strain) "
+                    "at MOI 1 yielded a single M-exchanged reassortant -- markedly "
+                    "rarer than the same paper's intra-species NM R11 x CC107 cross "
+                    "(12 of 25). RPI_INVITRO_BENCHMARK['SNV_x_BCCV'] "
+                    "(reassortment_detector.py) already records these counts for the "
+                    "K-stratum prior; this entry reconstructs the candidate itself.",
+        "backbone_species": "Orthohantavirus sinnombreense",
+        "donor_species": "Orthohantavirus nigrorivense",
+        "donated_segment": "M",
+        "backbone_strain_hint": "nm r11",
+        # expect_pattern is "m_only", NOT the measured "undetectable_by_design" gate1
+        # actually returns on this real pair (verified 2026-08-29) -- this module's own
+        # docstring requires expect_* to be an independent prediction derived from the
+        # cross being inter/intra-species, "NOT from the detector's output", and setting
+        # it to whatever gate1 happens to emit would violate exactly that. The measured
+        # mismatch is real and worth recording here rather than silently: BCCV's M
+        # protein sits closer to the Orthohantavirus bayoui (Bayou virus) reference
+        # profile than to any distinguishing nigrorivense-specific signal, and the gap
+        # between top candidates falls inside undetectable_floor -- gate1 STILL names
+        # the correct segment (discordant_segment == "M"), so this case passes the
+        # PRIMARY criterion (`localized`) and lands in summarise()'s existing
+        # "localized_but_parents_unresolvable" bucket, not "also_exact_pattern_match".
+        # This is a genuinely new blind-spot flavour: a species pair that IS
+        # taxonomically distinct in this project's curated table but is NOT reliably
+        # distinguishable at the protein level from a third, related species -- gate1's
+        # blind spot is not limited to literal same-species pairs (class B).
+        "expect_pattern": "m_only",
+        "expect_discordant": "M",
+    },
+    {
         "case_id": "KLEMPA2018_DOBV_intragenotype_M",
         "klass": "B_published_intra_species",
         "paper": "Klempa (2018) Virus Genes 54:638-646, doi:10.1007/s11262-018-1590-z",
