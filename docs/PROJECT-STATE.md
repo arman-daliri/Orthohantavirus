@@ -205,27 +205,90 @@ Build `rpi_calibration.py` → `data/rpi_calibration.json`.
 
 ---
 
-## 9. Archived chat sessions (deleted 2026-08-29, recoverable from git)
+## 9. Project history — how we got here
 
-`docs/claude-sessions-backup-20260812-183855/` held **13 raw JSONL transcripts, 66
-files, 16 MB**, spanning **2026-07-30 → 2026-08-12**. They were raw logs, not curated
-notes, and their outcomes are already captured in the design docs listed below. Deleted
-to keep the working tree clean; recover with
-`git checkout <commit-before-deletion> -- docs/claude-sessions-backup-20260812-183855`.
+Consolidated from all 19 Claude sessions (2026-07-30 → 2026-08-29). The raw transcripts
+are no longer in `/resume`; this is the record. Read it to understand *why* the design is
+what it is.
 
-| Dates | Msgs | Topic | Superseded by |
-|---|---|---|---|
-| 07-30 | 10 | Protein-count discrepancy (15504 vs NCBI 15568) | — |
-| 07-30 → 07-31 | 1797 | Main pipeline development | `all_hanta.py`, README |
-| 07-30 | 25 | Parquet file troubles | Parquet→CSV migration |
-| 07-31 | 147 | Tooling/model questions | — |
-| 07-31 | 27 | Claude-desktop setup | — |
-| 07-31 | 24+15+32 | ML framework / pipeline / curation design briefs | `2026-08-12-reassortment-detector-design.md` |
-| 08-01 | 460 | Pipeline Q&A, output differences | README |
-| 08-01 | 72 | Parquet output issues | Parquet→CSV migration |
-| 08-01 → 08-12 | 1824 | Parquet→CSV conversion, pipeline-complete branch | `all_hanta.py` |
-| 08-02 → 08-12 | 1102 | Pipeline explanation and extension | `2026-08-13-three-stage-pipeline-split-design.md` |
-| 08-12 | 337 | Brainstorming → reassortment detector | `2026-08-12-reassortment-detector-design.md` |
+**Raw transcript recovery, if ever needed:**
+- The 13 pre-08-12 sessions: `git checkout 09c2226 -- docs/claude-sessions-backup-20260812-183855`
+- The 5 later sessions (07-30, 08-23, 08-24 → 08-28): local archive at
+  `C:\git-projects\_claude-session-archive-orthohantavirus\` — **outside the repo and
+  not git-tracked**, deliberately, so transcripts are never pushed again (see Phase 4).
+  This is a single local copy with no remote backup; if the machine is lost, so are they.
+
+### Phase 1 — Pipeline consolidation (2026-07-30)
+
+Two branches existed, `main` and `v2`, and the question was which was scientifically
+defensible for publication. `v2` won on bioinformatics and biology logic for handling
+public NCBI Orthohantavirus data, classification, and recognising well-characterised
+human-pathogenic strains. **`v2` was merged into `main`**; the extra branches (`v2`,
+`update`, `more-info`) were then deleted from GitHub, leaving `main` as the single line.
+Several `/ultrareview` and `/code-review` rounds fixed bugs found in the merged pipeline.
+`Mydocs/TEACHME.html` was written in this phase as a step-by-step explainer.
+
+**Carried forward:** all sequence "distance" in `all_hanta.py` is **alignment-free 3-mer
+cosine** on amino-acid composition, not phylogenetic distance. A reassortment classifier
+built on it was **withdrawn after failing literature validation** — which is the reason
+the current detector uses real phylogenetics in gate 4.
+
+### Phase 2 — Reassortment detector (2026-08-12)
+
+Brainstormed and specced the gate-based detector. Produced
+`2026-08-12-reassortment-detector-design.md` and the three-stage pipeline split.
+
+### Phase 3 — The RPI is conceived (2026-08-23 → 08-24)
+
+The Zotero MCP was connected specifically so papers could be **cited accurately** rather
+than from memory. The scoring design was grounded on Rivero — but with an explicit
+instruction to **double- and triple-check against other papers, because Rivero is a
+bioRxiv preprint and not formally published**.
+
+**The founding requirement, in the user's words:** *"I do not want to rely on another
+paper's raw index, but to have numerical score instead of implausible / possible /
+plausible / likely."*
+
+That is the whole reason the Reassortment Plausibility Index exists: **a continuous
+numerical score, independently derived, replacing a borrowed categorical scale.** It is
+also why every weight in `RPI_WEIGHTS` carries its own provenance and verification state
+in a comment, and why the index is repeatedly described as RELATIVE and never a
+probability. Executed via subagent-driven development into
+`2026-08-24-reassortment-plausibility-index-design.md`.
+
+### Phase 4 — Hardening and the privacy incident (2026-08-24 → 08-28)
+
+Multiple adversarial review rounds; fixes verified **by execution**, not by inspection,
+with reviewers explicitly told to confirm invariants hold **on the shipped output** and
+to report without fixing. `03-pipeline-phylogeny-reassortment` was reconciled into
+`main`.
+
+**The incident that set repo policy:** a push accidentally published
+`docs/claude-sessions-backup-20260812-183855/` (66 files, 16 MB of transcripts) and two
+copyrighted PDFs to `github.com/arman-daliri/Orthohantavirus`. The decision was **not**
+to rewrite history — the remote is not the primary user's account, so a rewrite would
+break other people's clones. Instead: **the repo stays PRIVATE**, the PDFs were extracted
+to notes and removed, and **public release became a separate clean repo** built from an
+explicit file list in `PUBLIC_RELEASE.md`. This is why §8's rules exist.
+
+### Phase 5 — RPI as a validated fitness function (2026-08-29, this session)
+
+Scope set by the user: *"a valid fitness function for a genetic algorithm to detect real
+from fake reassortants after shuffling segments"*, reproducible on Windows and Linux,
+handed off to a downstream team as a callable scorer. Produced decisions **D1–D14**, the
+E-vs-M_pack finding in §3, and the work in §5.
+
+### Session index (raw transcripts deleted)
+
+| Dates | Msgs | What happened |
+|---|---|---|
+| 07-30 → 08-12 | ~5,900 | 13 sessions: pipeline dev, Parquet→CSV migration, branch consolidation. *(deleted 2026-08-29; recoverable via `git checkout 09c2226 -- docs/claude-sessions-backup-20260812-183855`)* |
+| 07-30 09:27–10:10 | 179 | v2-vs-main comparison; v2 merged to main |
+| 07-30 10:13–12:32 | 476 | ultrareview cycles, bug fixes, TEACHME.html, GitHub branch cleanup |
+| 08-23 13:46–19:05 | 78 | superpowers plugin install |
+| 08-23 19:16 → 08-24 12:20 | 1,305 | **RPI design** — Zotero MCP, Rivero grounding, numerical-score requirement |
+| 08-24 12:39 → 08-28 18:45 | 1,614 | RPI implementation, adversarial reviews, privacy incident, repo policy |
+| 08-29 11:19 → 19:10 | 1,241 | **This session** — WS0/WS1/WS2, D2b, D1–D14 |
 
 **Surviving curated documents (do not delete):**
 - `docs/superpowers/specs/2026-08-12-reassortment-detector-design.md`
@@ -234,3 +297,4 @@ to keep the working tree clean; recover with
 - `docs/superpowers/specs/2026-08-29-rpi-fitness-function-design.md`
 - `docs/superpowers/plans/*.md`
 - `docs/superpowers/notes/2026-08-14-reassortment-detector-reconsolidation.md`
+- `Mydocs/TEACHME.html`, `PUBLIC_RELEASE.md`, `README.md`
