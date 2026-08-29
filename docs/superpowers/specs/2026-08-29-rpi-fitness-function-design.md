@@ -37,7 +37,8 @@ both Windows and Linux.
 | **D3** | WS3.4 (M_pol scored for real) | **In scope and required.** Compute M_pack and M_pol from the candidate's actual terminal windows against the **implicated parent/donor consensus** — never self-comparison. This is what makes the score sequence-dependent. |
 | **D4** | MAFFT + IQ-TREE install | **Go.** Pinned versions. Gate 4 fixture runs in a **scratch dir only**, never touching existing outputs. |
 | **D5** | SNV x BCCV | Add the cross spec; resolve the ICTV species name against the reference index. |
-| **D6** | Cross-OS reproducibility | Byte-identity for MAFFT and RPI outputs; **topology + support-level agreement** for IQ-TREE. |
+| **D6** | Cross-OS reproducibility | **Narrowed 2026-08-29.** Byte-identity for RPI outputs, and for MAFFT outputs **only at the same MAFFT version**. Across the two machines MAFFT agreement is asserted at **alignment-content level** via the fixture, and IQ-TREE at **topology + support level**. See the platform-version divergence note below. |
+| **D14** | MAFFT platform split | **Windows 7.526 / Linux 7.525** — forced, not chosen: 7.525 has no Windows build. Recorded in `tools/VERSIONS.txt`. |
 | **D7** | Hard-fake taxonomy | Split into **b1** (within-species shuffles) and **b2** (cross-species sympatric). See §4/WS4 — this changed the pass criterion. |
 | **D8** | Gate 1 determinism (WS0) | **Approved.** `sorted()` at `:800`, standalone commit before WS2. Removes per-process nondeterminism in which two species gate 3 examines. No verdict-column or gate-logic change; currently latent. The deeper **2-of-N** issue is logged as a KNOWN LIMITATION on `gate3_check` pointing at the **Factor E rebuild** — **not fixed now**. |
 | **D9** | WS-API runtime (C2) | **Approved as specified.** Per-accession memoisation of gate 0 / gate 1, per-species-set and per-accession-pair caches, ecology precompute. **Report warm and cold per-call latency separately, never blended.** |
@@ -273,7 +274,35 @@ This also requires fixing the stale docstring on `rnacofold_dg` and the clamp co
 whole-segment folding. The clamp should stay (still correct, still cheap) but its stated
 rationale needs to match reality.
 
-**D2:** approve N = 50, or name a different window.
+**D2: APPROVED — N = 50 nt**, swept 25 / 50 / 75.
+
+### D2b — the mechanism: ViennaRNA Python bindings, no CLI path (APPROVED 2026-08-29)
+
+**Discovered while provisioning WS2:** the pip `viennarna` package ships the **Python bindings
+only**. `import RNA` works and reports 2.7.2, but there is no `RNAcofold` executable anywhere in
+the interpreter tree and none on PATH. `rnacofold_dg()` shells out via
+`subprocess.run([binary, "--noPS"], ...)`, so **as written it cannot run on this machine at all** —
+it would raise `FileNotFoundError`.
+
+**Resolution: the production path uses `RNA.fold_compound(...)` / `mfe_dimer()` directly.**
+Reasons on record:
+
+- **Eliminates subprocess overhead at thousands of calls.** This matters for the WS-API budget:
+  the measured 7.1 ms per 50 nt x 50 nt cofold is via the bindings; a process spawn per fold would
+  add tens of ms on Windows, and the scorer is called in a loop.
+- **A single pinned version, with no CLI-vs-bindings drift.** One `viennarna==2.7.2` pin governs
+  the energy-parameter set. A separately-installed CLI could drift from the bindings and silently
+  change every dG.
+- **Removes `_parse_rnacofold_dg` from production** — the stdout-format regex that has carried an
+  "ASSUMED FORMAT, NOT VALIDATED" caveat since it was written, and which still has never been run
+  against real RNAcofold output, because no binary exists here to produce any.
+
+**No CLI fallback.** The subprocess path is removed from the API surface entirely rather than left
+as a half-working alternative that could silently diverge from the bindings.
+
+**Requirement carried into WS3.1:** the calibration artifact must record the **mechanism**
+(`"ViennaRNA Python bindings"`) alongside `RNA.__version__`, because the entire tau derivation
+depends on which one produced the energies.
 
 ---
 
@@ -339,12 +368,23 @@ Depends on nothing. Runs in parallel with WS1.
 - Seed audit: `random.Random(seed)` in `validate_reassortment_detector.py:396` is seeded;
   `--phylo-seed` defaults to 42. Add explicit seeding to any new RNG in WS3/WS4 and record the
   seed in every artifact.
-- **Cross-OS hash check — with an honest scope limit.** MAFFT alignments (fixed options) and
-  all RPI arithmetic (pure Python/numpy) are byte-reproducible. **IQ-TREE likelihood values are
-  not guaranteed bit-identical across OS, compiler, or thread count**, even with a fixed seed.
-  So the fixture check hashes the deterministic artifacts byte-for-byte, and compares IQ-TREE
-  output on **topology + support values**, not bytes. Claiming byte-identity for IQ-TREE across
-  OSes would be a claim we cannot keep.
+- **Cross-OS hash check — with two honest scope limits.**
+  1. All RPI arithmetic (pure Python/numpy) is byte-reproducible, and is checked that way.
+  2. **IQ-TREE likelihood values are not guaranteed bit-identical across OS, compiler, or
+     thread count**, even with a fixed seed, so IQ-TREE is compared on **topology + support
+     values**, not bytes. Claiming byte-identity for IQ-TREE across OSes would be a claim we
+     cannot keep.
+  3. **KNOWN PLATFORM-VERSION DIVERGENCE (D14): the two machines run different MAFFT
+     versions — Windows 7.526, Linux 7.525 — because MAFFT 7.525 has no Windows build and
+     7.526 has no source release, so no single version is obtainable on both.** MAFFT
+     byte-identity is therefore claimed **only within a version**; across the two machines
+     the fixture asserts **alignment-content agreement** instead.
+
+  On the 7.525/7.526 pair specifically: they are a maintenance release pair (MAFFT's own
+  version string dates the 7.526 build 2024/Apr/26; the 7.525 source tarball was posted
+  2024/Mar/19), and no algorithmic change between them is documented. That is an absence of
+  evidence, not evidence of absence — so the fixture **asserts** the equivalence rather than
+  assuming it, and a failure there is a real finding rather than a broken test.
 
 ### WS3 — M_pack (**gated on D1 and D2**)
 

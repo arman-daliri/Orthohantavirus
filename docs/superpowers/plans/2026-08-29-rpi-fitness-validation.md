@@ -12,7 +12,9 @@ parent/donor consensus, never self-comparison — which is what makes the index 
 Validation scores four groups and reports both an RPI ranking and a gate-4 tree separation.
 
 **Tech Stack:** Python 3.14 (system interpreter), numpy 2.5.1, pandas 3.0.5, Biopython, dendropy,
-ViennaRNA 2.7.2 (RNAcofold), MAFFT 7.525, IQ-TREE 3.1.3, unittest, matplotlib.
+ViennaRNA 2.7.2 (**Python bindings, not the CLI** -- D2b), MAFFT **7.526 on Windows / 7.525 on
+Linux** (D14: 7.525 has no Windows build), IQ-TREE 3.1.3 (`iqtree3.exe`, from the `iqtree/iqtree3`
+repo), unittest, matplotlib.
 
 **Spec:** `docs/superpowers/specs/2026-08-29-rpi-fitness-function-design.md`
 
@@ -26,13 +28,16 @@ ViennaRNA 2.7.2 (RNAcofold), MAFFT 7.525, IQ-TREE 3.1.3, unittest, matplotlib.
 - M_pack must be **bounded in (0, 1]**, **monotonic** in ddG, **no exact zeros**, **sweepable ±50%**.
 - **D1:** calibrate first — bimodal ddG with a clean gap → logistic; otherwise τ-scaled Boltzmann
   with `τ = ddG_span / ln(100)` ≈ 4.86.
-- **D2:** RNAcofold window **N = 50 nt**, swept 25 / 50 / 75.
+- **D2:** RNAcofold window **N = 50 nt**, swept 25 / 50 / 75. **D2b:** folded via the ViennaRNA
+  **Python bindings**; the subprocess/CLI path is removed from the API surface, no fallback.
 - **D3:** M_pack and M_pol computed from the candidate's terminal windows against the **implicated
   parent/donor consensus** — never self-comparison.
 - **D4:** Gate 4 fixture runs in a **scratch dir only**, never touching `output/`.
-- **D6:** byte-identity for MAFFT and RPI outputs; **topology + support agreement** for IQ-TREE.
+- **D6 (narrowed):** byte-identity for RPI outputs, and for MAFFT **only within a version**;
+  across the two machines MAFFT is asserted at **alignment-content** level and IQ-TREE at
+  **topology + support** level. **D14:** the Windows/Linux MAFFT split is forced, not chosen.
 - **D7:** `reals ≈ b1` is an **expected tie**, asserted as equivalence, never as a separation.
-- Suite baseline: **169 tests, ~14 min**. Every task ends with the suite green.
+- Suite baseline: **179 tests, ~13 min** as of WS0 (was 169 before WS1). Every task ends green.
 - `RPI_WEIGHTS_VERSION` (`reassortment_detector.py:1467`) is bumped in the *same commit* as any
   change to `RPI_WEIGHTS`.
 
@@ -494,13 +499,27 @@ class EnvironmentReconciliationTest(unittest.TestCase):
 | **This Windows machine** | **Manual pinned binaries, with SHA-256 checksums recorded in the repo.** |
 | **Omarchy Linux machine** | conda with pinned versions (`environment.yml`). |
 
-- [ ] **Step 1: Install** pinned `mafft=7.525`, `iqtree=3.1.3` by the route for this machine.
-- [ ] **Step 2: Record SHA-256 of every downloaded Windows binary** into a tracked
-  `tools/CHECKSUMS.sha256`. A pinned version without a checksum pins a *name*, not an artifact.
-- [ ] **Step 3: Commit the `--version` output of all three tools** (mafft, iqtree, RNAcofold) as a
-  tracked file, so the environment a result came from is recoverable from the repo alone.
-  ViennaRNA is already confirmed: **2.7.2**, python bindings importable, 50 nt x 50 nt cofold
-  measured at 7.1 ms.
+- [x] **Step 1: Install** — DONE 2026-08-29. **MAFFT 7.525 has no Windows build** (official page
+  offers 7.222/7.304/7.312/7.313/7.427/7.450/7.490/**7.526**), and the release tracks genuinely
+  diverge: the source page has 7.525 but not 7.526. Per D14, Windows takes **7.526**, Linux keeps
+  7.525. **IQ-TREE 3.1.3 is in `iqtree/iqtree3`, not `iqtree/iqtree2`** — the latter tops out at
+  v2.4.0 with no 3.x release at all.
+- [x] **Step 2: SHA-256 recorded** in `tools/CHECKSUMS.sha256`, including the Linux 7.525 source
+  tarball so that pin is an artifact too, not a bare version string.
+- [x] **Step 3: `--version` output captured** (by running each tool, not transcribed) in
+  `tools/VERSIONS.txt`. IQ-TREE `3.1.3 for Windows 64-bit built Jun 19 2026`; MAFFT
+  `v7.526 (2024/Apr/26)`; ViennaRNA `2.7.2` bindings, 50 nt x 50 nt cofold measured at 7.1 ms.
+  Linux rows are explicitly marked **NOT YET CAPTURED** rather than filled from the pins.
+- [x] Archives and extracted trees (134 MB) gitignored; only the two metadata files are tracked.
+
+**Two findings that Task 7 and gate 4 must handle:**
+
+- [ ] **The executable is `iqtree3.exe`**, not `iqtree`/`iqtree2`. `parse_args` defaults
+  `--iqtree-bin` to `None` and `validate_reassortment_detector.score_case` passes the literal
+  string `"iqtree"` (`:464`). Both need the real path threaded through before gate 4 can run.
+- [ ] **MAFFT's `--version` is not on the first line.** The `.bat` wrapper prints a "Preparing
+  environment to run MAFFT on Windows" preamble first. Any version check must scan for the `v7.x`
+  token rather than read line one.
 - [ ] **Step 3: Gate 4 fixture run in a scratch dir only.** Per D4 this must not touch `output/`.
   Assert it, do not merely intend it:
 
@@ -534,6 +553,11 @@ class EnvironmentReconciliationTest(unittest.TestCase):
   values are not guaranteed bit-identical across OS, compiler, or thread count even with a fixed
   seed. Compare via Robinson–Foulds distance == 0 and per-node support within tolerance. A byte
   hash here would be a promise the pipeline cannot keep.
+- [ ] **Step 3b: MAFFT across machines is alignment-content, not bytes (D6/D14).** The two
+  machines run different MAFFT versions by necessity. Byte-identity is asserted only
+  *within* a version; across them the fixture compares alignment content. The 7.525/7.526
+  pair has no documented algorithmic change, but the fixture **asserts** that rather than
+  assuming it — a failure here is a real finding, not a broken test.
 - [ ] **Step 4: Commit WS2.**
 
 ```bash
@@ -562,7 +586,11 @@ Gated on WS1. Implements D1, D2, D3.
 - [ ] **Step 2: Build cognate and non-cognate pair sets** from the reference index. **This panel
   must be disjoint from the WS4 validation groups** — otherwise τ is tuned on the validation set
   and the whole result is circular.
-- [ ] **Step 3: Run RNAcofold over the panel; record ViennaRNA version in the artifact.**
+- [ ] **Step 3: Fold the panel via the ViennaRNA PYTHON BINDINGS** (`RNA.fold_compound(a+"&"+b)`,
+  `mfe_dimer()`) -- **not** the CLI. Per D2b the pip package ships no RNAcofold executable, and the
+  subprocess path is removed from the API surface entirely; there is deliberately no fallback.
+  **The artifact must record the MECHANISM (`"ViennaRNA Python bindings"`) alongside
+  `RNA.__version__`**, because the whole tau derivation depends on which produced the energies.
 - [ ] **Step 4: Test bimodality and branch (D1).** Report the ddG distribution, a dip-statistic or
   two-component Gaussian-mixture BIC comparison, and the gap width. **Bimodal with a clean gap →
   logistic (Option C). Otherwise → τ-scaled Boltzmann with `τ = ddG_span / ln(100)`.**
