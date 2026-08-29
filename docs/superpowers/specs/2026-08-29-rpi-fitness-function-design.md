@@ -39,6 +39,12 @@ both Windows and Linux.
 | **D5** | SNV x BCCV | Add the cross spec; resolve the ICTV species name against the reference index. |
 | **D6** | Cross-OS reproducibility | Byte-identity for MAFFT and RPI outputs; **topology + support-level agreement** for IQ-TREE. |
 | **D7** | Hard-fake taxonomy | Split into **b1** (within-species shuffles) and **b2** (cross-species sympatric). See §4/WS4 — this changed the pass criterion. |
+| **D8** | Gate 1 determinism (WS0) | **Approved.** `sorted()` at `:800`, standalone commit before WS2. Removes per-process nondeterminism in which two species gate 3 examines. No verdict-column or gate-logic change; currently latent. The deeper **2-of-N** issue is logged as a KNOWN LIMITATION on `gate3_check` pointing at the **Factor E rebuild** — **not fixed now**. |
+| **D9** | WS-API runtime (C2) | **Approved as specified.** Per-accession memoisation of gate 0 / gate 1, per-species-set and per-accession-pair caches, ecology precompute. **Report warm and cold per-call latency separately, never blended.** |
+| **D10** | `score_triplet` contract (C3) | **Approved.** RPI columns and status flags only — **never a verdict, never `gate4_*`.** |
+| **D11** | Single source of truth (C4) | **Approved.** WS-API serialises WS4's group builder and the `PanelBuilder` accession lookup; no copies. **`_score_panel` must stop mutating the `RPI_WEIGHTS` global** — pass weights explicitly, which makes the no-retuning rule enforceable rather than merely documented. |
+| **D12** | Install route | **Corrected.** *This Windows machine:* **manual pinned binaries with SHA-256 checksums recorded in the repo** — bioconda does not serve Windows natively. *Omarchy Linux machine:* conda with pinned versions. **Commit the `--version` output of all three tools.** |
+| **D13** | tau ≈ 4.86 | **Provisional**, pending the WS3.1 measurement under the N = 50 window. **Do not quote as settled anywhere.** |
 
 ---
 
@@ -156,6 +162,12 @@ tau = ddG_span / ln(D)
 
 With `D = 100` (matching `host_decay`, the widest existing factor) and ddG_span = 22.4:
 **tau ~= 4.864**.
+
+> **PROVISIONAL — do not quote as settled (D13).** The 22.4 figure predates the D2 decision and
+> may have been measured on a different window. A 50 nt x 50 nt cofold under ViennaRNA 2.7.2
+> returned dG = -97.7 on a constructed near-complementary pair, so the true span under N = 50
+> could be substantially wider and tau correspondingly different. **WS3.1 measures it.** Every
+> number in this table is illustrative of the *form*, not of the final parameter.
 
 | ddG | M_pack |
 |---|---|

@@ -487,9 +487,20 @@ class EnvironmentReconciliationTest(unittest.TestCase):
 **Files:**
 - Modify: `environment.yml`, `requirements-pip.txt` (comment block naming the binary source)
 
-- [ ] **Step 1: Install** — conda if available, otherwise vendored Windows binaries. Pin
-  `mafft=7.525`, `iqtree=3.1.3` to match `environment.yml`.
-- [ ] **Step 2: Verify** — `mafft --version`, `iqtree --version`; record exact strings.
+**Install route is per-machine (D12) — `bioconda does not serve Windows natively`:**
+
+| Machine | Route |
+|---|---|
+| **This Windows machine** | **Manual pinned binaries, with SHA-256 checksums recorded in the repo.** |
+| **Omarchy Linux machine** | conda with pinned versions (`environment.yml`). |
+
+- [ ] **Step 1: Install** pinned `mafft=7.525`, `iqtree=3.1.3` by the route for this machine.
+- [ ] **Step 2: Record SHA-256 of every downloaded Windows binary** into a tracked
+  `tools/CHECKSUMS.sha256`. A pinned version without a checksum pins a *name*, not an artifact.
+- [ ] **Step 3: Commit the `--version` output of all three tools** (mafft, iqtree, RNAcofold) as a
+  tracked file, so the environment a result came from is recoverable from the repo alone.
+  ViennaRNA is already confirmed: **2.7.2**, python bindings importable, 50 nt x 50 nt cofold
+  measured at 7.1 ms.
 - [ ] **Step 3: Gate 4 fixture run in a scratch dir only.** Per D4 this must not touch `output/`.
   Assert it, do not merely intend it:
 
