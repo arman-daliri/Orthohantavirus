@@ -435,6 +435,28 @@ numbers above did not come from the usual Bash path.
 `b2_vs_random`'s wrong-sign result (previous section) is still undiagnosed — separate
 from this finding and not addressed by it.
 
+### gate0 junk_sequence diagnostic — RUN, 2026-08-30. Outcome: real incomplete deposits, not a bug.
+
+`diagnose_gate0_junk.py` (new, read-only — calls only public `gate0_check` /
+`_build_precomputed` / `load_reference_data`) checked why `REAL_ORTHO_sinnombreense_005`
+and the `unclassified Orthohantavirus|msb89863` row hit `junk_sequence` in the
+`c_real_positive` group.
+
+- **`sinnombreense_005`** (`t2|Orthohantavirus sinnombreense|202003197`): only L fails —
+  5705 nt vs the expected 6300-6800 nt window. S (1461 nt) and M (3673 nt) both pass
+  their own length checks. A partial/truncated L deposit, not a data-loading bug.
+- **`msb89863`** (`t2|unclassified Orthohantavirus|msb89863`): fails on **all three**
+  segments — S=330 nt (expected 1200-2100), M=1390 nt (expected 3400-3800), L=490 nt
+  (expected 6300-6800). These are not full genomic segments at all, just short partial
+  GenBank records.
+
+Both also warn `terminal panhandle motif not recognizable in either orientation` on
+every segment, consistent with the documented "48% of deposits lack their true termini"
+limitation. **Conclusion: gate0 is correctly rejecting genuinely incomplete NCBI
+deposits — this is expected behavior, not a bug.** No code change indicated; these two
+candidates staying `None` in the `c_real_positive` group is correct and should not be
+patched around (e.g. do not relax `SEGMENT_LENGTH_RANGE` to force a score out of them).
+
 ---
 
 ## 8. Standing rules
