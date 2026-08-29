@@ -755,20 +755,32 @@ it must reproduce it. Every number this index produces inherits these constraint
    mode (c) — compensatory mutations restoring interaction interfaces after reassortment —
    is **out of scope** and is a named limitation, not a term in the model. A reassortant
    scored low may still emerge after adaptation.
-8. **Two of the four generation factors are not measured in the shipped code.** The design
-   defines `rpi_generation = E × K × M_pack × M_pol`, but as shipped:
-   - `M_pack` is **hardcoded to 1.0**. Scoring it needs RNAcofold; `boltzmann_compatibility`
-     and `rnacofold_dg` are implemented and tested, but ViennaRNA is not installed and the
-     `environment.yml` pin has never been reconciled against a real environment build.
-   - `M_pol` is scored by comparing each candidate's terminal windows **against themselves**,
-     so it is identically 1.0 for every candidate. `rpi_m_pol_status` is therefore forced to
-     `fixed_constant` on every row rather than reporting the `scored` that
-     `polymerase_compatibility` returns — a constant must not appear in a Methods table
-     dressed as a measurement.
+8. **One of the four generation factors is not measured in the shipped code; the other was
+   weakly discriminating even when measured (WS3.1, 2026-08-29).** The design defines
+   `rpi_generation = E × K × M_pack × M_pol`, but as shipped:
+   - `M_pack` is now scored for real (`score_m_pack`, D3): the candidate's own
+     cross-segment panhandle duplex, cofolded via the ViennaRNA Python bindings and
+     rescaled `M_pack = exp(-ΔΔG / τ)` against the **backbone species' own reference
+     consensus** (never the candidate compared to itself). τ = 3.914 is *derived*, not
+     chosen — the robust p5–p95 span of ΔΔG over a 42-isolate, 14-species, 756-fold
+     calibration panel disjoint from every validation group below (`rpi_calibration.py`,
+     `data/rpi_calibration.json`). **The signal is real but small**: only 62% of the
+     calibration panel's observations have non-cognate duplexes weaker than cognate ones
+     in the expected direction, and 38% have ΔΔG ≤ 0, where M_pack saturates at exactly
+     1.0 and contributes nothing (Cliff's δ = +0.222, conventionally "small"). The genus's
+     terminal 14 nt are invariant across species *and* across S/M/L, which structurally
+     caps what a terminal duplex can distinguish. **M_pack alone should not be expected to
+     separate cross-species sympatric shuffles (the WS4 b2 group)** — `rpi_m_pol` is
+     expected to carry more of that weight once it is real (below).
+   - `M_pol` is still scored by comparing each candidate's terminal windows **against
+     themselves**, so it is identically 1.0 for every candidate. `rpi_m_pol_status` is
+     therefore still forced to `fixed_constant` on every row rather than reporting the
+     `scored` that `polymerase_compatibility` returns — a constant must not appear in a
+     Methods table dressed as a measurement.
 
-   **`rpi_generation` is therefore currently `E × K`, not the four-factor product.** Both
-   factors become real once parental termini and a ViennaRNA build are available; neither
-   is in scope for the current work.
+   **`rpi_generation` is therefore currently `E × M_pack × K`, not the four-factor
+   product.** `M_pol` becomes real once real parental termini are sourced the same way
+   `M_pack` now is — deliberately out of scope for the current work (WS3.4).
 9. **The K stratum is derived from a proxy, and every row says so.** `identity` is fed from
    `gate0.best_kmer_identity` — **protein** k-mer novelty against the nearest reference,
    maximised over segments — not the **parental nucleotide** divergence §7 stratifies on,

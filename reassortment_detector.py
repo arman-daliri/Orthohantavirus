@@ -1476,6 +1476,35 @@ def viennarna_provenance() -> Dict[str, str]:
     return {"mechanism": "ViennaRNA Python bindings", "version": str(RNA.__version__)}
 
 
+# The genus-conserved GENOMIC 5'/3' termini that form the intramolecular panhandle
+# (D2, WS3.1). NOT the same thing as HANTAVIRUS_TERMINAL_TAG_NT below -- that is a
+# CDS-relative invariant LENGTH used by polymerase_compatibility's N-recognition
+# scoring; these are the literal genomic RNA sequence at each end. A deposit missing
+# them is missing its actual termini: GenBank submissions are routinely trimmed, and
+# `SEGMENT_LENGTH_RANGE` does not catch it -- a segment 30 nt short at each end is still
+# comfortably inside the ICTV band. Measured on a real deposit (rpi_calibration.py, WS3.1):
+# a truncated segment's "terminal window" folded to -10.0 kcal/mol against -42.2 for a
+# terminally complete one -- arbitrary internal sequence, not a panhandle.
+HANTAVIRUS_GENOMIC_5P_TAG = "TAGTAGTA"
+HANTAVIRUS_GENOMIC_3P_TAG = "TACTACTA"  # == _reverse_complement(HANTAVIRUS_GENOMIC_5P_TAG)
+
+
+def has_genomic_panhandle_termini(sequence: str) -> bool:
+    """Does this genomic deposit carry both true termini, or is it trimmed?
+
+    48% of the wild full-length triplet pool in this dataset carries NEITHER tag
+    (measured in rpi_calibration.py, WS3.1). Folding a trimmed deposit's "terminal
+    window" scores noise, not a panhandle -- this predicate is what
+    `species_consensus_panhandle_window` filters on before building a consensus, for
+    the same reason the WS3.1 calibration panel filters on it before deriving tau: a
+    consensus built from mostly-trimmed sequences would be a consensus of arbitrary
+    internal sequence at the columns nearest each end.
+    """
+    sequence = sequence.strip().upper()
+    return (sequence.startswith(HANTAVIRUS_GENOMIC_5P_TAG)
+            and sequence.endswith(HANTAVIRUS_GENOMIC_3P_TAG))
+
+
 # The terminal 14 nt of S, M and L are highly conserved across the genus AND shared
 # between the three segments (J Virol 1995;69(12):8132-8136, PMC189768 -- content
 # verified, author list NOT verified; resolve before any bibliography). M_pol must
@@ -1570,6 +1599,185 @@ def m_pol_variance_check(
     return float(np.mean(values)), "scored"
 
 
+def _wild_species_genomic_sequences(
+        reference: ReferenceData, species: str, segment: str) -> List[str]:
+    """Terminally complete wild genomic sequences for one species' segment (D3).
+
+    Filters on `has_genomic_panhandle_termini` for the same reason WS3.1's calibration
+    panel does: a trimmed deposit's terminal window is arbitrary internal sequence, and
+    folding it would corrupt the consensus this feeds into M_pack.
+    """
+    isolates = [i for i in reference.isolates
+                if i.species_name == species and not i.is_lab_derived
+                and not i.is_vaccine_strain]
+    sequences = genomic_sequences_by_segment(isolates, reference.genomic_index)[segment]
+    return [seq for seq in sequences if has_genomic_panhandle_termini(seq)]
+
+
+def species_consensus_panhandle_window(
+        reference: ReferenceData, species: str, segment: str, end: str,
+        n: int = RPI_PANHANDLE_WINDOW_NT) -> str:
+    """Majority-vote consensus terminal window for one species' segment (D3) -- the
+    "implicated parent/donor consensus" M_pack is scored against.
+
+    A SPECIES-level substitute for the isolate-level cognate pairing
+    rpi_calibration.py measures tau from: at scoring time the candidate's true parent
+    isolate is exactly the unknown the whole exercise is trying to resolve, so the
+    nearest well-defined ground truth is the species' own consensus, not one isolate's
+    sequence picked arbitrarily.
+
+    Returns "" if the species has no usable wild reference sequence for this segment --
+    the caller MUST treat that as `no_parental_sequence`, never fold an empty window.
+    """
+    sequences = _wild_species_genomic_sequences(reference, species, segment)
+    if not sequences:
+        return ""
+    five, three = empirical_panhandle_consensus(sequences, n=n)
+    return five if end == "5" else three
+
+
+def mpack_species_assignment(
+        gate1: "Gate1Result", odd_segment: str) -> Tuple[str, str]:
+    """(donor_species, backbone_species) for M_pack (D3).
+
+    donor_species is gate1's own top hit for `odd_segment` -- the species whose
+    reference consensus stands in for "the segment this candidate's odd segment
+    resembles". backbone_species is the OTHER implicated species, when exactly one
+    exists.
+
+    Two well-defined outcomes and one degenerate one:
+      - Exactly one OTHER implicated species -> (donor, that species). The ordinary
+        single-discordant-segment case.
+      - Zero other implicated species (gate1 pattern "concordant": every segment,
+        including `odd_segment`, best-matches the SAME species) -> (donor, donor).
+        Comparing that species' own consensus against itself is the CORRECT neutral
+        case here, not the self-comparison bug D3 forbids -- see score_m_pack's
+        docstring for why these are different things.
+      - Two or more OTHER implicated species (every segment disagrees, no single
+        backbone) -> ("", "") -- gate1's majority-vote heuristic does not resolve a
+        single backbone here, and forcing a choice would be arbitrary. Caller must
+        treat this as `no_parental_sequence`.
+    """
+    hits = gate1.top_hits.get(odd_segment) or []
+    donor = hits[0].species if hits else ""
+    if not donor:
+        return "", ""
+    others = sorted({s for s in gate1.implicated_species if s != donor})
+    if not others:
+        return donor, donor
+    if len(others) == 1:
+        return donor, others[0]
+    return donor, ""
+
+
+def score_m_pack(
+        candidate: CandidateInput, reference: ReferenceData, gate1: "Gate1Result",
+        odd_segment: str, weights: Optional[Dict[str, Any]] = None,
+) -> Tuple[float, str]:
+    """Factor M_pack (D3): does the candidate's actual cross-segment panhandle duplex
+    fold as tightly as a genuine single-species (backbone) pairing would?
+
+    Returns (value, status). Status is one of:
+      "scored"               -- at least one candidate-vs-backbone-consensus duplex pair
+                                was folded successfully.
+      "no_parental_sequence" -- the donor/backbone species could not be determined
+                                unambiguously (mpack_species_assignment), or neither has
+                                a usable wild reference sequence for the relevant
+                                segment (species_consensus_panhandle_window).
+      "undefined_energy"     -- ViennaRNA (or boltzmann_compatibility, N4) could not
+                                produce a usable ddG for ANY pair -- caught here and
+                                logged via the status, per the global "log and continue"
+                                constraint. compute_rpi floors m_pack at `eco_floor`
+                                regardless, so this never propagates a fabricated value.
+      "fixed_constant"       -- reserved for a future m_pack_variance_check analogous to
+                                m_pol_variance_check; not produced by this function. The
+                                WS3.1 calibration measured real, if small, signal
+                                (Cliff's delta = +0.222) -- not the negligible variance
+                                m_pol_variance_check exists to catch -- so fixing M_pack
+                                at a constant is not warranted by that evidence.
+
+    NEVER SELF-COMPARISON (D3). This is the exact defect class M_pol currently has
+    (`terminal_windows` passed as BOTH arguments to `polymerase_compatibility`, so it is
+    identically 1.0 for every candidate) -- and it is avoided here because the two sides
+    of every fold come from genuinely different sources: the "actual" side is the
+    CANDIDATE's own genomic sequence; the "reference" side is the BACKBONE SPECIES' OWN
+    CONSENSUS, sourced from `reference.genomic_index`. The mpack_species_assignment
+    donor==backbone case (gate1 pattern "concordant") looks superficially similar but is
+    NOT the same bug: both sides still come from different sources (this candidate's
+    actual sequence vs that species' independently-built reference consensus), and a
+    candidate that genuinely matches one species on every segment SHOULD score near 1.0
+    -- that is the correct answer, not an artifact of comparing something to itself.
+
+    Averages ddG over every inter-segment duplex touching `odd_segment` -- both
+    orientations against each of the two backbone segments, up to 4 observations -- the
+    same exhaustive treatment rpi_calibration.py's SEGMENT_DUPLEXES uses. There is no
+    single canonical pairing among three segments (the real intramolecular panhandle is
+    per-segment; the cross-segment duplex tested here is D2's modelling proxy), so
+    averaging over all of them avoids an arbitrary choice of just one.
+    """
+    table = _weights(weights)
+    donor_species, backbone_species = mpack_species_assignment(gate1, odd_segment)
+    if not donor_species or not backbone_species:
+        return 1.0, "no_parental_sequence"
+
+    candidate_genomic = {
+        "S": candidate.s_genomic, "M": candidate.m_genomic, "L": candidate.l_genomic}
+    backbone_segments = tuple(s for s in ("S", "M", "L") if s != odd_segment)
+
+    # Local cache: within one call, the odd segment's consensus/candidate windows are
+    # reused across both backbone segments, and each backbone segment's own windows are
+    # otherwise computed twice (once per orientation). Scoped to this call only -- the
+    # module-level memoisation a production WS-API loop would want is WS-API's D9, not
+    # this task's.
+    consensus_cache: Dict[Tuple[str, str, str], str] = {}
+    candidate_window_cache: Dict[Tuple[str, str], str] = {}
+
+    def consensus(species: str, segment: str, end: str) -> str:
+        key = (species, segment, end)
+        if key not in consensus_cache:
+            consensus_cache[key] = species_consensus_panhandle_window(
+                reference, species, segment, end, n=int(table["m_pack_window_nt"]))
+        return consensus_cache[key]
+
+    def candidate_window(segment: str, end: str) -> str:
+        key = (segment, end)
+        if key not in candidate_window_cache:
+            candidate_window_cache[key] = panhandle_window(
+                candidate_genomic[segment], end, n=int(table["m_pack_window_nt"]))
+        return candidate_window_cache[key]
+
+    ddgs: List[float] = []
+    undefined_energy = False
+    for backbone_segment in backbone_segments:
+        # Two orientations: odd-segment-5' against backbone-3', and backbone-5' against
+        # odd-segment-3'. Both are real candidates for a panhandle duplex (D2), and
+        # neither is more canonical than the other.
+        for five_segment, three_segment in (
+                (odd_segment, backbone_segment), (backbone_segment, odd_segment)):
+            cognate_five = consensus(backbone_species, five_segment, "5")
+            cognate_three = consensus(backbone_species, three_segment, "3")
+            if not cognate_five or not cognate_three:
+                continue
+            try:
+                dg_candidate = cofold_dg(
+                    candidate_window(five_segment, "5"), candidate_window(three_segment, "3"))
+                dg_cognate = cofold_dg(cognate_five, cognate_three)
+                ddgs.append(dg_candidate - dg_cognate)
+            except (ValueError, RuntimeError):
+                undefined_energy = True
+                continue
+
+    if not ddgs:
+        return (1.0, "undefined_energy") if undefined_energy else (1.0, "no_parental_sequence")
+
+    mean_ddg = float(np.mean(ddgs))
+    try:
+        value = boltzmann_compatibility(mean_ddg, 0.0, rt=table["m_pack_tau"])
+    except ValueError:
+        return 1.0, "undefined_energy"
+    return value, "scored"
+
+
 def retention_factor(odd_segment: str, structural_intact: bool,
                      weights: Optional[Dict[str, Any]] = None) -> float:
     """Factor F: scales rpi_generation into rpi_retention.
@@ -1623,7 +1831,7 @@ def _rpi_decimals(floor_value: float) -> int:
 
 def compute_rpi(
     implicated_species: List[str], isolates: List["ah.IsolateRecord"],
-    odd_segment: str, identity: float, m_pack: float, m_pol: float,
+    odd_segment: str, identity: float, m_pack: float, m_pack_status: str, m_pol: float,
     m_pol_status: str, structural_intact: bool,
     weights: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -1638,6 +1846,11 @@ def compute_rpi(
     molecular elegance compensate for ecological impossibility.
 
     This index is RELATIVE. It is not a probability, and must never be reported as one.
+
+    `m_pack_status` is REQUIRED, not defaulted, on the same reasoning `m_pol_status`
+    already is: a caller must state where its m_pack value came from (see
+    score_m_pack's four statuses) rather than let a constant land in the report dressed
+    as a measurement.
     """
     # Every lookup below goes through `table`, and every helper is handed it
     # explicitly. Nothing on this path reads the RPI_WEIGHTS global directly, which is
@@ -1659,6 +1872,7 @@ def compute_rpi(
     row = dict(eco)
     row.update({
         "rpi_m_pack": round(m_pack, 4),
+        "rpi_m_pack_status": m_pack_status,
         "rpi_m_pol": round(m_pol, 4),
         "rpi_m_pol_status": m_pol_status,
         "rpi_k_stratum": stratum,
@@ -2069,7 +2283,7 @@ def _score_panel(
     for candidate in panel:
         row = compute_rpi(
             candidate["implicated_species"], candidate["isolates"], candidate["odd_segment"],
-            candidate["identity"], candidate["m_pack"], candidate["m_pol"], "scored",
+            candidate["identity"], candidate["m_pack"], "scored", candidate["m_pol"], "scored",
             candidate["structural_intact"], weights=table,
         )
         generation.append(row["rpi_generation"])
@@ -2576,6 +2790,20 @@ def score_candidate(
     terminal_windows = {seg: candidate_cds.get(seg, "")[:64] for seg in ("S", "M", "L")}
     m_pol_value, _m_pol_self_comparison_status = polymerase_compatibility(
         terminal_windows, terminal_windows)
+    # M_PACK (D3, Task 10 / WS3.3): scored for real via score_m_pack -- the candidate's
+    # own cross-segment panhandle duplex, cofolded against the BACKBONE SPECIES' OWN
+    # reference consensus (reference.genomic_index), never against the candidate
+    # itself. See score_m_pack's docstring for the full method, the four possible
+    # statuses, and why the donor==backbone (concordant) case is not the self-comparison
+    # bug M_pol still has below.
+    #
+    # WS3.1's calibration measured ddG as REAL but SMALL signal (Cliff's delta = +0.222;
+    # 38% of the calibration panel has ddG <= 0, where M_pack saturates at exactly 1.0).
+    # User-acknowledged 2026-08-29: proceed as scoped here, let M_pol (WS3.4) carry more
+    # of the b2 cross-species discrimination weight. See data/rpi_calibration.json ->
+    # "discrimination" for the measurement this call site now depends on.
+    m_pack_value, m_pack_status = score_m_pack(
+        candidate, reference, gate1, gate1.discordant_segment or "M")
     result.update(compute_rpi(
         implicated_species=gate1.implicated_species,
         isolates=reference.isolates,
@@ -2588,6 +2816,10 @@ def score_candidate(
         # gate1 having identified one. The substitution is visible in the output: an
         # empty gate1_discordant_segment on a row with M-valued rpi_f means the default
         # fired. Check that column before quoting rpi_retention for such a row.
+        #
+        # MUST MATCH the odd_segment passed to score_m_pack above -- both read
+        # gate1.discordant_segment with the same "M" default, so rpi_m_pack, rpi_k_value
+        # and rpi_f are always scored against the same segment identity.
         odd_segment=gate1.discordant_segment or "M",
         # SCAFFOLDING (K stratum): gate0.best_kmer_identity is PROTEIN k-mer novelty
         # against the nearest reference, maximised over segments -- NOT the parental
@@ -2597,14 +2829,8 @@ def score_candidate(
         # RPI_K_STRATUM_PROVISIONAL. Computing real parental identity is a documented
         # follow-up, deliberately out of scope for this wave.
         identity=gate0.best_kmer_identity,
-        # SCAFFOLDING (M_pack): fixed at 1.0, not computed. Scoring it needs RNAcofold
-        # (boltzmann_compatibility / cofold_dg are implemented and tested, but
-        # ViennaRNA is not installed here -- environment.yml DOES pin viennarna=2.7.2,
-        # and that pin has simply never been reconciled against a real environment
-        # build; see the README's limitation item 8 -- spec 6.1).
-        # rpi_generation is therefore currently E * K, not the four-factor product the
-        # schema advertises; stated as such in the README's limitations list.
-        m_pack=1.0,
+        m_pack=m_pack_value,
+        m_pack_status=m_pack_status,
         m_pol=m_pol_value,
         m_pol_status="fixed_constant",
         structural_intact=not (
@@ -2775,6 +3001,7 @@ if __name__ == "__main__":
 import random
 import tempfile
 import unittest
+import unittest.mock
 
 
 class LongestOrfProteinTest(unittest.TestCase):
@@ -4188,6 +4415,281 @@ class PolymeraseCompatibilityTest(unittest.TestCase):
         self.assertEqual(status, "scored")
 
 
+class HasGenomicPanhandleTerminiTest(unittest.TestCase):
+    """D3/WS3.1: the filter species_consensus_panhandle_window relies on before
+    building a consensus."""
+
+    def test_accepts_a_sequence_carrying_both_conserved_tags(self):
+        self.assertTrue(has_genomic_panhandle_termini(
+            HANTAVIRUS_GENOMIC_5P_TAG + "ACGT" * 10 + HANTAVIRUS_GENOMIC_3P_TAG))
+
+    def test_rejects_a_sequence_truncated_at_either_end(self):
+        body = "ACGT" * 10
+        self.assertFalse(has_genomic_panhandle_termini(body + HANTAVIRUS_GENOMIC_3P_TAG))
+        self.assertFalse(has_genomic_panhandle_termini(HANTAVIRUS_GENOMIC_5P_TAG + body))
+        self.assertFalse(has_genomic_panhandle_termini(body))
+
+    def test_the_two_tags_are_reverse_complements(self):
+        """The filter is only meaningful if the tags describe the two ends of ONE
+        panhandle. If these ever drift apart the filter would silently select for
+        something that is not a panhandle at all."""
+        self.assertEqual(_reverse_complement(HANTAVIRUS_GENOMIC_5P_TAG),
+                         HANTAVIRUS_GENOMIC_3P_TAG)
+
+
+def _genomic_isolate(species: str, key_suffix: str, s_seq: str = "", m_seq: str = "",
+                     l_seq: str = "", lab: bool = False, vaccine: bool = False,
+                     ) -> "ah.IsolateRecord":
+    """Minimal IsolateRecord carrying real accessions, for tests that need
+    reference.genomic_index lookups to actually resolve -- _eco_isolate's isolates
+    above all have empty accessions, which is fine for ecological_opportunity but
+    cannot exercise species_consensus_panhandle_window or score_m_pack."""
+    key = f"{species}:{key_suffix}"
+    return ah.IsolateRecord(
+        isolate_key=key, species_name=species, species_taxid="1",
+        species_status="classified", biosample="", isolate=key_suffix, strain="",
+        host_name="Test host", host_taxid="1", host_order="Rodentia",
+        host_family="Cricetidae", host_role="reservoir_rodent",
+        collection_date="2001", year="2001", location="", country="USA", region="",
+        grouping_tier="tier_2_species_isolate", grouping_confidence=1.0,
+        s_accession=f"{key}_S" if s_seq else "", m_accession=f"{key}_M" if m_seq else "",
+        l_accession=f"{key}_L" if l_seq else "",
+        s_completeness="complete", m_completeness="complete", l_completeness="complete",
+        s_nt_length=len(s_seq), m_nt_length=len(m_seq), l_nt_length=len(l_seq),
+        s_protein_aa="", m_protein_aa="", l_protein_aa="", concatenated_protein_aa="",
+        segments_present=[], coding_complete_segments=[], triplet_status="",
+        has_complete_triplet=False, is_lab_derived=lab, is_vaccine_strain=vaccine,
+        has_nss_orf=False, metadata_conflict=False, taxonomic_incongruence=False,
+        cross_species_partners=[], kmer_cluster_id="", s_protein_accessions=[],
+        m_protein_accessions=[], l_protein_accessions=[], all_accessions=[], warnings=[],
+    )
+
+
+def _genomic_reference(isolates: List["ah.IsolateRecord"],
+                       sequences: Dict[str, str]) -> ReferenceData:
+    """ReferenceData whose genomic_index resolves every accession in `sequences` (keyed
+    by accession, e.g. "SpA:iso1_S") to a FastaRecord carrying that sequence."""
+    genomic_index = {
+        accession: ah.FastaRecord(accession=accession, accession_base=accession,
+                                  header="", sequence=seq, length=len(seq))
+        for accession, seq in sequences.items()
+    }
+    return ReferenceData(isolates=isolates, cds_index={}, genomic_index=genomic_index)
+
+
+# Test-only, deliberately SHORTER than RPI_PANHANDLE_WINDOW_NT (50): these tests pass a
+# custom weights table with a matching m_pack_window_nt so fixture sequences can stay
+# small while still exercising has_genomic_panhandle_termini's real 8-nt tags.
+_TEST_PANHANDLE_WINDOW_NT = 12
+
+
+def _tagged_seq(five_body: str, three_body: str) -> str:
+    """A genomic sequence carrying real conserved termini around the given bodies,
+    short enough for _TEST_PANHANDLE_WINDOW_NT (12 nt: the 8-nt tag plus a few bases of
+    the body it is windowed with)."""
+    return HANTAVIRUS_GENOMIC_5P_TAG + five_body + three_body + HANTAVIRUS_GENOMIC_3P_TAG
+
+
+class SpeciesConsensusPanhandleWindowTest(unittest.TestCase):
+    def test_majority_vote_across_isolates_of_one_species(self):
+        # Three isolates of SpA's M segment; two agree on the base right after the tag,
+        # one differs -- majority vote should pick the two-out-of-three base.
+        seqs = {
+            "SpA:i1_M": _tagged_seq("AA", "TT"),
+            "SpA:i2_M": _tagged_seq("AA", "TT"),
+            "SpA:i3_M": _tagged_seq("GG", "TT"),
+        }
+        isolates = [_genomic_isolate("SpA", f"i{n}", m_seq=seqs[f"SpA:i{n}_M"])
+                   for n in (1, 2, 3)]
+        reference = _genomic_reference(isolates, seqs)
+        five = species_consensus_panhandle_window(
+            reference, "SpA", "M", "5", n=_TEST_PANHANDLE_WINDOW_NT)
+        self.assertEqual(five, HANTAVIRUS_GENOMIC_5P_TAG + "AATT")
+
+    def test_excludes_deposits_missing_true_termini(self):
+        """A truncated deposit -- present, but not carrying the conserved tags --
+        must not enter the consensus. Its "terminal window" is arbitrary internal
+        sequence (WS3.1 finding), and a majority-vote consensus is not exempt from
+        that: including it would corrupt the very average this function computes."""
+        seqs = {
+            "SpA:i1_M": _tagged_seq("AA", "TT"),
+            "SpA:i2_M": "GGGGGGGGGGGGGGGGGGGGGGGG",  # no conserved tags at all
+        }
+        isolates = [_genomic_isolate("SpA", "i1", m_seq=seqs["SpA:i1_M"]),
+                   _genomic_isolate("SpA", "i2", m_seq=seqs["SpA:i2_M"])]
+        reference = _genomic_reference(isolates, seqs)
+        five = species_consensus_panhandle_window(
+            reference, "SpA", "M", "5", n=_TEST_PANHANDLE_WINDOW_NT)
+        self.assertEqual(five, HANTAVIRUS_GENOMIC_5P_TAG + "AATT")
+
+    def test_excludes_lab_derived_and_vaccine_isolates(self):
+        seqs = {"SpA:i1_M": _tagged_seq("AA", "TT")}
+        isolates = [_genomic_isolate("SpA", "i1", m_seq=seqs["SpA:i1_M"], lab=True)]
+        reference = _genomic_reference(isolates, seqs)
+        self.assertEqual(
+            species_consensus_panhandle_window(reference, "SpA", "M", "5"), "")
+
+    def test_returns_empty_string_when_species_has_no_usable_sequence(self):
+        reference = _genomic_reference([], {})
+        self.assertEqual(
+            species_consensus_panhandle_window(reference, "Nobody", "M", "5"), "")
+
+
+class MpackSpeciesAssignmentTest(unittest.TestCase):
+    def test_two_implicated_species_gives_donor_and_backbone(self):
+        gate1 = Gate1Result(
+            top_hits={"M": [SpeciesHit(species="Donor", distance=0.1)]},
+            implicated_species=["Backbone", "Donor"], discordant_segment="M",
+            pattern="m_only")
+        donor, backbone = mpack_species_assignment(gate1, "M")
+        self.assertEqual((donor, backbone), ("Donor", "Backbone"))
+
+    def test_concordant_pattern_returns_the_same_species_for_both(self):
+        """Gate1 found one species matching every segment -- donor == backbone is the
+        CORRECT answer here, not the self-comparison bug D3 forbids. See
+        score_m_pack's docstring for why."""
+        gate1 = Gate1Result(
+            top_hits={"M": [SpeciesHit(species="OnlySpecies", distance=0.1)]},
+            implicated_species=["OnlySpecies"], discordant_segment="", pattern="concordant")
+        donor, backbone = mpack_species_assignment(gate1, "M")
+        self.assertEqual((donor, backbone), ("OnlySpecies", "OnlySpecies"))
+
+    def test_three_or_more_implicated_species_is_unresolved(self):
+        """Every segment disagrees -- gate1's majority-vote heuristic does not resolve
+        a single backbone, and forcing a choice would be arbitrary."""
+        gate1 = Gate1Result(
+            top_hits={"M": [SpeciesHit(species="Donor", distance=0.1)]},
+            implicated_species=["Backbone1", "Backbone2", "Donor"],
+            discordant_segment="M", pattern="m_only")
+        self.assertEqual(mpack_species_assignment(gate1, "M"), ("Donor", ""))
+
+    def test_no_hits_for_the_odd_segment_is_unresolved(self):
+        gate1 = Gate1Result(top_hits={"M": []}, implicated_species=["Backbone"],
+                            discordant_segment="M", pattern="m_only")
+        self.assertEqual(mpack_species_assignment(gate1, "M"), ("", ""))
+
+
+class ScoreMPackTest(unittest.TestCase):
+    """D3/Task 10 (WS3.3). Uses a custom weights table with a short
+    _TEST_PANHANDLE_WINDOW_NT so fixture sequences stay small while still exercising
+    has_genomic_panhandle_termini's real tags -- production always reads
+    RPI_WEIGHTS["m_pack_window_nt"] (50), asserted separately by
+    MPackTauRescalingTest.test_window_matches_the_window_tau_was_measured_under."""
+
+    def _weights(self) -> Dict[str, Any]:
+        table = copy.deepcopy(RPI_WEIGHTS)
+        table["m_pack_window_nt"] = _TEST_PANHANDLE_WINDOW_NT
+        return table
+
+    def _reference_and_gate1(self):
+        """One backbone species (Backbone) with a consistent S/M/L consensus, and one
+        donor species (Donor) whose M segment consensus differs -- the ordinary
+        single-discordant-segment (M) case."""
+        seqs = {
+            "Backbone:i1_S": _tagged_seq("AA", "TT"),
+            "Backbone:i1_M": _tagged_seq("AA", "TT"),
+            "Backbone:i1_L": _tagged_seq("AA", "TT"),
+            "Donor:i1_M": _tagged_seq("CC", "GG"),
+        }
+        isolates = [
+            _genomic_isolate("Backbone", "i1", s_seq=seqs["Backbone:i1_S"],
+                            m_seq=seqs["Backbone:i1_M"], l_seq=seqs["Backbone:i1_L"]),
+            _genomic_isolate("Donor", "i1", m_seq=seqs["Donor:i1_M"]),
+        ]
+        reference = _genomic_reference(isolates, seqs)
+        gate1 = Gate1Result(
+            top_hits={"M": [SpeciesHit(species="Donor", distance=0.1)]},
+            implicated_species=["Backbone", "Donor"], discordant_segment="M",
+            pattern="m_only")
+        return reference, gate1
+
+    def test_candidate_matching_the_backbone_scores_near_one(self):
+        """The candidate's ACTUAL M segment is identical to what the backbone species'
+        own consensus would produce -- ddG should be ~0 and M_pack near 1.0."""
+        reference, gate1 = self._reference_and_gate1()
+        candidate = CandidateInput(
+            candidate_id="C1",
+            s_genomic=_tagged_seq("AA", "TT"), m_genomic=_tagged_seq("AA", "TT"),
+            l_genomic=_tagged_seq("AA", "TT"))
+        value, status = score_m_pack(candidate, reference, gate1, "M",
+                                     weights=self._weights())
+        self.assertEqual(status, "scored")
+        self.assertGreater(value, 0.9)
+
+    def test_never_self_comparison(self):
+        """D3: the candidate side and the reference side must come from genuinely
+        different sources. Mutating the candidate's own sequence after scoring must
+        not retroactively change a result that already used the reference consensus --
+        the two are structurally independent, not aliased."""
+        reference, gate1 = self._reference_and_gate1()
+        candidate = CandidateInput(
+            candidate_id="C1",
+            s_genomic=_tagged_seq("AA", "TT"), m_genomic=_tagged_seq("AA", "TT"),
+            l_genomic=_tagged_seq("AA", "TT"))
+        value_before, _ = score_m_pack(candidate, reference, gate1, "M",
+                                       weights=self._weights())
+        candidate.m_genomic = _tagged_seq("CC", "GG")
+        value_after, _ = score_m_pack(candidate, reference, gate1, "M",
+                                      weights=self._weights())
+        self.assertNotEqual(value_before, value_after)
+
+    def test_no_parental_sequence_when_backbone_is_unresolved(self):
+        reference, gate1 = self._reference_and_gate1()
+        gate1.implicated_species = ["Backbone1", "Backbone2", "Donor"]
+        candidate = CandidateInput(
+            candidate_id="C1", s_genomic=_tagged_seq("AA", "TT"),
+            m_genomic=_tagged_seq("AA", "TT"), l_genomic=_tagged_seq("AA", "TT"))
+        value, status = score_m_pack(candidate, reference, gate1, "M",
+                                     weights=self._weights())
+        self.assertEqual(status, "no_parental_sequence")
+        self.assertEqual(value, 1.0)
+
+    def test_no_parental_sequence_when_species_has_no_reference_sequence(self):
+        reference = _genomic_reference([], {})
+        gate1 = Gate1Result(
+            top_hits={"M": [SpeciesHit(species="Donor", distance=0.1)]},
+            implicated_species=["Backbone", "Donor"], discordant_segment="M",
+            pattern="m_only")
+        candidate = CandidateInput(
+            candidate_id="C1", s_genomic=_tagged_seq("AA", "TT"),
+            m_genomic=_tagged_seq("AA", "TT"), l_genomic=_tagged_seq("AA", "TT"))
+        value, status = score_m_pack(candidate, reference, gate1, "M",
+                                     weights=self._weights())
+        self.assertEqual(status, "no_parental_sequence")
+        self.assertEqual(value, 1.0)
+
+    def test_undefined_energy_status_on_a_non_finite_ddg(self):
+        """N4: boltzmann_compatibility raises ValueError on a non-finite ddG rather
+        than silently scoring it. score_m_pack must catch that and report
+        undefined_energy, log-and-continue, per the global constraint -- never let the
+        exception propagate out of score_candidate."""
+        reference, gate1 = self._reference_and_gate1()
+        candidate = CandidateInput(
+            candidate_id="C1", s_genomic=_tagged_seq("AA", "TT"),
+            m_genomic=_tagged_seq("AA", "TT"), l_genomic=_tagged_seq("AA", "TT"))
+        with unittest.mock.patch(
+                __name__ + ".boltzmann_compatibility",
+                side_effect=ValueError("non-finite ddG")):
+            value, status = score_m_pack(candidate, reference, gate1, "M",
+                                         weights=self._weights())
+        self.assertEqual(status, "undefined_energy")
+        self.assertEqual(value, 1.0)
+
+    def test_never_produces_a_literal_zero_or_a_value_above_one(self):
+        """Property this function must preserve regardless of status: compute_rpi's
+        no-literal-zeros guarantee starts here. A maximally mismatched candidate M
+        segment (every base opposite the backbone consensus) is the most adverse
+        real-sequence input this function will see."""
+        reference, gate1 = self._reference_and_gate1()
+        candidate = CandidateInput(
+            candidate_id="C1", s_genomic=_tagged_seq("AA", "TT"),
+            m_genomic=_tagged_seq("GG", "AA"), l_genomic=_tagged_seq("AA", "TT"))
+        value, _status = score_m_pack(candidate, reference, gate1, "M",
+                                      weights=self._weights())
+        self.assertGreater(value, 0.0)
+        self.assertLessEqual(value, 1.0)
+
+
 class RetentionFactorTest(unittest.TestCase):
     def test_m_exchange_is_favoured_over_s_exchange(self):
         """Generation (Rodriguez, in vitro): M:S:L = 12:12:1. Retention (Henderson,
@@ -4214,7 +4716,8 @@ class RpiAssemblyTest(unittest.TestCase):
             implicated_species=["A", "B"],
             isolates=[_eco_isolate("A", "USA", "2001"), _eco_isolate("B", "USA", "2002")],
             odd_segment="M", identity=0.85,
-            m_pack=1.0, m_pol=1.0, m_pol_status="scored", structural_intact=True,
+            m_pack=1.0, m_pack_status="scored", m_pol=1.0, m_pol_status="scored",
+            structural_intact=True,
         )
         defaults.update(kwargs)
         return compute_rpi(**defaults)
@@ -4222,9 +4725,9 @@ class RpiAssemblyTest(unittest.TestCase):
     def test_emits_every_column_from_spec_section_9(self):
         row = self._row()
         for column in ("rpi_generation", "rpi_retention", "rpi_e_host", "rpi_e_geo",
-                       "rpi_e_time", "rpi_e_total", "rpi_m_pack", "rpi_m_pol",
-                       "rpi_m_pol_status", "rpi_k_stratum", "rpi_k_value", "rpi_f",
-                       "rpi_smoothing", "rpi_weights_version"):
+                       "rpi_e_time", "rpi_e_total", "rpi_m_pack", "rpi_m_pack_status",
+                       "rpi_m_pol", "rpi_m_pol_status", "rpi_k_stratum", "rpi_k_value",
+                       "rpi_f", "rpi_smoothing", "rpi_weights_version"):
             self.assertIn(column, row, column)
 
     def test_reported_e_total_is_never_a_literal_zero(self):
@@ -4241,8 +4744,8 @@ class RpiAssemblyTest(unittest.TestCase):
                              host_family="Cricetidae", host_name="Peromyscus maniculatus")
         far_b = _eco_isolate("SpB", "Chile", "2004", host_order="Soricomorpha",
                              host_family="Soricidae", host_name="Sorex araneus")
-        row = compute_rpi(["SpA", "SpB"], [far_a, far_b], "M", 0.9, 1.0, 1.0,
-                          "fixed_constant", True)
+        row = compute_rpi(["SpA", "SpB"], [far_a, far_b], "M", 0.9, 1.0, "fixed_constant",
+                          1.0, "fixed_constant", True)
         self.assertGreater(row["rpi_e_total"], 0.0)
         self.assertGreater(row["rpi_generation"], 0.0)
         self.assertGreater(row["rpi_retention"], 0.0)
@@ -4255,8 +4758,8 @@ class RpiAssemblyTest(unittest.TestCase):
         far_b = _eco_isolate("SpB", "Chile", "2004", host_order="Soricomorpha",
                              host_family="Soricidae", host_name="Sorex araneus")
         row = compute_rpi(["SpA", "SpB"], [far_a, far_b], "S", 0.5,
-                          RPI_WEIGHTS["eco_floor"], RPI_WEIGHTS["eco_floor"],
-                          "fixed_constant", False)
+                          RPI_WEIGHTS["eco_floor"], "fixed_constant",
+                          RPI_WEIGHTS["eco_floor"], "fixed_constant", False)
         self.assertEqual(row["rpi_generation"], RPI_WEIGHTS["eco_floor"] ** 4)
         self.assertGreater(row["rpi_retention"], 0.0)
 
@@ -4275,7 +4778,8 @@ class RpiAssemblyTest(unittest.TestCase):
         for odd_segment in ("S", "M", "L"):
             for identity in (0.5, 0.9):
                 row = compute_rpi(["SpA", "SpB"], [near_a, near_b], odd_segment,
-                                  identity, 1.0, 1.0, "fixed_constant", True)
+                                  identity, 1.0, "fixed_constant", 1.0, "fixed_constant",
+                                  True)
                 components = (row["rpi_e_host"], row["rpi_e_geo"], row["rpi_e_time"])
                 if any(0.0 < c < 1.0 for c in components):
                     seen_fractional = True
@@ -4300,7 +4804,7 @@ class RpiAssemblyTest(unittest.TestCase):
         for odd_segment in ("S", "M", "L"):
             for intact in (True, False):
                 row = compute_rpi(["SpA", "SpB"], [far_a, far_b], odd_segment, 0.9,
-                                  1.0, 1.0, "fixed_constant", intact)
+                                  1.0, "fixed_constant", 1.0, "fixed_constant", intact)
                 if row["rpi_retention"] < row["rpi_generation"]:
                     seen_strict = True
                 self.assertLessEqual(row["rpi_retention"], row["rpi_generation"],
@@ -4427,7 +4931,8 @@ class VerdictUnchangedRegressionTest(unittest.TestCase):
             implicated_species=["A", "B"],
             isolates=[_eco_isolate("A", "USA", "2001"), _eco_isolate("B", "USA", "2002")],
             odd_segment="M", identity=0.85,
-            m_pack=1.0, m_pol=1.0, m_pol_status="scored", structural_intact=True,
+            m_pack=1.0, m_pack_status="scored", m_pol=1.0, m_pol_status="scored",
+            structural_intact=True,
         )
         self.assertNotIn("verdict", row)
         self.assertTrue(set(row.keys()).isdisjoint({"verdict"}))
@@ -4677,7 +5182,7 @@ class ScorePanelDoesNotMutateGlobalWeightsTest(unittest.TestCase):
             return compute_rpi(["A", "B"],
                                [_eco_isolate("A", "USA", "2001"),
                                 _eco_isolate("B", "USA", "2002")],
-                               "M", 0.85, 1.0, 1.0, "scored", True)
+                               "M", 0.85, 1.0, "scored", 1.0, "scored", True)
 
         reference_row = unperturbed_row()
         observed = []

@@ -682,14 +682,33 @@ to retune τ.
   (+6), all pass; `sensitivity_sweep`/`_score_panel`'s `copy.deepcopy(RPI_WEIGHTS)` unaffected —
   extending the sweep to cover τ and N is WS4 Task 15, not this task.
 
-### Task 10: Score M_pack for real (D3)
+### Task 10: Score M_pack for real (D3) — DONE (2026-08-29)
 
-- [ ] Replace `m_pack=1.0` (`reassortment_detector.py:2456`) with a cognate-vs-non-cognate
-  comparison against the **implicated parent/donor consensus** sourced from
-  `reference.genomic_index`. **Never self-comparison.**
-- [ ] Add `rpi_m_pack_status`: `scored` / `fixed_constant` / `undefined_energy` /
+- [x] Replace `m_pack=1.0` with a cognate-vs-non-cognate comparison against the
+  **implicated parent/donor consensus** sourced from `reference.genomic_index`. **Never
+  self-comparison.** `score_m_pack` folds the candidate's OWN cross-segment panhandle
+  duplex (odd segment vs each backbone segment, both orientations, up to 4 observations
+  averaged) against the **backbone species' own reference consensus**
+  (`species_consensus_panhandle_window`, majority-vote over that species' wild,
+  terminally-complete isolates — `has_genomic_panhandle_termini` reuses the WS3.1
+  finding that 48% of deposits lack true termini). Donor/backbone species come from
+  `mpack_species_assignment(gate1, odd_segment)`, which also handles the concordant
+  case correctly (donor==backbone is the right answer there, not the self-comparison
+  bug this task forbids — see its docstring).
+- [x] Add `rpi_m_pack_status`: `scored` / `fixed_constant` / `undefined_energy` /
   `no_parental_sequence`. `undefined_energy` is where Task 1's `ValueError` is caught — log and
-  continue, per the global constraint.
+  continue, per the global constraint. `fixed_constant` is reserved for a future
+  `m_pack_variance_check` analogous to `m_pol_variance_check`; not produced by this
+  implementation (WS3.1's Cliff's δ = +0.222 is real signal, not the negligible
+  variance that check exists to catch). `compute_rpi` gained a required `m_pack_status`
+  parameter, positioned next to `m_pack` the way `m_pol`/`m_pol_status` already are; all
+  10 existing call sites updated.
+- [x] Smoke-tested against the real WS4 panel (12 cases, `PanelBuilder`/`build_panel`):
+  all returned `status="scored"`, values ranging 0.10–1.0 with real variation by case
+  (published inter-species crosses and intra-lineage crosses scored lower than true
+  negatives, as expected). 8 new test classes (`HasGenomicPanhandleTerminiTest`,
+  `SpeciesConsensusPanhandleWindowTest`, `MpackSpeciesAssignmentTest`, `ScoreMPackTest`),
+  ~26 tests. README limitation item 8 and `PROJECT-STATE.md` §3 updated to match.
 
 ### Task 11: Score M_pol for real (D3)
 

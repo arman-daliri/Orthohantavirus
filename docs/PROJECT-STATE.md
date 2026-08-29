@@ -39,28 +39,41 @@ Read both before touching code. This file summarises; they are authoritative.
 
 **RPI's factors split into two kinds, and only one kind can discriminate.**
 
-`compute_rpi` takes six inputs. E (ecology), K (constellation prior) and F (retention)
-are **species-level or segment-level priors** — they do not read the nucleotides of the
-particular S+M+L assembly being scored. Only **M_pack** and **M_pol** do.
+`compute_rpi` takes seven inputs (`m_pack_status` added WS3.2). E (ecology), K
+(constellation prior) and F (retention) are **species-level or segment-level priors** —
+they do not read the nucleotides of the particular S+M+L assembly being scored. Only
+**M_pack** and **M_pol** do.
 
-Today `m_pack` is hardcoded `1.0`, and `m_pol` is computed by passing
-`terminal_windows` as **both** arguments — a self-comparison, so it is exactly 1.0 on
-every candidate. `divergence_stratum` is a binary threshold at 0.80 and production
-identities run 0.35–0.46, so every row lands `distant` and the stratum never varies.
+**UPDATE 2026-08-29 (WS3.3): M_pack is real.** `score_m_pack` cofolds the candidate's
+own cross-segment panhandle duplex against the backbone species' own reference
+consensus (D3) and rescales via `M_pack = exp(-ΔΔG / τ)`, τ = 3.914 (WS3.1). It is
+**not** the self-comparison bug — see `score_m_pack`'s docstring for why the
+donor==backbone (concordant) case looks similar but isn't. `m_pol` is still computed by
+passing `terminal_windows` as **both** arguments — a self-comparison, so it is exactly
+1.0 on every candidate. `divergence_stratum` is a binary threshold at 0.80 and
+production identities run 0.35–0.46, so every row lands `distant` and the stratum never
+varies.
 
-**Consequence:** for a fixed species set and odd segment, `rpi_generation` has exactly
-one possible value. Two assemblies matching on species/place/year get identical scores,
-necessarily.
+**Consequence, now partially resolved:** for a fixed species set and odd segment,
+`rpi_generation` no longer has exactly one possible value — M_pack now varies with the
+candidate's actual sequence (0.10–1.0 observed on the real WS4 panel, smoke-tested
+2026-08-29). It is still true that M_pol contributes nothing, and WS3.1's own
+measurement shows M_pack's signal is real but small (Cliff's δ = +0.222; 38% of the
+calibration panel saturates M_pack at 1.0). Two assemblies matching on species/place/
+year and folding to a similar duplex can still land close together.
 
-**But this is only a defect for some comparisons** (corrected by the user, decision D7):
+**But a tie is only a defect for some comparisons** (corrected by the user, decision D7):
 
 - **Within-species shuffles (b1)** *should* score high. They are genuinely plausible.
   RPI measures **plausibility, not occurrence**; separating b1 from real reassortants is
   the **tree detector's** job, not the index's. `reals ≈ b1` is an **expected tie**.
-- **Cross-species sympatric shuffles (b2)** are where the index must earn its keep, and
-  where it provably cannot today.
+- **Cross-species sympatric shuffles (b2)** are where the index must earn its keep. With
+  M_pack alone (M_pol still scaffolded), it is **expected to discriminate weakly, not
+  yet strongly** — the user's 2026-08-29 decision was to proceed with M_pack as scoped
+  and let WS3.4's M_pol carry more of that weight, not to retune τ.
 
-**This is why WS3.3 and WS3.4 are mandatory, not optional.**
+**This is why WS3.4 is still needed** — M_pack alone was never expected to fully resolve
+b2; WS4 will measure how much of the gap M_pack alone closes before M_pol lands.
 
 ---
 
