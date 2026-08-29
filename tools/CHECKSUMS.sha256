@@ -1,0 +1,29 @@
+# SHA-256 of every external tool artifact this project pins.
+#
+# A pinned version without a checksum pins a NAME, not an ARTIFACT: upstream can
+# re-cut a release under the same version string and nothing would notice. These
+# hashes are what make the pin mean something.
+#
+# Verify (from the repo root):
+#   sha256sum -c tools/CHECKSUMS.sha256
+# or, without coreutils:
+#   python -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" <file>
+#
+# The archives themselves are NOT committed (see .gitignore) -- they are 38 MB and
+# recoverable from the URLs below. This file plus tools/VERSIONS.txt is the record.
+
+# --- Windows (this machine) -------------------------------------------------------
+# https://mafft.cbrc.jp/alignment/software/mafft-7.526-win64-signed.zip
+# 27476513 bytes; server Last-Modified: Mon, 13 May 2024 07:53:11 GMT
+7c3a508c8512af04007d68019c6fbd4ff00d891244b58f87ec9aa0e53fbae8a7  dist/mafft-7.526-win64-signed.zip
+
+# https://github.com/iqtree/iqtree3/releases/download/v3.1.3/iqtree-3.1.3-Windows.zip
+# 10672551 bytes; server Last-Modified: Fri, 19 Jun 2026 08:51:02 GMT
+6e0e11c7ed6197a0f4ebfbadafc7e82bebdf5b6e510c8a13f36183fe8eae3aef  dist/iqtree-3.1.3-Windows.zip
+
+# --- Linux / conda (Omarchy machine) ----------------------------------------------
+# Recorded here so the Linux pin is an artifact too, not just a version string.
+# NOT downloaded or built on this machine; conda resolves it from bioconda.
+# https://mafft.cbrc.jp/alignment/software/mafft-7.525-with-extensions-src.tgz
+# 758305 bytes; server Last-Modified: Tue, 19 Mar 2024 08:20:00 GMT
+2876f4adc1a2de4ed206bc40896763bf208bf1a02bda52f8bfdd91cf52d73e4a  dist/mafft-7.525-with-extensions-src.tgz

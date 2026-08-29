@@ -1,0 +1,62 @@
+External tool versions, per machine. Recorded 2026-08-29.
+
+Captured by running each tool; not transcribed from a release page. Checksums for every
+artifact are in tools/CHECKSUMS.sha256.
+
+===================================================================================
+THE MAFFT SPLIT -- a deliberate, recorded platform-version divergence
+===================================================================================
+MAFFT 7.525 has NO Windows build. The official Windows page offers 7.222, 7.304,
+7.312, 7.313, 7.427, 7.450, 7.490 and 7.526 -- 7.525 is not among them. The two
+release tracks genuinely diverge: the source page carries 7.525 but not 7.526, and
+the Windows page carries 7.526 but not 7.525.
+
+  Windows (this machine) : MAFFT 7.526   <- cannot be 7.525; no such build exists
+  Linux / conda (Omarchy): MAFFT 7.525   <- environment.yml pin, obtainable there
+
+7.525 and 7.526 are a maintenance release pair. MAFFT's own version string dates the
+7.526 build 2024/Apr/26 and the 7.525 source tarball was posted 2024/Mar/19 (server
+Last-Modified). NO ALGORITHMIC CHANGE BETWEEN THEM IS DOCUMENTED -- but that is an
+absence of evidence, not evidence of absence, and this project does not run on
+undocumented equivalence. The reproducibility fixture ASSERTS alignment-content
+agreement across the two rather than assuming it. See the D6 note in the design doc.
+
+===================================================================================
+WINDOWS (this machine) -- manual pinned binaries
+===================================================================================
+
+MAFFT
+  version   : v7.526 (2024/Apr/26)
+  invoked   : tools\mafft-win\mafft.bat --version
+  source    : https://mafft.cbrc.jp/alignment/software/mafft-7.526-win64-signed.zip
+  note      : the .bat wrapper prints a "Preparing environment to run MAFFT on
+              Windows" preamble before the version line; parse for the v7.x token,
+              do not assume the version is on the first line.
+
+IQ-TREE
+  version   : IQ-TREE version 3.1.3 for Windows 64-bit built Jun 19 2026
+  invoked   : tools\iqtree-3.1.3-Windows\bin\iqtree3.exe --version
+  source    : https://github.com/iqtree/iqtree3/releases/download/v3.1.3/
+              iqtree-3.1.3-Windows.zip
+  note      : the executable is iqtree3.exe, NOT iqtree.exe or iqtree2.exe. The
+              3.x line lives in the iqtree/iqtree3 repository; iqtree/iqtree2 tops
+              out at v2.4.0 and has no 3.x release at all.
+
+ViennaRNA
+  version   : 2.7.2  (python bindings, `import RNA; RNA.__version__`)
+  source    : PyPI, pinned in requirements-pip.txt
+  note      : PYTHON BINDINGS ONLY -- the pip package ships NO RNAcofold executable,
+              and none is on PATH. The production path uses RNA.fold_compound /
+              mfe_dimer directly (design doc route (a)); there is deliberately no
+              CLI fallback, so the two cannot silently diverge.
+
+===================================================================================
+LINUX / CONDA (Omarchy machine) -- NOT YET PROVISIONED
+===================================================================================
+Versions below are the environment.yml pins. The --version outputs are NOT recorded
+here because they have not been captured on that machine; recording pins as though
+they were observed output would be a fabrication. Fill these in on first provision.
+
+  MAFFT     : 7.525   (--version output: NOT YET CAPTURED)
+  IQ-TREE   : 3.1.3   (--version output: NOT YET CAPTURED)
+  ViennaRNA : 2.7.2   (--version output: NOT YET CAPTURED)
