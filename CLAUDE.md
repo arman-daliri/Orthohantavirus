@@ -6,9 +6,15 @@
 current state, all decisions D1-D14, measured performance numbers, what was completed,
 and the exact next action. This section is only a pointer.
 
-**State: green, WS3.1–WS3.4 committed locally, not yet pushed.** Branch
-`04-rpi-fitness-validation`. Suite **228 tests, all pass** (~14 min) + **39 tests, <1 s**
-(`rpi_calibration`). Validation harness **PASS**. `main` pushed, unaffected by this branch.
+**State: green tests, but WS4 Task 13/14 result is UNRESOLVED — read
+`docs/PROJECT-STATE.md` §7c before doing anything else.** Branch
+`04-rpi-fitness-validation`, committed locally, not yet pushed. All test suites pass
+(228 + 39 + 29), but the discrimination-panel measurement itself (`reals ~ b1 > b2 >
+random`) came back NOT holding, and the cause has a plausible but UNCONFIRMED hypothesis
+(Factor E composition mismatch between groups) — §7c has the exact numbers, the
+diagnostic to run next, and an explicit "what NOT to do" list (do not retune τ, do not
+change the panel before confirming the hypothesis). `main` pushed, unaffected by this
+branch.
 
 **WS3.1–WS3.2 ARE DONE.** τ = 3.914 (WS3.1's D1 branch: Option A, τ-scaled Boltzmann —
 ΔΔG is NOT bimodal). `RPI_WEIGHTS["m_pack_tau"]`/`["m_pack_window_nt"]` set, version
@@ -25,8 +31,12 @@ shared, not M_pack-only) for ONE donor/backbone determination per candidate.
   in: `footprint` now reads `n_recognition_footprint(backbone_species)` — SNV's real
   23-nt asymmetry wired to production for the first time.
 
-**NEXT ACTION: WS4 (Task 12+) — validation, the core deliverable.** WS3 is done; WS2
-Task 7 (cross-OS fixture) also remains, independently. See `docs/PROJECT-STATE.md` §7b.
+**NEXT ACTION: run the diagnostic in `docs/PROJECT-STATE.md` §7c** — stratify
+`c_real_positive` by Factor E (near-1 all_hanta intra-species candidates vs suppressed
+published inter-species crosses) and re-run `reals_vs_b1` on the E~1 stratum only,
+before drawing any conclusion about M_pack/M_pol. Task 12 is done; Task 13/14's CODE is
+done and tested; only the RESULT's interpretation is open. WS2 Task 7 (cross-OS fixture)
+also remains, independently.
 
 **Two weak-signal findings, user-acknowledged 2026-08-29 — proceed as planned, do not
 retune.**

@@ -11,12 +11,12 @@ A fresh session should need this file, `CLAUDE.md`, and the two documents in
 | | |
 |---|---|
 | **Branch** | `04-rpi-fitness-validation`, pushed, tracking `origin/` |
-| **HEAD** | `6a62c77` (WS4 Task 12) |
+| **HEAD** | `1e0b9aa` (WS4 Task 13/14, IN PROGRESS — see section 7c) |
 | **`main`** | `e7d9f44`, pushed (was 4 commits behind at session start) |
-| **Test suite** | **228 tests, all pass**, ~14 min (`python -m unittest reassortment_detector`) + **39 tests, <1 s** (`python -m unittest rpi_calibration`) |
-| **Validation harness** | **PASS** — sensitivity 19/19 (added SNV x BCCV, WS4 Task 12), specificity 27/27, blind spot 5/5, adversarial 4/4 |
+| **Test suite** | **228 tests** (`reassortment_detector`) + **39 tests** (`rpi_calibration`) + **29 tests, ~7 s** (`rpi_discrimination` + `rpi_discrimination_stats`, NEW this session), all pass |
+| **Validation harness** | **PASS** — sensitivity 19/19, specificity 27/27, blind spot 5/5, adversarial 4/4 (unchanged since Task 12) |
 | **Working tree** | Clean except `Mydocs/My Library.csv`, deleted by an external process; user said leave it |
-| **Unpushed** | `3947f1c`..`6a62c77` — WS3.1 through WS4 Task 12, committed locally, **not pushed** |
+| **Unpushed** | `3947f1c`..`1e0b9aa` — WS3.1 through WS4 Task 13/14 (in progress), committed locally, **not pushed** |
 
 **Current goal:** make the Reassortment Plausibility Index (RPI) work end-to-end and
 demonstrate it separates real reassortants from shuffled fakes, reproducibly on Windows
@@ -269,27 +269,137 @@ Task 10 (WS3.3), scoped separately on purpose. Full suite 194+6 tests, all pass.
   check over a representative sample of lineage pairs, not a per-candidate computation.
   Building that aggregation is future work, never in either task's stated checklist.
 
-## NEXT ACTION — WS4 (Task 12+): validation, the core deliverable
+## 7c. WS4 Task 12 — DONE. Task 13/14 — CODE DONE, RESULT NOT YET INTERPRETED.
 
-Gated on WS3 (done). WS2 Task 7 (cross-OS fixture) also remains, independently.
+**Start a fresh session here.** This section is the complete handoff — read it before
+touching `rpi_discrimination.py` or `rpi_discrimination_stats.py`.
 
-**Binding constraint on WS4 Task 13:** the b1/b2/random group builders **MUST exclude the
-42 isolate keys in `data/rpi_calibration.json` → `reserved_for_calibration.isolate_keys`.**
-τ is derived from this panel's ΔΔG span, so any overlap tunes the scale parameter on the
-validation set and makes the WS4 result circular. The WS4 side is the only place this half
-of the disjointness guarantee can be enforced.
+### Task 12 (D5) — DONE, see section 5 / commit `6a62c77`.
+SNV x BCCV cross added to `PUBLISHED_CROSSES`. Validation harness sensitivity 19/19.
+Corrected a wrong species lookup along the way (BCCV is `Orthohantavirus nigrorivense`
+in this project's own curated table, not `bayoui`). Nothing further to do here.
 
-**Weak-signal findings, user-acknowledged 2026-08-29 — proceed as planned, do not retune.**
+### Task 13 (D7) — `rpi_discrimination.py`, commit `1e0b9aa`.
+Code works, is tested (17 tests), and was run once against real data. **Read that
+module's own docstring first** — it documents the four groups' construction in full
+(random / b1 / b2 / real, sample sizes and why, the calibration-disjointness
+enforcement) so this section does not repeat it.
+
+### Task 14 (D7) — `rpi_discrimination_stats.py`, commit `1e0b9aa`.
+Hand-rolled Mann-Whitney U (no scipy in this environment) + Cliff's delta (reused from
+`rpi_calibration.py`), 12 tests, all pass. Computes the three pairwise comparisons the
+ranking `reals ~ b1 > b2 > random` reduces to. **Read that module's own docstring** for
+why "equivalence" is deliberately NOT a formal TOST claim.
+
+### THE MEASURED RESULT (one run, 2026-08-29, seed 20260829) — the ranking does NOT hold:
+
+    b2_vs_random:  p=0.153 (NOT significant), Cliff's delta = -0.225 (small, WRONG SIGN —
+                   random fakes scored HIGHER than sympatric cross-species fakes)
+    b1_vs_b2:      p=0.052 (borderline NOT significant), Cliff's delta = +0.275 (small,
+                   right direction, just misses alpha=0.05)
+    reals_vs_b1:   p=0.048 (SIGNIFICANT), Cliff's delta = -0.430 (medium, WRONG DIRECTION
+                   for a claimed tie — reals scored LOWER than b1, not indistinguishable)
+    overall_ranking_supported: False
+
+Reproduce: `python rpi_discrimination.py --json <path>` (~15 min, scores 97 candidates
+through `score_candidate`), then
+`rpi_discrimination_stats.evaluate_pass_criterion(json.load(open(path))["groups"])`.
+
+### LEADING HYPOTHESIS for `reals_vs_b1` — NOT YET CONFIRMED. Check this FIRST.
+
+Group (c) "real positives" mixes two things with very different Factor E exposure:
+
+- The 4 published inter-species lab crosses (RIZVANOV x2, HANDKE, the new BCCV one) are
+  **real parental pairs that do NOT ecologically co-occur** (SNV is USA, ANDV is Chile;
+  PUUV and PHV are different-continent lab pairings). Factor E is SUPPOSED to penalise
+  these hard — "a perfect molecular profile must NOT rescue a candidate whose parents
+  never co-occurred" is the model's own stated design (section 3 of this doc). Measured:
+  `RIZVANOV2004_SNVsl_x_ANDVm` scored 0.0035, `RIZVANOV2004_reciprocal` 0.0046,
+  `HANDKE2010` 0.0047 — all near the floor, almost certainly Factor E doing exactly what
+  it is designed to do, NOT a M_pack/M_pol failure.
+- The 7 all_hanta-detected intra-species candidates are same-species, so Factor E is
+  near 1 (no ecological penalty) — matching b1's own Factor E exposure (b1 is
+  within-species by construction too). These ranged 0.025–0.47 in the one run
+  (`REAL_ORTHO_seoulense_001` = 0.050, `_002` = 0.47, `_003` = 0.35, `_004` = 0.025,
+  `_000` hantanense = 0.47). 2 of 9 candidates (`REAL_ORTHO_sinnombreense_005`,
+  the `unclassified Orthohantavirus|msb89863` row) hit `junk_sequence` at gate0 and
+  scored `None` — NOT YET INVESTIGATED why; check gate0 failures on those two
+  specifically before re-running.
+
+**b1 has NO Factor-E-penalised members at all** (by construction every b1 case is one
+species, so E is always ~1). Comparing a "reals" pool that is ~36% Factor-E-suppressed-
+near-zero against a pool that is 0% Factor-E-suppressed is an apples-to-oranges
+comparison that could manufacture exactly this "reals scores significantly lower"
+result WITHOUT M_pack or M_pol being at fault.
+
+**The specific next diagnostic, not yet run:** stratify `c_real_positive` by
+`rpi_e_total` (already in the scored row) into "E ~= 1" (the all_hanta intra-species
+candidates) vs "E suppressed" (the published inter-species lab crosses), and re-run
+`reals_vs_b1` against ONLY the E~1 stratum. If THAT comparison also fails to look like a
+plausible tie, the finding is real (M_pack/M_pol, or gate1's blind spot for
+intra-species events, genuinely produce a reals/b1 gap) and should be written up
+plainly per Task 14's honest-failure clause — do not retune τ or invent a new factor to
+close the gap. If restricting to the E~1 stratum resolves it, the fix is a Task 13
+change (split "real positives" into an ecologically-matched sub-group before comparing
+to b1, or compare each stratum against a construction with matching Factor E exposure),
+not a scoring-code change.
+
+### `b2_vs_random`'s wrong-sign result — also not yet diagnosed.
+
+`gate1_pattern` counts observed on this run: `a_random_fakes` was 17/20 `m_only` (gate1
+DID detect discordance for random fakes, as expected — its 3 `undetectable_by_design`
+cases are presumably close species pairs drawn by chance); `b2_cross_species_sympatric`
+was 14/36 (39%) `undetectable_by_design` — the SAME near-identity blind spot Task 12
+found for BCCV/bayoui, now affecting the sympatric species themselves
+(hantanense/khabarovskense/seoulense/puumalaense are closely related, which is part of
+WHY they can be sympatric). `undetectable_by_design` still sets `discordant_segment`
+(it is a confidence qualifier on the same computation, not a different one — see
+`gate1_check`), so `rpi_species_assignment` should still resolve a real donor/backbone
+for these — this was NOT yet verified by checking `rpi_m_pack`/`rpi_m_pol` values on the
+b2 rows specifically. **Next diagnostic:** pull the per-row `rpi_m_pack`/`rpi_m_pol`
+values for `b2_cross_species_sympatric` (same JSON, `report["groups"]
+["b2_cross_species_sympatric"]`) and check whether the `undetectable_by_design` rows
+score differently (higher, i.e. more "plausible") than the `m_only`/`s_or_l_involving`
+rows within b2 itself — and separately check `a_random_fakes`' own `rpi_e_total` values
+(different-continent pairs should suppress E hard; if random's E is NOT actually being
+suppressed as expected, that is a second, independent thing to check before concluding
+anything about M_pack/M_pol).
+
+### What NOT to do next.
+
+- Do not retune `m_pack_tau`, `RPI_N_FOOTPRINT_NT`, or any `RPI_WEIGHTS` entry against
+  this result — every prior session decision (2026-08-29, the WS3.1 and WS3.3/3.4
+  sign-offs) was explicit that weak-signal findings get reported, not retuned against
+  the validation set. This result is validation, not calibration.
+- Do not change `rpi_discrimination.py`'s group construction until the E-stratification
+  diagnostic above is actually run — the hypothesis is plausible but unconfirmed, and
+  changing the panel before confirming would risk fitting the panel to the desired
+  answer.
+- Do not report Task 14 as "failed" or "passed" externally yet — the honest-failure
+  clause requires reporting the measurement, but the measurement needs the diagnostics
+  above before its cause is understood well enough to write up.
+
+### Task 15 (not started).
+Chimera ladder (detection-limit-vs-divergence sweep) + extend `sensitivity_sweep` to
+cover `m_pack_tau` and `m_pack_window_nt` at ±50% / 25-50-75 nt. The `sensitivity_sweep`
+extension is small and mechanical (follow the exact pattern already used for
+`jeffreys_alpha`/`host_decay` — deep-copy `RPI_WEIGHTS`, perturb, score
+`_rpi_sensitivity_panel`, report rank correlation); the chimera ladder needs a
+divergence metric (candidate: `gate0.best_kmer_identity` or `SpeciesHit.distance` from
+`nearest_species_by_kmer`) and a set of real species pairs spanning it, not yet chosen.
+Blocked behind Task 14 being actually resolved, not technically blocked.
+
+**Binding constraint (still applies to any further b1/b2/random work):** every group
+builder **MUST exclude the 42 isolate keys in `data/rpi_calibration.json` →
+`reserved_for_calibration.isolate_keys`** (`rpi_discrimination.usable_pool` already
+does this). τ is derived from this panel's ΔΔG span, so any overlap tunes the scale
+parameter on the validation set and makes the WS4 result circular.
+
+**Weak-signal findings from WS3, still true, still not to be fixed by retuning:**
 - M_pack: ΔΔG separates cognate/non-cognate only weakly (Cliff's δ = +0.222; 38% of the
   calibration panel has ΔΔG ≤ 0, where M_pack saturates at 1.0).
 - M_pol: real signal exists only for an SNV backbone (the only species with a non-default
   `RPI_N_FOOTPRINT_NT` entry); every other backbone reports `no_signal_beyond_tag`.
-
-Both are named limitations of what the underlying biology supports measuring, not bugs to
-fix by retuning τ or by inventing additional footprint lengths without a literature
-source. **WS4 is where it gets decided whether M_pack + M_pol together are enough** to
-separate the b2 cross-species sympatric group, or whether the deferred Factor E rebuild
-(gate3's KNOWN LIMITATION) turns out to matter more.
 
 ### Gate 4 blockers to handle when it is first run
 - The executable is **`iqtree3.exe`**, not `iqtree`. `parse_args` defaults
