@@ -1,8 +1,10 @@
 # RPI as a Fitness Function — Design Doc
 
-**Status: DRAFT. Awaiting approval on two decisions (D1, D2) before any code is written.**
+**Status: APPROVED 2026-08-29.** D1, D2, WS3.4 scope, MAFFT/IQ-TREE install, SNV x BCCV and
+the cross-OS scoping are all settled — see "Decisions of record" below. Implementation
+proceeds; the task plan is at `docs/superpowers/plans/2026-08-29-rpi-fitness-validation.md`.
 
-**Branch:** `04-rpi-fitness-validation` (created, empty)
+**Branch:** `04-rpi-fitness-validation`
 **Date:** 2026-08-29
 **Supersedes nothing.** Extends `2026-08-24-reassortment-plausibility-index-design.md`.
 
@@ -23,6 +25,20 @@ both Windows and Linux.
   **sweepable at ±50%** in the sensitivity analysis.
 - Reproducible: pinned MAFFT / IQ-TREE / ViennaRNA, seeded everything, hash check on a small
   fixture, identical across OSes.
+
+---
+
+## Decisions of record (2026-08-29)
+
+| # | Decision | Resolution |
+|---|---|---|
+| **D1** | M_pack rescaling | **Calibrate first, then choose.** Run the WS3.1 calibration panel; if the ddG distribution is bimodal with a clean gap -> logistic (Option C); otherwise -> tau-scaled Boltzmann (Option A) with `tau = ddG_span / ln(100)` ~= 4.86. Min-max (Option B) rejected: cohort-dependence breaks reproducibility. |
+| **D2** | RNAcofold window | **N = 50 nt**, swept 25 / 50 / 75. Whole-segment folding is both computationally infeasible and biologically wrong — the compatibility signal is terminal (panhandle), not distributed. |
+| **D3** | WS3.4 (M_pol scored for real) | **In scope and required.** Compute M_pack and M_pol from the candidate's actual terminal windows against the **implicated parent/donor consensus** — never self-comparison. This is what makes the score sequence-dependent. |
+| **D4** | MAFFT + IQ-TREE install | **Go.** Pinned versions. Gate 4 fixture runs in a **scratch dir only**, never touching existing outputs. |
+| **D5** | SNV x BCCV | Add the cross spec; resolve the ICTV species name against the reference index. |
+| **D6** | Cross-OS reproducibility | Byte-identity for MAFFT and RPI outputs; **topology + support-level agreement** for IQ-TREE. |
+| **D7** | Hard-fake taxonomy | Split into **b1** (within-species shuffles) and **b2** (cross-species sympatric). See §4/WS4 — this changed the pass criterion. |
 
 ---
 
@@ -66,23 +82,42 @@ not). A hard fake is *defined* by matching the real reassortant on species, plac
 which is precisely what fixes E. So the hard fake and the real reassortant receive **identical
 RPI scores**, necessarily, today.
 
-**Only sequence-level factors can discriminate hard fakes.** E, K and F are all species-level
-or segment-level priors. M_pack and M_pol are the only two terms in the model that read the
-actual nucleotides of the actual combination being scored. Therefore:
+**Only sequence-level factors read the actual combination being scored.** E, K and F are all
+species-level or segment-level priors. M_pack and M_pol are the only two terms in the model
+that look at the nucleotides of *this* S+M+L assembly.
 
-> Workstream 4's headline test — `real > hard fake` — **cannot pass** unless M_pack (and
-> ideally M_pol) is genuinely *scored*, not merely *rescaled*. Rescaling alone fixes the
-> annihilation problem but leaves the constant at 1.0.
+### What this does and does not mean (corrected 2026-08-29, per D7)
 
-This is why the plan below puts "score M_pack against real parental sequences" and "score
-M_pol against real parental termini" inside the M_pack workstream, rather than treating the
-rescaling as a standalone arithmetic change. **Turning M_pack on is the deliverable; the
+An earlier draft of this section treated "RPI gives a real reassortant and a same-species
+shuffle the same score" as a defect to be engineered away. **That was a misframing, and it is
+worth stating plainly because it would have set the wrong success criterion for the whole
+validation.**
+
+RPI measures **plausibility**, not **occurrence**. A within-species shuffle *is* plausible:
+its parents co-circulate, co-infect, and have compatible termini, so a high RPI is the
+*correct* answer for it. Asking RPI to score it below a real reassortant would be asking the
+index to report something it does not measure — and the layer that separates "could happen"
+from "did happen" is the phylogenetic detector, not the index. **Plausibility is not evidence
+of occurrence.**
+
+So the finding splits in two:
+
+- **For within-species shuffles (b1):** identical-to-real scores are the *intended* behaviour.
+  These are a **plausibility-ceiling control** — they tell us the top of the scale is where it
+  should be. Gate 4's tree calls, not RPI, must separate them from real positives.
+- **For cross-species sympatric shuffles (b2):** E is high by construction (same host order,
+  country, sampling years), so E cannot discriminate — and with `m_pack = 1.0` and a
+  self-compared `m_pol = 1.0`, **nothing else can either.** b2 is where the index must earn
+  its keep, and today it provably cannot.
+
+> **The operative conclusion is unchanged, only its target:** WS3.3 and WS3.4 are mandatory,
+> because b2 discrimination is impossible without them. Rescaling alone fixes the annihilation
+> problem but leaves both factors constant at 1.0.
+
+This is why the plan puts "score M_pack against real parental sequences" and "score M_pol
+against real parental termini" inside the M_pack workstream rather than treating the rescaling
+as a standalone arithmetic change. **Turning M_pack and M_pol on is the deliverable; the
 rescaling is one decision inside it.**
-
-Flagging this clearly because it changes what success looks like: if we only fix the scaling
-and then validate, group (b) will come back a flat tie, and the honest report will be "RPI does
-not separate hard fakes" — a true but unhelpful result that is predictable from the source code
-right now, without running anything.
 
 ---
 
@@ -323,24 +358,43 @@ Depends on nothing. Runs in parallel with WS1.
 
 Depends on WS3.
 
-Three groups, scored on `rpi_generation` and `rpi_retention`:
+**Four groups** (per D7), scored on `rpi_generation` and `rpi_retention`:
 
 - **(a) Random fakes** — segments drawn from different species *and* different continents.
   Expect near-floor. E collapses (`host_decay` different_order = 0.01, geo floor = 0.01) *and*
-  M_pack collapses. This group separates on E alone, so **it is the weak test** and should be
+  M_pack collapses. This group separates on E alone, so **it is the weak test** and must be
   reported as such rather than as a success.
-- **(b) Hard fakes** — same species, same country, same year. E ~= 1.0 by construction.
-  **This is the real test, and it is a pure test of M_pack + M_pol** per §0.
+- **(b1) Within-species shuffles** — segments from different isolates of the *same* species.
+  **Expected to score HIGH, at or near the real positives.** This is a
+  **plausibility-ceiling control**, not a negative: these assemblies genuinely are plausible,
+  and RPI scoring them highly is correct behaviour. **RPI is not required to separate b1 from
+  the real positives** — the tree detector is the layer that does that. What b1 tests is that
+  the top of the RPI scale sits where it should.
+- **(b2) Cross-species sympatric shuffles** — different species, but same host order, same
+  country, overlapping sampling years. **E is high by construction, so M_pack and M_pol must
+  do all of the discriminating.** Expected mid-to-low. **This is the group that actually tests
+  the index**, and per §0 it is impossible without WS3.3 + WS3.4.
 - **(c) Real positives** — the 8 supported candidates plus the published lab pairs.
   **Gap found:** `PUBLISHED_CROSSES` currently has SNV x ANDV (both orientations), PUUV x PHV,
   and the Rodriguez SNV NMR11 x CC107 intra-species pair — but **SNV x BCCV is not there**. It
-  exists only as counts in `RPI_INVITRO_BENCHMARK`. WS4 must add it as a cross spec, which
+  exists only as counts in `RPI_INVITRO_BENCHMARK`. Per D5, WS4 adds it as a cross spec, which
   requires resolving BCCV's ICTV species name against the reference index and confirming a
   complete triplet exists. If it does not, that is logged as a skip, not silently dropped.
 
-**Pass criterion:** median `rpi_retention` ordered **real > hard fake > random fake**, with the
-real-vs-hard-fake gap reported with a Mann-Whitney U and an effect size. Not a t-test — the
-scores are bounded products and nowhere near normal.
+### Pass criterion (two parts, both required)
+
+1. **RPI ranking:** median `rpi_retention` ordered **reals ~= b1 > b2 > random fakes**.
+   `reals ~= b1` is an *expected tie*, asserted as an equivalence (overlapping distributions),
+   **not** as a separation. Reporting a real-over-b1 gap as a success would be claiming the
+   index measures occurrence, which it does not.
+2. **Detector separation:** the detector's **tree calls (gate 4) separate reals from b1.**
+   This is the half that establishes occurrence, and it is the first real exercise of gate 4
+   against live binaries (D4).
+
+Gaps that must separate (b1 vs b2, b2 vs random) are reported with a Mann-Whitney U and an
+effect size. Not a t-test — the scores are bounded products and nowhere near normal. The
+expected tie (reals vs b1) is reported as an equivalence interval, since a non-significant
+U-test is absence of evidence, not evidence of the tie we are claiming.
 
 - **Planted chimeras at increasing parental divergence** to find the detection limit: sweep
   donor/backbone pairs across the observed identity range and report the divergence at which
@@ -348,10 +402,10 @@ scores are bounded products and nowhere near normal.
 - **±50% sensitivity sweep on all weights**, extending the existing `sensitivity_sweep`
   (`reassortment_detector.py:1932`) to cover tau and N.
 
-**Honest-failure clause:** if group (b) does not separate, the deliverable is the measurement
-plus a stated limitation — *not* a retuned tau chosen to make it separate. Tuning the scale
-parameter against the validation set would make the validation circular, and it is the single
-easiest thing for a reviewer to catch.
+**Honest-failure clause:** if group (b2) does not separate from b1, the deliverable is the
+measurement plus a stated limitation — *not* a retuned tau chosen to make it separate. Tuning
+the scale parameter against the validation set would make the validation circular, and it is
+the single easiest thing for a reviewer to catch.
 
 ### WS5 — Outputs
 
@@ -368,21 +422,20 @@ easiest thing for a reviewer to catch.
 
 | Risk | Mitigation |
 |---|---|
-| **Group (b) does not separate** — the predicted-from-source outcome if WS3.3/3.4 are skipped | WS3.3 and WS3.4 are both mandatory, not optional. If it still does not separate with both scored, report it. |
-| MAFFT/IQ-TREE unavailable -> gate 4 still unvalidated | WS1-WS5 do not depend on gate 4; RPI runs without phylogeny. Flagged as a standing limitation. |
+| **Group (b2) does not separate from b1** — the predicted-from-source outcome if WS3.3/3.4 are skipped | WS3.3 and WS3.4 are both mandatory, not optional. If it still does not separate with both scored, report it. |
+| **b1 read as a false positive** | b1 scoring high is *correct*. The pass criterion asserts `reals ~= b1` as an equivalence, and `RATIONALE.md` states why. Guarding against a future reader "fixing" this. |
+| Gate 4 fixture run clobbers existing outputs | Per D4, the fixture runs in a scratch dir only. Asserted in the WS2 test, not just intended. |
 | tau tuned against the validation set (circularity) | tau is derived in WS3.1 from a calibration panel **disjoint from the WS4 validation groups**, and pinned before WS4 runs. |
 | RNAcofold energies are parameter-set dependent | ViennaRNA 2.7.2 pinned and now installed; the calibration artifact records the version. |
 | Cross-OS bit-identity claimed too broadly | Scoped in WS2: bytes for MAFFT + RPI, topology/support for IQ-TREE. |
 
 ---
 
-## 6. What I am asking for
+## 6. Status
 
-1. **D1** — M_pack rescaling: Option A now, or calibrate-then-choose (recommended), or C.
-2. **D2** — RNAcofold window N = 50 nt, or your number.
-3. **Go/no-go on installing MAFFT + IQ-TREE** (conda or manual Windows binaries) for WS2.
-4. Confirmation that **WS3.4 (scoring M_pol for real) is in scope** — §0 says the headline
-   result depends on it, but it was not in your list, so it is not being assumed.
+All open questions resolved — see "Decisions of record". The bite-sized task plan is at
+`docs/superpowers/plans/2026-08-29-rpi-fitness-validation.md`. Implementation starts at WS1.
 
-On approval this expands into the bite-sized, step-by-step task plan at
-`docs/superpowers/plans/2026-08-29-rpi-fitness-validation.md`, starting with WS1.
+One decision remains *deferred by design*, not unanswered: **D1's A-vs-C choice is made from
+the WS3.1 calibration artifact**, on the bimodality test stated in the table. That is a
+data-driven branch inside the plan, not a pending approval.
