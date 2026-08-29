@@ -583,9 +583,20 @@ Gated on WS1. Implements D1, D2, D3.
 - [ ] **Step 1: Implement the 50-nt panhandle window (D2)** — terminal 50 nt of the 5′ end of one
   segment against the terminal 50 nt of the 3′ end of the other, reverse-complemented.
   `_reverse_complement` already exists at `reassortment_detector.py:415`.
-- [ ] **Step 2: Build cognate and non-cognate pair sets** from the reference index. **This panel
-  must be disjoint from the WS4 validation groups** — otherwise τ is tuned on the validation set
-  and the whole result is circular.
+- [ ] **Step 2: Build cognate and non-cognate pair sets** from the reference index.
+
+  **APPROVED DEFINITION (2026-08-29) — do not re-litigate:**
+  - **Cognate = WITHIN-ISOLATE**: S/M/L drawn from the *same* isolate. The one reading nobody
+    disputes — segments that demonstrably travelled together in a real virion. Rejected
+    alternative: within-species (different isolates of one species), because that is what b1
+    tests, and using it here would contaminate the b1 comparison.
+  - **Non-cognate = ACROSS SPECIES**, at matched sampling depth.
+  - **Both restricted to isolates NOT used in any WS4 group.**
+
+  **This panel must be disjoint from the WS4 validation groups** — otherwise τ is tuned on the
+  validation set and the whole result is circular. That disjointness is the reason for the
+  restriction above, not an afterthought: τ is derived from the observed ΔΔG span, so the
+  panel's composition directly sets the scale parameter every downstream score depends on.
 - [ ] **Step 3: Fold the panel via the ViennaRNA PYTHON BINDINGS** (`RNA.fold_compound(a+"&"+b)`,
   `mfe_dimer()`) -- **not** the CLI. Per D2b the pip package ships no RNAcofold executable, and the
   subprocess path is removed from the API surface entirely; there is deliberately no fallback.
