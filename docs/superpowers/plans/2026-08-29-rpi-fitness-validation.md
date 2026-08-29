@@ -49,6 +49,12 @@ ViennaRNA 2.7.2 (RNAcofold), MAFFT 7.525, IQ-TREE 3.1.3, unittest, matplotlib.
 | `requirements-pip.txt` | Create | System-Python path, reconciled against `environment.yml` |
 | `RATIONALE.md` | Create | Design decisions and their reasoning — the defence document |
 | `docs/methods-paragraph.md` | Create | Corrected Methods text |
+| `rpi_score_api.py` | Create | WS-API: `score_triplet` entry point, accession resolution, memo layer |
+| `tests/fixtures/groups/*.csv` | Create | WS-API: the four groups as manifests with expected-ordering assertions |
+
+**Shared extraction (WS-API + WS4/Task 13):** accession→sequence lookup currently lives in
+`validate_reassortment_detector.PanelBuilder`. Both need it. **Promote it once**, into
+`reassortment_detector.py` or `rpi_score_api.py`; do not copy it.
 
 ---
 
@@ -390,6 +396,41 @@ git commit -m "Fix N4 nan-ddG flip, N5 numpy JSON hole, N6 vacuous ordering guar
 
 ---
 
+# WS0 — Determinism prerequisite (**BLOCKS WS-API AND WS2/D6**)
+
+Discovered while verifying WS1. Not in the original plan. **Must land before WS2.**
+
+`reassortment_detector.py:800` builds `implicated_species = list({...})` from a **set**. Python
+randomises string hashing per process, so the list order varies run to run. Verified: 5 processes
+produced 3 distinct orderings of the same 3 species. A determinism audit found this is the *only*
+set-iteration that reaches output — `:763` is a single-element set and `:2618` is already `sorted`.
+
+It is not cosmetic. `gate3_check:928` reads `implicated_species[:2]`, so which two species gate 3
+tests is chosen at random. Measured on the three species live in the current report:
+
+```
+hantanense  + sinnombreense -> no_ecological_route
+hantanense  + luxiense      -> ecological_overlap_plausible   <- different answer
+sinnombreense + luxiense    -> no_ecological_route
+```
+
+Two of six orderings flip it, so ~1/3 of runs disagree. `combine_verdict:1101` returns
+`"no_ecological_route"` straight from that status, so **any candidate implicating 3 species that
+clears gate 0's identity floor has a nondeterministic verdict.** Currently latent: the one
+3-species row in the panel (`ADV_shuffled_real_sequence`) is decided earlier by gate 0.
+
+- [ ] **Step 1: Failing test** — assert `gate1_check` returns species in a stable order, and that
+  `gate3_check` gives the same status for every permutation of one implicated set.
+- [ ] **Step 2: Fix** — `sorted({s for s in best_species.values() if s})` at `:800`.
+- [ ] **Step 3:** Confirm the validation report is byte-identical across two consecutive runs.
+- [ ] **Step 4: Commit separately from WS1/WS2** — this changes a reported column's order and can
+  change `gate3_status` on 3-species inputs, so it needs its own reviewable commit.
+
+**Requires approval:** this touches frozen gate behaviour. It replaces a random value with a fixed
+one rather than changing a defined one, but that is the user's call.
+
+---
+
 # WS2 — Reproducibility
 
 Independent of WS1; may run in parallel. Requires D4 (approved).
@@ -589,6 +630,88 @@ Gated on WS3.
 
 - [ ] Planted chimeras across the observed divergence range; report the detection limit.
 - [ ] Extend `sensitivity_sweep` (`reassortment_detector.py:1932`) to cover τ and N (25/50/75).
+
+---
+
+# WS-API — Scoring handoff
+
+Scope boundary: **this project's role ends at defining and validating the scoring function.** A
+downstream team consumes it. Depends on WS0 (determinism), WS3 (M_pack must exist to report a
+per-call time) and WS4 (fixture groups). Lands last.
+
+## Measured baseline (2026-08-29, before any optimisation)
+
+Timed on a real complete triplet, gate 4 disabled, warm caches:
+
+| Component | Per call | Note |
+|---|---|---|
+| `gate1_check` | **4,231 ms** | `nearest_species_by_kmer` over all reference profiles × 3 segments |
+| `gate0_check` | **2,770 ms** | ORF finding + k-mer identity per segment |
+| `ecological_opportunity` | **2,848 ms** | only when ≥2 species implicated — **always true for shuffles**; 0 ms for the 1-species case |
+| `gate2` / `gate3` | ~0 ms | |
+| **`score_candidate` total** | **7,088 ms** | 1-species case; ~9.9 s for a multi-species shuffle |
+| RNAcofold, 50 nt × 50 nt | **7.1 ms** | ViennaRNA 2.7.2, measured |
+| 3 folds per triplet (S-M, S-L, M-L) | **21 ms** | |
+
+One-time: `load_reference_data` 3.2 s, `_build_precomputed` 0.09 s.
+
+**At today's cost, 1,000 calls ≈ 2 hours and 10,000 ≈ 20 hours.**
+
+### Task A1: Make the runtime budget achievable
+
+The stated budget — "per-call cost = at most one RNAcofold fold" — is **not reachable by
+precomputing ecology alone.** RNAcofold is ~0.3% of the cost; ecology is ~29%; **gate 0 + gate 1
+are ~71%**, and the original brief did not target them.
+
+What makes it reachable is that `score_triplet`'s input unit is **accessions from a bounded
+reference index**, so almost all of the cost is a pure function of a single segment accession and
+can be memoised:
+
+- [ ] **Per-accession memo for gate 0 / gate 1 segment work.** ORF extraction, k-mer profile, and
+  nearest-species hits are pure functions of the segment sequence. Key on accession. Bounded by the
+  index size, not by call count.
+- [ ] **Per-species-set memo for ecology.** `ecological_opportunity` depends only on the implicated
+  species set — a key space of ~42 species (≈861 pairs), so it collapses to a dict lookup.
+- [ ] **Per-accession-pair memo for cofold dG.** Cognate baselines precomputed at load; non-cognate
+  folds cached by ordered accession pair.
+- [ ] **Steady-state target: dict lookups + 0–3 cofolds ≈ low tens of ms.** Cold cost stays ~7 s
+  for a novel accession. **Report both warm and cold, not one blended number** — a blended figure
+  would misrepresent the first pass over a new panel.
+- [ ] Caching must be **semantically inert**: assert a memoised run and a non-memoised run produce
+  identical rows.
+
+### Task A2: `score_triplet` entry point
+
+- [ ] `score_triplet(s_acc, m_acc, l_acc) -> dict` — accessions resolved against the reference index.
+- [ ] Returns `rpi_generation`, `rpi_retention`, per-factor columns (`rpi_e_*`, `rpi_m_pack`,
+  `rpi_m_pol`, `rpi_k_*`, `rpi_f`), and status flags (`rpi_m_pack_status`, `rpi_m_pol_status`,
+  `rpi_k_stratum_provisional`, `rpi_weights_version`).
+- [ ] **Does NOT run gate 4, and does NOT return `verdict`.** Verified: with phylogeny disabled,
+  `combine_verdict` returns `"insufficient_comparators"` for *every* call, because
+  `gate4.phylo_status` short-circuits at `:1101`. Returning that would hand the caller a constant
+  dressed as a finding. Occurrence is the tree detector's layer, per the scope note.
+- [ ] Fully offline: local subprocess / ViennaRNA bindings only, no network. Assert it.
+- [ ] Deterministic and seeded — **requires WS0.**
+
+### Task A3: Verification fixtures
+
+- [ ] The four groups (a, b1, b2, c) as **manifest CSVs** with expected-ordering assertions, so the
+  downstream team can confirm their harness calls the function correctly before trusting results.
+- [ ] **Serialise WS4/Task 13's group builder — do not reimplement it.** Two definitions of "b2"
+  that drift apart is the exact failure this fixture exists to prevent.
+- [ ] Expected ordering per D7: `reals ≈ b1 > b2 > random`, with `reals ≈ b1` an **equivalence**.
+
+### Task A4: README section
+
+- [ ] What the score measures: **relative plausibility, not occurrence** — occurrence is the tree
+  detector's layer. Not a probability.
+- [ ] Input contract (three accessions), output columns, pinned versions (ViennaRNA 2.7.2,
+  MAFFT 7.525, IQ-TREE 3.1.3).
+- [ ] **The one rule: never adjust tau or any weight inside the caller's loop.**
+  **Make it enforceable, not just documented** — `_score_panel` (`:1916`, `:1929`) *mutates the
+  `RPI_WEIGHTS` module global* and restores it afterwards, so a sweep running alongside scoring
+  would silently read perturbed weights. Add a guard that refuses to score while a sweep holds the
+  global, or move the sweep to a passed-in weights argument.
 
 ---
 
