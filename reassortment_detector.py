@@ -285,6 +285,20 @@ RPI_WEIGHTS: Dict[str, Any] = {
 }
 
 
+def _weights(weights: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """The weight table to score against: an explicitly-passed one, else the global.
+
+    Exists so the sensitivity sweep can score a perturbed table WITHOUT reassigning the
+    module-level RPI_WEIGHTS. That reassignment was process-global: anything scoring
+    concurrently -- the WS-API scorer the downstream team calls in a loop -- would have
+    silently read perturbed weights and returned numbers attributable to no declared
+    weights version. Threading the table through is what makes "never adjust tau or any
+    weight inside the caller's loop" an enforced property rather than a documented
+    request.
+    """
+    return RPI_WEIGHTS if weights is None else weights
+
+
 def smoothed_prior(counts: Dict[str, float], alpha: float) -> Dict[str, float]:
     """Jeffreys-smoothed distribution over "S", "M", "L" from raw odd-segment counts.
 
@@ -299,15 +313,17 @@ def smoothed_prior(counts: Dict[str, float], alpha: float) -> Dict[str, float]:
     return {segment: value / total for segment, value in smoothed.items()}
 
 
-def constellation_prior(stratum: str, alpha: Optional[float] = None) -> Dict[str, float]:
+def constellation_prior(stratum: str, alpha: Optional[float] = None,
+                        weights: Optional[Dict[str, Any]] = None) -> Dict[str, float]:
     """Jeffreys-smoothed prior over which segment is the odd one out.
 
     Returns a distribution over "S", "M", "L" summing to 1.0, with every category
     strictly positive. Raises KeyError for an unknown stratum rather than silently
     defaulting -- a wrong stratum must be loud.
     """
-    alpha = RPI_WEIGHTS["jeffreys_alpha"] if alpha is None else alpha
-    return smoothed_prior(RPI_WEIGHTS["constellation_counts"][stratum], alpha)
+    table = _weights(weights)
+    alpha = table["jeffreys_alpha"] if alpha is None else alpha
+    return smoothed_prior(table["constellation_counts"][stratum], alpha)
 
 
 # ---------------------------------------------------------------------------
@@ -1148,7 +1164,8 @@ def combine_verdict(
     return "no_conflict"
 
 
-def divergence_stratum(identity: float, boundary: Optional[float] = None) -> str:
+def divergence_stratum(identity: float, boundary: Optional[float] = None,
+                       weights: Optional[Dict[str, Any]] = None) -> str:
     """Classify a parental pair as 'close' or 'distant' by nucleotide identity.
 
     `identity` is a fraction in [0, 1], NOT a percentage. The stratum selects which
@@ -1156,7 +1173,8 @@ def divergence_stratum(identity: float, boundary: Optional[float] = None) -> str
     """
     if not 0.0 <= identity <= 1.0:
         raise ValueError(f"identity must be a fraction in [0, 1], got {identity!r}")
-    boundary = RPI_WEIGHTS["stratum_identity_boundary"] if boundary is None else boundary
+    boundary = (_weights(weights)["stratum_identity_boundary"]
+                if boundary is None else boundary)
     return "close" if identity >= boundary else "distant"
 
 
@@ -1203,6 +1221,7 @@ def _year_span(isolates: Sequence["ah.IsolateRecord"]) -> Optional[Tuple[int, in
 
 def ecological_opportunity(
     implicated_species: List[str], isolates: List["ah.IsolateRecord"],
+    weights: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, float]:
     """Factor E: relative opportunity for the implicated lineages to co-infect one cell.
 
@@ -1213,7 +1232,8 @@ def ecological_opportunity(
     Returns 1.0 (neutral) when fewer than two species are implicated: there is no
     co-infection requirement to test, so E must not penalise.
     """
-    floor = RPI_WEIGHTS["eco_floor"]
+    table = _weights(weights)
+    floor = table["eco_floor"]
     if len(implicated_species) < 2:
         return {"rpi_e_host": 1.0, "rpi_e_geo": 1.0, "rpi_e_time": 1.0, "rpi_e_total": 1.0}
 
@@ -1248,7 +1268,7 @@ def ecological_opportunity(
                 continue
 
             best_host = max(
-                RPI_WEIGHTS["host_decay"][host_rank_proximity(a, b)]
+                table["host_decay"][host_rank_proximity(a, b)]
                 for a in members_a for b in members_b
             )
             countries_a = {i.country for i in members_a if i.country}
@@ -1477,7 +1497,8 @@ def m_pol_variance_check(
     return float(np.mean(values)), "scored"
 
 
-def retention_factor(odd_segment: str, structural_intact: bool) -> float:
+def retention_factor(odd_segment: str, structural_intact: bool,
+                     weights: Optional[Dict[str, Any]] = None) -> float:
     """Factor F: scales rpi_generation into rpi_retention.
 
     SCOPE (spec 0.7, 8): models IMMEDIATE post-reassortment fitness only. McDonald's
@@ -1485,10 +1506,11 @@ def retention_factor(odd_segment: str, structural_intact: bool) -> float:
     -- is OUT OF SCOPE and is a named limitation, not a term here. A reassortant scoring
     low may still emerge after adaptation.
     """
-    base = RPI_WEIGHTS["retention_by_odd_segment"].get(odd_segment, 0.15)
+    table = _weights(weights)
+    base = table["retention_by_odd_segment"].get(odd_segment, 0.15)
     if not structural_intact:
-        base *= RPI_WEIGHTS["retention_structural_penalty"]
-    return max(RPI_WEIGHTS["eco_floor"], min(1.0, base))
+        base *= table["retention_structural_penalty"]
+    return max(table["eco_floor"], min(1.0, base))
 
 
 # Tag identifying which revision of RPI_WEIGHTS produced a given rpi_* row -- not itself
@@ -1530,6 +1552,7 @@ def compute_rpi(
     implicated_species: List[str], isolates: List["ah.IsolateRecord"],
     odd_segment: str, identity: float, m_pack: float, m_pol: float,
     m_pol_status: str, structural_intact: bool,
+    weights: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Assemble the Reassortment Plausibility Index.
 
@@ -1543,11 +1566,15 @@ def compute_rpi(
 
     This index is RELATIVE. It is not a probability, and must never be reported as one.
     """
-    floor = RPI_WEIGHTS["eco_floor"]
-    eco = ecological_opportunity(implicated_species, isolates)
-    stratum = divergence_stratum(identity)
-    k_value = constellation_prior(stratum)[odd_segment]
-    f_value = retention_factor(odd_segment, structural_intact)
+    # Every lookup below goes through `table`, and every helper is handed it
+    # explicitly. Nothing on this path reads the RPI_WEIGHTS global directly, which is
+    # what lets the sensitivity sweep score a perturbed table without reassigning it.
+    table = _weights(weights)
+    floor = table["eco_floor"]
+    eco = ecological_opportunity(implicated_species, isolates, weights=table)
+    stratum = divergence_stratum(identity, weights=table)
+    k_value = constellation_prior(stratum, weights=table)[odd_segment]
+    f_value = retention_factor(odd_segment, structural_intact, weights=table)
 
     generation = eco["rpi_e_total"] * max(m_pack, floor) * max(m_pol, floor) * k_value
     # floor ** 4: the product of four factors each individually floored at `floor` can
@@ -1567,7 +1594,7 @@ def compute_rpi(
         "rpi_k_stratum_provisional": RPI_K_STRATUM_PROVISIONAL,
         "rpi_k_value": round(k_value, 4),
         "rpi_f": round(f_value, 4),
-        "rpi_smoothing": RPI_WEIGHTS["jeffreys_alpha"],
+        "rpi_smoothing": table["jeffreys_alpha"],
         "rpi_weights_version": RPI_WEIGHTS_VERSION,
         # Precision per column is set by THAT COLUMN'S OWN FLOOR, not picked by eye.
         # Each is a product of floored factors, so each has a different smallest
@@ -1949,29 +1976,32 @@ def _score_panel(
     """rpi_generation and rpi_retention for every panel candidate under `weights`.
 
     `weights` must be a caller-owned dict (a deep copy of RPI_WEIGHTS with one key
-    perturbed) or None to score under the current global unperturbed. Temporarily
-    swaps the module-level RPI_WEIGHTS so compute_rpi's internal lookups pick up the
-    perturbation, then restores the ORIGINAL object -- via try/finally, so this holds
-    even if compute_rpi raises -- meaning the module-level RPI_WEIGHTS binding is
-    never left mutated or swapped once this function returns.
+    perturbed) or None to score under the current global unperturbed. It is PASSED DOWN
+    to compute_rpi, not installed anywhere.
+
+    This function used to reassign the module-level RPI_WEIGHTS for the duration of the
+    scoring loop and restore it in a finally block. That was correct single-threaded and
+    unsafe for the use this index is now built for: the reassignment is PROCESS-GLOBAL,
+    so anything scoring concurrently -- the WS-API entry point the downstream team calls
+    in a loop -- would read perturbed weights for the length of a sweep and return
+    numbers attributable to no declared rpi_weights_version. Nothing announced it,
+    because every individual row still looked well-formed.
+
+    Passing the table explicitly is what turns "never adjust tau or any weight inside
+    the caller's loop" from a README request into a property of the code. See
+    ScorePanelDoesNotMutateGlobalWeightsTest.
     """
-    global RPI_WEIGHTS
-    original = RPI_WEIGHTS
-    if weights is not None:
-        RPI_WEIGHTS = weights
-    try:
-        generation, retention = [], []
-        for candidate in panel:
-            row = compute_rpi(
-                candidate["implicated_species"], candidate["isolates"], candidate["odd_segment"],
-                candidate["identity"], candidate["m_pack"], candidate["m_pol"], "scored",
-                candidate["structural_intact"],
-            )
-            generation.append(row["rpi_generation"])
-            retention.append(row["rpi_retention"])
-        return {"generation": generation, "retention": retention}
-    finally:
-        RPI_WEIGHTS = original
+    table = _weights(weights)
+    generation, retention = [], []
+    for candidate in panel:
+        row = compute_rpi(
+            candidate["implicated_species"], candidate["isolates"], candidate["odd_segment"],
+            candidate["identity"], candidate["m_pack"], candidate["m_pol"], "scored",
+            candidate["structural_intact"], weights=table,
+        )
+        generation.append(row["rpi_generation"])
+        retention.append(row["rpi_retention"])
+    return {"generation": generation, "retention": retention}
 
 
 def sensitivity_sweep(factor: float = 0.5) -> Dict[str, Any]:
@@ -4417,6 +4447,72 @@ def _read_conda_pins(path: Path) -> Dict[str, Tuple[str, str]]:
             operator = ">=" if match.group(2) == ">=" else "=="
             pins[match.group(1).lower()] = (operator, match.group(3))
     return pins
+
+
+class ScorePanelDoesNotMutateGlobalWeightsTest(unittest.TestCase):
+    """_score_panel used to reassign the module-level RPI_WEIGHTS while scoring.
+
+    Correct single-threaded, unsafe for the WS-API use: the reassignment is
+    process-global, so a scorer running concurrently would read perturbed weights for
+    the duration of a sweep and return numbers attributable to no declared weights
+    version -- silently, because each row still looked well-formed."""
+
+    def test_global_is_untouched_while_a_perturbed_table_is_scored(self):
+        panel = _rpi_sensitivity_panel()
+        perturbed = copy.deepcopy(RPI_WEIGHTS)
+        perturbed["eco_floor"] = 0.5
+        perturbed["jeffreys_alpha"] = 9.0
+        before_object, before_snapshot = RPI_WEIGHTS, copy.deepcopy(RPI_WEIGHTS)
+        _score_panel(panel, perturbed)
+        self.assertIs(RPI_WEIGHTS, before_object, "RPI_WEIGHTS was rebound")
+        self.assertEqual(RPI_WEIGHTS, before_snapshot, "RPI_WEIGHTS contents changed")
+
+    def test_the_perturbation_actually_reaches_compute_rpi(self):
+        """Guard the guard: if `weights` were ignored rather than threaded, the test
+        above would pass for the wrong reason -- the global would be untouched because
+        nothing used the perturbed table at all."""
+        panel = _rpi_sensitivity_panel()
+        perturbed = copy.deepcopy(RPI_WEIGHTS)
+        perturbed["retention_by_odd_segment"] = {"M": 0.02, "S": 0.02, "L": 0.02}
+        self.assertNotEqual(_score_panel(panel, perturbed)["retention"],
+                            _score_panel(panel)["retention"])
+
+    def test_a_concurrent_scorer_is_unaffected_by_an_in_flight_sweep(self):
+        """The failure this fix exists to prevent, stated directly: a row scored WHILE a
+        sweep is mid-loop must equal the same row scored with no sweep in flight.
+
+        Scoring after the sweep returns would prove nothing -- the old code restored the
+        global in a finally block, so it was always correct once the call had finished.
+        The bug was only observable DURING the loop, so the observation has to happen
+        there. This panel entry runs the nested score when _score_panel reads its last
+        key, which is inside the loop body, with the perturbed table installed under the
+        old implementation."""
+        def unperturbed_row():
+            return compute_rpi(["A", "B"],
+                               [_eco_isolate("A", "USA", "2001"),
+                                _eco_isolate("B", "USA", "2002")],
+                               "M", 0.85, 1.0, 1.0, "scored", True)
+
+        reference_row = unperturbed_row()
+        observed = []
+
+        class ObservingCandidate(dict):
+            def __getitem__(self, key):
+                if key == "structural_intact":       # read last by _score_panel
+                    observed.append(unperturbed_row())
+                return super().__getitem__(key)
+
+        probe = ObservingCandidate(_rpi_sensitivity_panel()[0])
+        perturbed = copy.deepcopy(RPI_WEIGHTS)
+        perturbed["eco_floor"] = 0.9
+        perturbed["host_decay"] = {k: 0.9 for k in RPI_WEIGHTS["host_decay"]}
+
+        _score_panel([probe], perturbed)
+
+        self.assertEqual(len(observed), 1, "probe never fired -- test measures nothing")
+        self.assertEqual(observed[0], reference_row,
+                         "a row scored mid-sweep differs from the same row scored "
+                         "outside one: the sweep leaked its weights process-wide")
 
 
 class EnvironmentReconciliationTest(unittest.TestCase):
