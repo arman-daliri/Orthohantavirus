@@ -17,6 +17,7 @@ docs/superpowers/notes/2026-08-14-reassortment-detector-reconsolidation.md.
 import argparse
 import copy
 import csv
+import itertools
 import json
 import math
 import os
@@ -4371,6 +4372,120 @@ class VetoVsContinuousETest(unittest.TestCase):
         comparison that never happened."""
         result = veto_vs_continuous_e([{"candidate_id": "junk"}])
         self.assertTrue(math.isnan(result["agreement_fraction"]))
+
+
+def _parse_version(text: str) -> Tuple[int, ...]:
+    """Numeric version tuple, ignoring any non-numeric suffix.
+
+    Deliberately minimal rather than pulling in `packaging`: adding a dependency to a
+    test that exists to police dependencies would be self-defeating, and every pin in
+    these two files is a plain dotted numeric.
+    """
+    parts: List[int] = []
+    for chunk in text.strip().split("."):
+        digits = "".join(itertools.takewhile(str.isdigit, chunk))
+        if not digits:
+            break
+        parts.append(int(digits))
+    return tuple(parts)
+
+
+def _read_requirement_pins(path: Path) -> Dict[str, Tuple[str, str]]:
+    """{package: (operator, version)} from a requirements.txt-style file."""
+    pins: Dict[str, Tuple[str, str]] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.split("#", 1)[0].strip()
+        match = re.match(r"^([A-Za-z0-9_.\-]+)\s*(==|>=)\s*([0-9][0-9.]*)$", line)
+        if match:
+            pins[match.group(1).lower()] = (match.group(2), match.group(3))
+    return pins
+
+
+def _read_conda_pins(path: Path) -> Dict[str, Tuple[str, str]]:
+    """{package: (operator, version)} from an environment.yml dependency list.
+
+    Hand-parsed rather than via PyYAML, which is not a project dependency and would have
+    to be added purely to run this check.
+    """
+    pins: Dict[str, Tuple[str, str]] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.split("#", 1)[0].strip()
+        if not stripped.startswith("- "):
+            continue
+        match = re.match(r"^-\s*([A-Za-z0-9_.\-]+)\s*(==|=|>=)\s*([0-9][0-9.]*)$", stripped)
+        if match:
+            operator = ">=" if match.group(2) == ">=" else "=="
+            pins[match.group(1).lower()] = (operator, match.group(3))
+    return pins
+
+
+class EnvironmentReconciliationTest(unittest.TestCase):
+    """environment.yml and requirements-pip.txt describe two different interpreters.
+
+    They are allowed to differ in SCOPE. They are not allowed to pin INCOMPATIBLE
+    versions of the same package. Nothing enforced that before this test, and the README
+    recorded the contradiction as an open question rather than a checked invariant.
+    """
+
+    def setUp(self):
+        root = Path(__file__).parent
+        self.conda = _read_conda_pins(root / "environment.yml")
+        self.pip = _read_requirement_pins(root / "requirements-pip.txt")
+
+    def test_both_files_were_actually_parsed(self):
+        """Guard the guard: a parser that silently matched nothing would make every
+        assertion below vacuously true."""
+        self.assertGreaterEqual(len(self.conda), 5, self.conda)
+        self.assertGreaterEqual(len(self.pip), 4, self.pip)
+        self.assertIn("viennarna", self.conda)
+        self.assertIn("viennarna", self.pip)
+
+    def test_every_shared_package_is_compatible(self):
+        shared = sorted(set(self.conda) & set(self.pip))
+        self.assertTrue(shared, "no packages in common -- parser drift?")
+        for name in shared:
+            conda_op, conda_version = self.conda[name]
+            _pip_op, pip_version = self.pip[name]
+            installed, required = _parse_version(pip_version), _parse_version(conda_version)
+            if conda_op == ">=":
+                self.assertGreaterEqual(
+                    installed, required,
+                    f"{name}: requirements-pip.txt pins {pip_version}, below "
+                    f"environment.yml's floor {conda_version}")
+            else:
+                self.assertEqual(
+                    installed, required,
+                    f"{name}: environment.yml pins {name}=={conda_version} exactly, but "
+                    f"requirements-pip.txt says {pip_version}")
+
+    def test_viennarna_exact_pin_matches_in_both_files(self):
+        """Singled out because it is the one pin where a mismatch changes RESULTS rather
+        than merely risking an incompatibility: RNAcofold's free energies depend on the
+        version's energy-parameter set, so a drift here silently rewrites every RPI
+        score."""
+        self.assertEqual(self.conda["viennarna"], ("==", "2.7.2"))
+        self.assertEqual(self.pip["viennarna"], ("==", "2.7.2"))
+
+    def test_mafft_and_iqtree_are_not_claimed_as_pip_installable(self):
+        """`pymafft` on PyPI is an unrelated package. Listing either here would send the
+        next reader to install the wrong thing."""
+        for absent in ("mafft", "iqtree", "pymafft"):
+            self.assertNotIn(absent, self.pip)
+
+    def test_installed_versions_satisfy_the_pip_pins(self):
+        """The files agree with each other above; this checks they also agree with the
+        interpreter actually running the suite. Without it both files could be
+        internally consistent and jointly wrong."""
+        import importlib
+        for package, module_name in (("numpy", "numpy"), ("pandas", "pandas"),
+                                     ("biopython", "Bio"), ("dendropy", "dendropy"),
+                                     ("viennarna", "RNA")):
+            with self.subTest(package=package):
+                module = importlib.import_module(module_name)
+                self.assertEqual(_parse_version(module.__version__),
+                                 _parse_version(self.pip[package][1]),
+                                 f"{package}: installed {module.__version__}, "
+                                 f"requirements-pip.txt pins {self.pip[package][1]}")
 
 
 class JsonSafeNumpyScalarTest(unittest.TestCase):

@@ -1,0 +1,45 @@
+# System-Python path (Python 3.14, Windows) -- NOT the hanta_phylo conda env.
+#
+# WHY THIS FILE EXISTS
+# environment.yml describes the conda environment. This file describes the interpreter
+# the project is ACTUALLY run on in the authoring environment, where conda/mamba/
+# micromamba are not on PATH (verified 2026-08-29: none of the three resolve). The two
+# were silently contradicting each other; they are reconciled here instead.
+#
+# The rule: every pin below must SATISFY environment.yml's constraint for the same
+# package. EnvironmentReconciliationTest asserts that, so the two files cannot drift
+# apart unnoticed. They are allowed to differ in scope -- they are not allowed to
+# disagree.
+#
+# Exact pins (==), not floors. This file records what a verified-green run was actually
+# executed against; a floor would not reproduce it.
+#
+# Verified installed 2026-08-29 on Python 3.14.6
+#   (C:\Users\mohaj\AppData\Local\Python\pythoncore-3.14-64\python.exe)
+
+numpy==2.5.1          # environment.yml: numpy>=2.4       -- satisfied
+pandas==3.0.5         # environment.yml: pandas>=2.3      -- satisfied
+biopython==1.88       # environment.yml: biopython>=1.87  -- satisfied
+dendropy==5.0.13      # environment.yml: dendropy>=5.0    -- satisfied
+
+# Exact pin required, and it matches environment.yml exactly. RNAcofold's reported free
+# energies are dependent on the ViennaRNA version's energy-parameter set, so an
+# unpinned version would silently change every downstream RPI score.
+viennarna==2.7.2
+
+# ---------------------------------------------------------------------------
+# NOT INSTALLABLE FROM PyPI -- do not add them here
+# ---------------------------------------------------------------------------
+# mafft  7.525  and  iqtree  3.1.3
+#   `pymafft` on PyPI is an UNRELATED package. Do not install it.
+#   Install route is per-machine (design doc D12), because bioconda does not serve
+#   Windows natively:
+#     - this Windows machine : manual pinned binaries, SHA-256 recorded in
+#                              tools/CHECKSUMS.sha256
+#     - Omarchy Linux machine: conda, via environment.yml
+#
+# CAVEAT -- the pip `viennarna` package ships the PYTHON BINDINGS ONLY, no CLI binary.
+# Verified 2026-08-29: `import RNA` works and reports 2.7.2, but no RNAcofold executable
+# exists anywhere in the interpreter tree and none is on PATH. reassortment_detector's
+# rnacofold_dg() shells out to a binary and therefore CANNOT run on this machine as
+# written. See the design doc's WS3 note.
