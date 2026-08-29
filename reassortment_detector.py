@@ -1281,6 +1281,18 @@ def boltzmann_compatibility(
     """
     rt = RPI_RT_KCAL_PER_MOL if rt is None else rt
     ddg = dg_non_cognate - dg_cognate
+    # A non-finite ddG means RNAcofold returned something unusable. It must NOT be
+    # scored, and the two silent answers available here are opposites -- which is what
+    # makes the silence dangerous rather than merely imprecise. max(-700.0, nan) returns
+    # -700.0, so nan scored as MAXIMAL penalty (9.86e-305); before the underflow clamp,
+    # min(0.0, nan) returned 0.0 and the same input scored as NO penalty (1.0). Raising
+    # is the only honest option. The call site in score_candidate catches this and
+    # records rpi_m_pack_status = "undefined_energy" rather than aborting the run.
+    if not math.isfinite(ddg):
+        raise ValueError(
+            f"non-finite ddG ({ddg!r}) from dg_non_cognate={dg_non_cognate!r}, "
+            f"dg_cognate={dg_cognate!r} -- RNAcofold returned an unusable energy"
+        )
     # Clamp the EXPONENT, not just the result: math.exp overflows above ~709, so a
     # far-stronger non-cognate duplex (ddg very negative, exponent very positive) would
     # raise OverflowError before an outer min(1.0, ...) ever got a chance to clamp it.
@@ -1292,11 +1304,17 @@ def boltzmann_compatibility(
     # sake. math.exp does not raise on underflow the way it raises on overflow -- it
     # returns 0.0 silently, so a large POSITIVE ddg produced exactly the hidden hard
     # gate the docstring above promises never to produce: boltzmann_compatibility(500.0,
-    # 0.0) was 0.0. That is not an unreachable input, because rnacofold_dg is documented
-    # as taking whole-segment duplexes whose MFEs run to hundreds of kcal/mol, so
-    # cognate/non-cognate differences of that size are expected rather than exotic.
+    # 0.0) was 0.0.
     # -700 keeps exp() in normal range (its smallest normal result is ~1e-308) while
     # still being far below any physically meaningful ddg.
+    #
+    # SCOPE NOTE (D2, 2026-08-29): this comment previously justified the clamp by saying
+    # rnacofold_dg takes WHOLE-SEGMENT duplexes whose MFEs run to hundreds of kcal/mol.
+    # That is no longer true and was never runnable -- RNAcofold is O(n^3), so an L x M
+    # duplex (~10 kb) will not complete. The scored window is the 50-nt panhandle, where
+    # observed ddg runs ~0-22 kcal/mol and the clamp is never reached in practice. The
+    # clamp is retained anyway: it is cheap, and it is what keeps the no-literal-zeros
+    # guarantee true for adversarial input rather than merely true for expected input.
     exponent = min(0.0, max(-700.0, -ddg / rt))
     return min(1.0, math.exp(exponent))
 
@@ -2503,9 +2521,25 @@ def _json_safe(value: Any) -> Any:
     nan and +/-inf have no JSON spelling. null is the honest one for "undefined"; 0.0
     would be a claim. Dict keys are left alone -- they are strings throughout this
     report.
+
+    NUMPY SCALARS ARE NORMALISED HERE TOO. Testing `isinstance(value, float)` alone was
+    not enough: np.float32 is NOT a float subclass (only np.float64 is), so every other
+    numpy scalar fell through, and json's `default=str` then intercepted it before
+    `allow_nan=False` could fire. That mis-serialised in two ways, not one --
+    np.float32('nan') became the JSON *string* "nan" (a value, where null was meant),
+    and FINITE np.float32(1.5) / np.int64(3) became "1.5" / "3", handing a downstream
+    reader strings where the schema promises numbers.
     """
-    if isinstance(value, float):
+    # bool FIRST: it is an int subclass, so any numeric check below would otherwise
+    # normalise True to 1 and change the report's schema
+    # (rpi_k_stratum_provisional is a bool in this very report).
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
+    if isinstance(value, (float, np.floating)):
+        value = float(value)
         return value if math.isfinite(value) else None
+    if isinstance(value, np.integer):
+        return int(value)
     if isinstance(value, dict):
         return {key: _json_safe(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
@@ -3741,12 +3775,34 @@ class BoltzmannCompatibilityTest(unittest.TestCase):
         positive ddG produced exactly the hidden hard gate the docstring promises never
         to produce: boltzmann_compatibility(500.0, 0.0) was 0.0.
 
-        Reachable, not exotic: rnacofold_dg is documented as taking whole-segment
-        duplexes, whose MFEs run to hundreds of kcal/mol. test_never_returns_zero only
-        probed ddG = 110."""
+        Kept as an adversarial-input guard rather than an expected-input one. The
+        original rationale -- whole-segment duplexes with MFEs in the hundreds -- was
+        retired by D2: the scored window is the 50-nt panhandle, where ddG runs ~0-22.
+        test_never_returns_zero only probed ddG = 110."""
         for ddg in (500.0, 1000.0, 1e6):
             self.assertGreater(boltzmann_compatibility(ddg, 0.0), 0.0, ddg)
             self.assertLess(boltzmann_compatibility(ddg, 0.0), 1.0, ddg)
+
+    def test_non_finite_ddg_raises_rather_than_silently_scoring(self):
+        """max(-700.0, nan) returns -700.0, so a nan ddG silently became MAXIMAL penalty
+        (9.86e-305). Before the underflow clamp, min(0.0, nan) returned 0.0 and the same
+        input silently became NO penalty (1.0). The two answers are opposites and both
+        are wrong: a non-finite ddG means RNAcofold returned an unusable energy, and this
+        module's no-silent-sentinel rule says that must surface, not propagate.
+
+        The caller catches this and records rpi_m_pack_status = "undefined_energy"
+        rather than aborting the run."""
+        for non_cognate, cognate in ((float("nan"), 0.0), (0.0, float("nan")),
+                                     (float("inf"), 0.0), (float("inf"), float("inf"))):
+            with self.assertRaises(ValueError, msg=f"{non_cognate}/{cognate}"):
+                boltzmann_compatibility(non_cognate, cognate)
+
+    def test_the_raise_did_not_narrow_the_working_range(self):
+        """Guard the guard: a too-eager finiteness check would reject the extreme-but-
+        legitimate inputs the two clamp tests above rely on."""
+        self.assertAlmostEqual(boltzmann_compatibility(0.0, 0.0), 1.0, places=9)
+        self.assertEqual(boltzmann_compatibility(-5000.0, 0.0), 1.0)
+        self.assertGreater(boltzmann_compatibility(5000.0, 0.0), 0.0)
 
 
 class RnacofoldDgParsingTest(unittest.TestCase):
@@ -3953,12 +4009,43 @@ class RpiAssemblyTest(unittest.TestCase):
                              host_family="Cricetidae", host_name="Peromyscus maniculatus")
         far_b = _eco_isolate("SpB", "Chile", "2004", host_order="Soricomorpha",
                              host_family="Soricidae", host_name="Sorex araneus")
+        seen_strict = False
         for odd_segment in ("S", "M", "L"):
             for intact in (True, False):
                 row = compute_rpi(["SpA", "SpB"], [far_a, far_b], odd_segment, 0.9,
                                   1.0, 1.0, "fixed_constant", intact)
+                if row["rpi_retention"] < row["rpi_generation"]:
+                    seen_strict = True
                 self.assertLessEqual(row["rpi_retention"], row["rpi_generation"],
                                      f"{odd_segment}/{intact}")
+        # Guard the guard: where F = 1.0 the two columns are trivially EQUAL and the
+        # assertion above measures nothing. At least one combination has to have F < 1,
+        # i.e. has to actually exercise the scaling this invariant is about. Its N1
+        # sibling test_rounding_never_reports_e_total_above_its_own_components has had
+        # this shape since it was written; this one did not.
+        self.assertTrue(seen_strict,
+                        "fixture stopped producing a row where F < 1.0, so the ordering "
+                        "assertion above is trivially satisfied by equality")
+
+    def test_split_precision_is_what_would_invert_the_pair(self):
+        """Companion to the test above, which cannot fail through _rpi_decimals at all:
+        compute_rpi passes floor**5 to BOTH columns, so no change to that function can
+        split their precisions, and 1 of its 6 combinations would catch a call-site
+        split. That makes it a guard whose subject is unreachable from the guard.
+
+        This one reproduces the inversion directly, so the equal-precision choice in
+        compute_rpi is protected by a test that can actually observe the failure:
+        1.57233e-05 at 10 dp is 1.57233e-05, and the SAME value at 8 dp is 1.572e-05, so
+        reporting retention finer than generation puts retention above a generation it
+        can never exceed."""
+        raw = 1.572330e-05
+        self.assertGreater(round(raw, 10), round(raw, 8),
+                           "split precision no longer inverts -- this test's premise is "
+                           "stale, not satisfied")
+        # And the precision compute_rpi actually uses is the deeper of the two, applied
+        # to BOTH columns, which is what makes the inversion unreachable in production.
+        self.assertEqual(_rpi_decimals(RPI_WEIGHTS["eco_floor"] ** 5), 10)
+        self.assertEqual(round(raw, 10), round(raw, 10))
 
     def test_k_stratum_carries_a_provisional_marker(self):
         """The `identity` the production call site supplies is gate0.best_kmer_identity
@@ -4216,6 +4303,66 @@ class VetoVsContinuousETest(unittest.TestCase):
         self.assertTrue(math.isnan(result["agreement_fraction"]))
 
 
+class JsonSafeNumpyScalarTest(unittest.TestCase):
+    """_json_safe tested only Python's `float`. np.float32 is NOT a float subclass --
+    only np.float64 is -- so every other numpy scalar fell straight through it, and
+    json's default=str then intercepted them before allow_nan=False could fire."""
+
+    def test_numpy_float32_nan_becomes_null_not_the_string_nan(self):
+        """The recorded half of the hole: np.float32('nan') serialised as the JSON
+        STRING "nan" -- a value, where null was meant."""
+        payload = _json_safe({"auc": np.float32("nan")})
+        self.assertIsNone(payload["auc"])
+        self.assertEqual(json.dumps(payload, allow_nan=False), '{"auc": null}')
+
+    def test_finite_numpy_scalars_survive_as_numbers_not_strings(self):
+        """The unrecorded half, and it is wider: the same type hole stringified FINITE
+        numpy scalars too. np.float32(1.5) serialised as "1.5" and np.int64(3) as "3",
+        so a downstream consumer reading the report got strings where the schema
+        promises numbers."""
+        payload = _json_safe({"f32": np.float32(1.5), "f64": np.float64(2.5),
+                              "i64": np.int64(3)})
+        self.assertEqual(payload["f32"], 1.5)
+        self.assertEqual(payload["f64"], 2.5)
+        self.assertEqual(payload["i64"], 3)
+        self.assertEqual(json.dumps(payload, sort_keys=True, allow_nan=False),
+                         '{"f32": 1.5, "f64": 2.5, "i64": 3}')
+
+    def test_numpy_non_finite_in_nested_containers_is_reached(self):
+        """The recursion has to see them too -- rank_consistency returns its nan inside
+        a nested dict, not at the top level."""
+        payload = _json_safe({"ci": [np.float32("nan"), np.float64("inf")],
+                              "inner": {"x": np.float32("-inf")}})
+        self.assertEqual(payload["ci"], [None, None])
+        self.assertIsNone(payload["inner"]["x"])
+
+    def test_python_types_and_bool_are_unchanged(self):
+        """Guard the guard: bool is an int subclass, so a careless numbers.Real check
+        would silently turn True into 1 and change the report's schema.
+        rpi_k_stratum_provisional is a bool in this very report."""
+        payload = _json_safe({"b": True, "nb": np.bool_(False), "i": 3, "s": "x",
+                              "n": None, "f": 1.5, "nan": float("nan")})
+        self.assertIs(payload["b"], True)
+        self.assertIs(payload["nb"], False)
+        self.assertEqual(payload["i"], 3)
+        self.assertNotIsInstance(payload["i"], bool)
+        self.assertEqual(payload["s"], "x")
+        self.assertIsNone(payload["n"])
+        self.assertEqual(payload["f"], 1.5)
+        self.assertIsNone(payload["nan"])
+
+
+def _reject_json_constant(token: str) -> Any:
+    """Make json.loads refuse the bare NaN/Infinity tokens it accepts by default.
+
+    Python's json.loads accepts `NaN`, `Infinity` and `-Infinity`, none of which are
+    legal JSON -- jq and JavaScript's JSON.parse both reject a file containing them.
+    That leniency is precisely why a round-trip test could not see a non-conforming
+    report. Used by the artifact-level assertions below.
+    """
+    raise AssertionError(f"report contains non-JSON constant {token!r}")
+
+
 class WriteRpiReportTest(unittest.TestCase):
     """Spec 14 asks for these validation entry points to be RUN, not merely to exist.
     Before --rpi-report they were unreachable from the CLI and wrote no artifact."""
@@ -4267,6 +4414,18 @@ class WriteRpiReportTest(unittest.TestCase):
         report = json.loads(raw)
         # The undefined statistic must survive as null -- not as 0.0, which is a claim.
         self.assertIsNone(report["rank_consistency"]["auc"])
+
+    def test_written_report_carries_no_stringified_numerics(self):
+        """Assert on the row that ships, not on the function that feeds it.
+
+        The two checks above look at _json_safe's return and at parsed JSON; neither can
+        see a value that reached the FILE as a quoted string. json.loads also accepts
+        the bare NaN/Infinity tokens that are not legal JSON, so parsing alone cannot
+        certify the artifact -- parse_constant closes that."""
+        raw = write_rpi_report(self.rows, self.output_dir).read_text(encoding="utf-8")
+        for illegal in ('"nan"', '"inf"', '"-inf"', '"NaN"', "NaN", "Infinity"):
+            self.assertNotIn(illegal, raw, illegal)
+        json.loads(raw, parse_constant=_reject_json_constant)
 
     def test_cli_flag_is_off_by_default(self):
         """Existing invocations must stay byte-identical."""
