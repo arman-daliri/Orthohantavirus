@@ -282,6 +282,42 @@ RPI_WEIGHTS: Dict[str, Any] = {
     # Gate 2 structural integrity (WAASA, TM/IS, pH switch) failing does not veto -- it
     # discounts. Provisional; not fitted.
     "retention_structural_penalty": 0.5,
+
+    # M_pack rescaling (D1, decided WS3.1). `boltzmann_compatibility`'s raw exp(-ddG/RT)
+    # form spans a physically-scaled range (RPI_RT_KCAL_PER_MOL ~= 0.6163) incommensurate
+    # with the other RPI factors -- see docs/superpowers/specs/2026-08-29-rpi-fitness-
+    # function-design.md, "Option A". `m_pack_tau` REPLACES RT at the call site (Task
+    # 10 / WS3.3), so M_pack becomes exp(-ddG / m_pack_tau) rather than a physical
+    # Boltzmann weight -- the index is explicitly RELATIVE, per compute_rpi's docstring.
+    #
+    # tau = 3.914, DERIVED (not chosen) from data/rpi_calibration.json: the robust
+    # p5-p95 span of DeltaDeltaG over 756 cognate/non-cognate folds (42 isolates, 14
+    # species, ViennaRNA Python bindings 2.7.2), divided by ln(100) -- 100 matching
+    # host_decay, the widest existing RPI factor. Reproduce with
+    # `python rpi_calibration.py`; re-derive across seeds/windows with
+    # `python rpi_calibration.py --stability`.
+    #
+    # THE D1 BRANCH: bimodal-with-a-clean-gap DeltaDeltaG would have selected a
+    # logistic (Option C) instead. It measured NOT bimodal -- BIC prefers one
+    # component (delta +15.1 over two), component means only 1.24 SD apart against a
+    # 2.0 requirement, one density mode. So Option A stands. Stable across seeds
+    # (tau = 3.90/4.28/3.90) and per-species sampling caps (3.93-4.39) at this window.
+    #
+    # KNOWN WEAK, NOT A BUG: DeltaDeltaG separates cognate from non-cognate only
+    # weakly (Cliff's delta = +0.222, "small"; 38% of the calibration panel has
+    # DeltaDeltaG <= 0, where M_pack saturates at exactly 1.0 and contributes no
+    # signal). The genus's terminal 14 nt are invariant across species AND across
+    # S/M/L, which structurally caps what a terminal duplex can distinguish --
+    # M_pack alone is not expected to separate the WS4 b2 (cross-species sympatric)
+    # group; M_pol carries more of that weight. See data/rpi_calibration.json ->
+    # "discrimination" for the full measurement. This is evidence to weigh, not a
+    # defect in the rescaling to fix by retuning tau.
+    "m_pack_tau": 3.914078624686338,
+    # The panhandle window (D2) tau was measured under. Swept 25/75 in WS4's
+    # sensitivity analysis (Task 15) -- NOT re-derived here, so a caller changing
+    # RPI_PANHANDLE_WINDOW_NT without re-running rpi_calibration.py would silently
+    # score against a tau measured at a different window than the one folding.
+    "m_pack_window_nt": 50,
 }
 
 
@@ -1553,7 +1589,7 @@ def retention_factor(odd_segment: str, structural_intact: bool,
 # Tag identifying which revision of RPI_WEIGHTS produced a given rpi_* row -- not itself
 # a weight, so it lives at module scope rather than inside RPI_WEIGHTS. Bump this any
 # time RPI_WEIGHTS changes so historical output rows remain attributable.
-RPI_WEIGHTS_VERSION = "2026-08-24.2"
+RPI_WEIGHTS_VERSION = "2026-08-29.1"
 
 # Emitted as the rpi_k_stratum_provisional column on every row.
 #
@@ -3941,6 +3977,75 @@ class BoltzmannCompatibilityTest(unittest.TestCase):
         self.assertAlmostEqual(boltzmann_compatibility(0.0, 0.0), 1.0, places=9)
         self.assertEqual(boltzmann_compatibility(-5000.0, 0.0), 1.0)
         self.assertGreater(boltzmann_compatibility(5000.0, 0.0), 0.0)
+
+
+class MPackTauRescalingTest(unittest.TestCase):
+    """WS3.2 (Task 9): tau REPLACES RT at boltzmann_compatibility's `rt` argument, so
+    these tests exercise that exact call shape rather than the function in isolation --
+    the four properties below are what M_pack must have once Task 10 wires it in, and
+    tau is the number that must preserve them, not RPI_RT_KCAL_PER_MOL.
+
+    tau itself is NOT re-derived here. It is a measurement from data/rpi_calibration.json
+    (rpi_calibration.py's ArtifactShapeTest and RescalingBranchTest cover that derivation
+    with a synthetic ground truth). This class asks only: given the shipped tau, does
+    M_pack behave the way spec section 6.1 / D1 Option A requires?
+    """
+
+    TAU = RPI_WEIGHTS["m_pack_tau"]
+
+    def test_tau_is_the_measured_ws3_1_value_not_the_dead_provisional_one(self):
+        """D13: tau ~= 4.86 was provisional pending WS3.1 and must never be quoted as
+        settled again. If this constant drifts back toward 4.86 -- e.g. someone reverts
+        to the old placeholder -- this is the test that catches it."""
+        self.assertAlmostEqual(self.TAU, 3.914078624686338, places=6)
+        self.assertNotAlmostEqual(self.TAU, 4.864, places=1)
+
+    def test_bounded_in_zero_one_inclusive_of_one(self):
+        """Property 1/4 (D1, Task 9): M_pack in (0, 1]. Swept across the panel's
+        observed ddG range (data/rpi_calibration.json: min -15.60, max +21.90) plus
+        extremes."""
+        for ddg in (-50.0, -15.6, -1.0, 0.0, 1.0, 21.9, 50.0, 700.0):
+            value = boltzmann_compatibility(ddg, 0.0, rt=self.TAU)
+            self.assertGreater(value, 0.0, ddg)
+            self.assertLessEqual(value, 1.0, ddg)
+
+    def test_monotonic_decreasing_in_ddg(self):
+        """Property 2/4: a weaker non-cognate duplex (larger ddG) must never score
+        HIGHER than a stronger one. Checked over the calibration panel's actual range,
+        not just two arbitrary points."""
+        ddgs = [-15.6, -6.8, -3.0, 0.0, 1.6, 5.0, 11.22, 21.9]
+        values = [boltzmann_compatibility(d, 0.0, rt=self.TAU) for d in ddgs]
+        for earlier, later in zip(values, values[1:]):
+            self.assertGreaterEqual(earlier, later)
+
+    def test_no_exact_zeros_at_extremes(self):
+        """Property 3/4: the no-literal-zeros guarantee, at tau's scale specifically.
+        A far worse-than-observed ddG must still floor at the -700-exponent clamp's
+        ~1e-304 rather than underflow to a literal 0.0 -- see boltzmann_compatibility's
+        own docstring for why exp() underflowing silently was the bug this guards."""
+        self.assertGreater(boltzmann_compatibility(1e6, 0.0, rt=self.TAU), 0.0)
+        self.assertGreater(boltzmann_compatibility(-1e6, 0.0, rt=self.TAU), 0.0)
+
+    def test_sweepable_at_plus_minus_50_percent(self):
+        """Property 4/4: D1 requires tau to be trivially sweepable at +/-50% --
+        tau in {1.957, 3.914, 5.871} -- for WS4 Task 15's sensitivity analysis. Checked
+        here as a property of THIS tau (all three variants still bounded, monotonic,
+        non-zero), not merely that the arithmetic of halving/doubling succeeds."""
+        for scaled_tau in (self.TAU * 0.5, self.TAU, self.TAU * 1.5):
+            values = [boltzmann_compatibility(d, 0.0, rt=scaled_tau)
+                     for d in (-15.6, 0.0, 11.22, 21.9)]
+            for value in values:
+                self.assertGreater(value, 0.0)
+                self.assertLessEqual(value, 1.0)
+            for earlier, later in zip(values, values[1:]):
+                self.assertGreaterEqual(earlier, later)
+
+    def test_window_matches_the_window_tau_was_measured_under(self):
+        """tau is only valid at the N it was calibrated under (D2). If
+        RPI_PANHANDLE_WINDOW_NT is ever changed without re-running rpi_calibration.py,
+        this is the test that should be updated alongside it -- and its failure without
+        that update is the signal that someone forgot."""
+        self.assertEqual(RPI_WEIGHTS["m_pack_window_nt"], RPI_PANHANDLE_WINDOW_NT)
 
 
 class CofoldDgTest(unittest.TestCase):

@@ -6,26 +6,35 @@
 current state, all decisions D1-D14, measured performance numbers, what was completed,
 and the exact next action. This section is only a pointer.
 
-**State: everything green and pushed.** Branch `04-rpi-fitness-validation` at `0abd77e`.
-Suite **194 tests, all pass** (~13.5 min). Validation harness **PASS**. `main` at
-`e7d9f44`, pushed. Nothing unpushed.
+**State: green, WS3.1 and WS3.2 committed locally, not yet pushed.** Branch
+`04-rpi-fitness-validation`. Suite **194+6 tests, all pass** (~14 min) +
+**39 tests, <1 s** (`rpi_calibration`). Validation harness **PASS**. `main` pushed,
+unaffected by this branch.
 
-**WS3.1 IS DONE.** `rpi_calibration.py` + `data/rpi_calibration.json` built, 39 tests,
-artifact byte-identical under `PYTHONHASHSEED` 1 vs 999. **The D1 branch resolved to
-Option A — τ-scaled Boltzmann, τ = 3.914.** The ΔΔG distribution is NOT bimodal (failed 3
-of 4 pre-registered checks; BIC prefers one component by 15.1, means 1.24 SD apart against
-a 2.0 requirement).
+**WS3.1 IS DONE.** `rpi_calibration.py` + `data/rpi_calibration.json` built. **The D1
+branch resolved to Option A — τ-scaled Boltzmann, τ = 3.914.** The ΔΔG distribution is
+NOT bimodal (failed 3 of 4 pre-registered checks; BIC prefers one component by 15.1,
+means 1.24 SD apart against a 2.0 requirement). **User approved this branch 2026-08-29.**
 
-**NEXT ACTION: WS3.2 (Task 9) — add τ = 3.914 and N = 50 to `RPI_WEIGHTS` and bump
-`RPI_WEIGHTS_VERSION` in the same commit.** Gated on the user signing off the WS3.1 branch
-report (plan Step 5 requires it). See `docs/PROJECT-STATE.md` §7 and §7b.
+**WS3.2 (Task 9) IS DONE.** `RPI_WEIGHTS["m_pack_tau"] = 3.914078624686338`,
+`RPI_WEIGHTS["m_pack_window_nt"] = 50`, `RPI_WEIGHTS_VERSION = "2026-08-29.1"`.
+`MPackTauRescalingTest` (6 tests) asserts the four required properties against the exact
+call shape Task 10 will use. **τ is not yet consumed anywhere** — `m_pack=1.0` at the
+`score_candidate` call site is untouched; that wiring is Task 10.
 
-**⚠ Weigh before WS3.3:** ΔΔG carries real but SMALL signal. Only 62% of non-cognate
-duplexes are weaker than cognate; **38% have ΔΔG ≤ 0, so M_pack clamps to exactly 1.0 and
-contributes nothing.** Cliff's δ = +0.222 ("small"). The genus's terminal 14 nt are
-invariant across species *and* across S/M/L, capping what a terminal duplex can
-distinguish. **M_pack alone should not be expected to separate the b2 group** — and the
-answer to that is not to retune τ.
+**NEXT ACTION: WS3.3 (Task 10, D3) — score M_pack for real.** Replace `m_pack=1.0` with
+a cognate-vs-non-cognate `cofold_dg` comparison against the implicated parent/donor
+consensus (never self-comparison), call
+`boltzmann_compatibility(ddg, 0.0, rt=RPI_WEIGHTS["m_pack_tau"])`, add
+`rpi_m_pack_status`. See `docs/PROJECT-STATE.md` §7b.
+
+**User's decision on the weak-M_pack finding (2026-08-29): proceed as planned, let M_pol
+carry more weight.** ΔΔG carries real but SMALL signal — 38% of the calibration panel has
+ΔΔG ≤ 0, where M_pack clamps to exactly 1.0 and contributes nothing; Cliff's δ = +0.222
+("small"). The genus's terminal 14 nt are invariant across species *and* across S/M/L,
+capping what a terminal duplex can distinguish. **Do not retune τ in response to this** —
+implement Task 10 as scoped, note the limitation in `RATIONALE.md`/README, and revisit
+only if WS4 shows b2 still does not separate.
 
 **Binding on WS4 Task 13:** the b1/b2/random builders MUST exclude the 42 isolate keys in
 `data/rpi_calibration.json` → `reserved_for_calibration.isolate_keys`, or τ is tuned on

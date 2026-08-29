@@ -206,23 +206,44 @@ per-species caps 2/4/8/16/none.
    **M_pack alone should not be expected to separate the b2 group.** Do not respond to
    this by retuning τ.
 
-## 7b. NEXT ACTION — WS3.2 (Task 9), gated on the user's sign-off
+## 7b. WS3.2 (Task 9) — DONE (2026-08-29). User approved the D1 branch and the
+"proceed as planned" response to the weak-M_pack finding.
 
-**WS3.1 Step 5 requires reporting the branch outcome before Task 9 is implemented.** That
-report is above. Once approved:
+`RPI_WEIGHTS` now carries `m_pack_tau = 3.914078624686338` and `m_pack_window_nt = 50`.
+`RPI_WEIGHTS_VERSION` → `"2026-08-29.1"`. `MPackTauRescalingTest` (6 tests) asserts the
+four required properties against the EXACT call shape Task 10 will use —
+`boltzmann_compatibility(ddg, 0.0, rt=RPI_WEIGHTS["m_pack_tau"])` — plus a regression
+guard that τ never drifts back to the dead 4.86 provisional. **τ is not yet consumed
+anywhere**: `m_pack=1.0` at the `score_candidate` call site is untouched. That wiring is
+Task 10 (WS3.3), scoped separately on purpose. Full suite 194+6 tests, all pass.
 
-1. Add **τ = 3.914** and **N = 50** to `RPI_WEIGHTS`; **bump `RPI_WEIGHTS_VERSION` in the
-   same commit.**
-2. Assert the four required properties: bounded (0, 1], monotonic decreasing in ΔΔG, no
-   exact zeros at extremes, ±50% sweepable (τ ∈ {1.96, 3.91, 5.87}).
-3. Then WS3.3 (Task 10, M_pack for real) → WS3.4 (Task 11, M_pol) → WS4 → WS-API → WS5.
-   WS2 Task 7 (cross-OS fixture) also remains.
+## NEXT ACTION — WS3.3 (Task 10, D3): score M_pack for real
+
+1. Replace `m_pack=1.0` (`reassortment_detector.py` — search `SCAFFOLDING (M_pack)`) with
+   a cognate-vs-non-cognate `cofold_dg` comparison against the **implicated parent/donor
+   consensus**, sourced from `reference.genomic_index`. **Never self-comparison** — this
+   is the same defect class M_pol currently has (`terminal_windows` passed as both
+   arguments).
+2. Call `boltzmann_compatibility(ddg, 0.0, rt=RPI_WEIGHTS["m_pack_tau"])`, not the RT
+   default — that is the whole point of Task 9.
+3. Add `rpi_m_pack_status`: `scored` / `fixed_constant` / `undefined_energy` /
+   `no_parental_sequence`. `undefined_energy` is where `boltzmann_compatibility`'s
+   `ValueError` (N4) is caught — log and continue.
+4. Then WS3.4 (Task 11, M_pol) → WS4 → WS-API → WS5. WS2 Task 7 (cross-OS fixture) also
+   remains.
 
 **Binding constraint on WS4 Task 13:** the b1/b2/random group builders **MUST exclude the
 42 isolate keys in `data/rpi_calibration.json` → `reserved_for_calibration.isolate_keys`.**
 τ is derived from this panel's ΔΔG span, so any overlap tunes the scale parameter on the
 validation set and makes the WS4 result circular. The WS4 side is the only place this half
 of the disjointness guarantee can be enforced.
+
+**Weak-M_pack finding, user-acknowledged 2026-08-29 — proceed as planned.** ΔΔG separates
+cognate/non-cognate only weakly (Cliff's δ = +0.222; 38% of the panel has ΔΔG ≤ 0, where
+M_pack saturates at 1.0). Decision: implement M_pack per D3 as scoped, note the limitation
+in `RATIONALE.md`/README, and let WS3.4's M_pol carry more of the b2-discrimination
+weight. Revisit only if WS4 shows b2 still does not separate — **do not respond by
+retuning τ.**
 
 ### Gate 4 blockers to handle when it is first run
 - The executable is **`iqtree3.exe`**, not `iqtree`. `parse_args` defaults

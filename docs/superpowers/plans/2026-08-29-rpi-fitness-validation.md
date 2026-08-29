@@ -668,12 +668,19 @@ duplex can distinguish. M_pack's dynamic range under τ is healthy (median 0.66,
 b2 cross-species sympatric group.** This is evidence to weigh before WS3.3/WS3.4, not a reason
 to retune τ.
 
-### Task 9: Implement the chosen rescaling
+### Task 9: Implement the chosen rescaling — DONE (2026-08-29)
 
-- [ ] Add τ (or ddG₅₀/s) and window N to `RPI_WEIGHTS`; **bump `RPI_WEIGHTS_VERSION`** in the same
-  commit.
-- [ ] Assert the four required properties as tests: bounded (0,1], monotonic decreasing in ddG,
-  no exact zeros at extremes, and ±50% sweepable.
+- [x] Add τ (or ddG₅₀/s) and window N to `RPI_WEIGHTS`; **bump `RPI_WEIGHTS_VERSION`** in the same
+  commit. Added `m_pack_tau = 3.914078624686338` and `m_pack_window_nt = 50`;
+  `RPI_WEIGHTS_VERSION` → `"2026-08-29.1"`. τ is not yet consumed anywhere — `m_pack=1.0` at the
+  call site is untouched, per D3/Task 10's scope, not this one.
+- [x] Assert the four required properties as tests: bounded (0,1], monotonic decreasing in ddG,
+  no exact zeros at extremes, and ±50% sweepable. `MPackTauRescalingTest`, 6 tests, exercising
+  `boltzmann_compatibility(ddg, 0.0, rt=RPI_WEIGHTS["m_pack_tau"])` — the exact call shape Task
+  10 will use — plus a regression guard that τ never drifts back to the dead 4.86 provisional,
+  and a window-consistency check against `RPI_PANHANDLE_WINDOW_NT`. Full suite still 194 tests
+  (+6), all pass; `sensitivity_sweep`/`_score_panel`'s `copy.deepcopy(RPI_WEIGHTS)` unaffected —
+  extending the sweep to cover τ and N is WS4 Task 15, not this task.
 
 ### Task 10: Score M_pack for real (D3)
 
