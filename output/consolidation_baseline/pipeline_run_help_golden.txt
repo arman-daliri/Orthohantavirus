@@ -1,0 +1,12 @@
+usage: pipeline.py run [-h] [--recalibrate]
+                       [--reference-input REFERENCE_INPUT] [--output OUTPUT]
+                       [--seed SEED]
+
+options:
+  -h, --help            show this help message and exit
+  --recalibrate         rebuild data/rpi_calibration.json even if it exists
+  --reference-input REFERENCE_INPUT
+                        package root containing all_hanta/ncbi_dataset/data
+  --output OUTPUT       combined report path (default
+                        output/pipeline/run_<ts>.json)
+  --seed SEED
