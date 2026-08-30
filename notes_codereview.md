@@ -14,7 +14,7 @@ logic, verdicts, or group construction, is written up here and left for the user
 
 ## Findings
 
-### 1. `resolve_e_parent_isolates`'s known-isolate check may mislabel intra-species published crosses (`reassortment_detector.py:1437`) — PROPOSAL, not fixed
+### 1. `resolve_e_parent_isolates`'s known-isolate check may mislabel intra-species published crosses (`reassortment_detector.py:1437`) — PROPOSAL, downgraded after verification
 
 Since `98bc10a`, `build_swap` always populates `known_segment_isolates`. For the
 `B_published_intra_species` entries in `PUBLISHED_CROSSES`
@@ -22,22 +22,36 @@ Since `98bc10a`, `build_swap` always populates `known_segment_isolates`. For the
 different isolates — gate1 cannot see intra-species reassortment (a documented,
 pre-existing blind spot), so `implicated_species` collapses to that one species.
 `resolve_e_parent_isolates`'s `all(species in by_species for species in
-implicated_species)` check is then true over a single-element list, so these rows get
-`rpi_e_isolate_basis="actual_parents"`.
+implicated_species)` check is then true over a single-element list, so these rows
+WOULD get `rpi_e_isolate_basis="actual_parents"` if scored.
 
-**Why this is a judgment call, not a clear bug:** every segment's known isolate
-genuinely IS a real isolate of that one species (backbone's or donor's, both real), so
-`"actual_parents"` is arguably literally true. But `ecological_opportunity` never reads
-`parent_isolates` in the `<2`-species branch (its own early return), so the label
-describes something that was never actually used to compute anything — and it
-corrupts the "stratify real positives by Factor E basis" diagnostic in
-`notes_e_isolate_fix.md`/`docs/PROJECT-STATE.md`, which implicitly assumed
-`actual_parents` meant "a real multi-species ecological comparison happened."
-`rpi_e_total` is unaffected either way (stays neutral 1.0) — this is a label-semantics
-question, not a score-moving bug, but it is exactly the kind of output-column-semantics
-call this evening's hard rules reserve for the user.
+**Verified against the codebase (this is not currently reachable, contrary to the
+reviewer's original "why it matters" claim):** the reviewer's finding said this
+"corrupt[s] exactly the 'stratify real positives by Factor E basis' diagnostic." Checked
+both places `score_candidate` is actually called on `PUBLISHED_CROSSES` rows:
+- `rpi_discrimination.py`'s `load_published_inter_species_crosses` — the function that
+  feeds Task 14's group-c stats and the basis-stratification diagnostic — filters to
+  `spec["klass"] != "A_published_inter_species": continue` (line 440-441).
+  `B_published_intra_species` rows never reach `resolve_e_parent_isolates` through this
+  path at all; the module's own docstring on this function states this exclusion is
+  deliberate ("Class B (intra-species) is EXCLUDED here").
+- `validate_reassortment_detector.py`'s `score_case` (line 565-601), which DOES call
+  `score_candidate` on every `PUBLISHED_CROSSES` entry including class B, builds its
+  output row from an explicit fixed key list that does not include
+  `rpi_e_isolate_basis` at all (only `rpi_generation`/`rpi_retention`/`rpi_e_total`/
+  `rpi_k_stratum` survive into the report).
 
-**Severity:** medium (label correctness on a diagnostic column, not on any score).
+So the vacuous-truth branch is real code, and would fire if a caller ever built a
+single-species candidate with `known_segment_isolates` set and asked for its basis
+label directly — but no current caller does that in a way that reaches any diagnostic
+or report. `rpi_e_total` is unaffected either way (stays neutral 1.0, per
+`ecological_opportunity`'s own early return). Keeping this as a proposal rather than
+autonomously touching it (output-column semantics is still not mine to decide), but
+correcting the severity: this is a latent code-shape observation, not a current data-
+quality bug in anything the pipeline reports today.
+
+**Severity:** low (was reported as medium; downgraded — no reachable path to a
+misleading output currently exists, verified directly rather than assumed).
 
 ### 2. Three of four new efficiency-fix tests assert on the intermediate, not the shipped row (`reassortment_detector.py:4563,4575,4586`) — PROPOSAL, not fixed
 
@@ -105,7 +119,7 @@ without re-verifying" reasoning as finding 3 — left for the user to weigh agai
 
 | # | finding | severity | disposition |
 |---|---|---|---|
-| 1 | intra-species crosses may get `actual_parents` basis with no comparison behind it | medium | proposal — left for user (output-column semantics) |
+| 1 | intra-species crosses may get `actual_parents` basis with no comparison behind it | low (downgraded from medium — verified not currently reachable via any diagnostic or report) | proposal — left for user (output-column semantics) |
 | 2 | 3 new tests assert on intermediate, not shipped row | low | proposal — left for user (test coverage) |
 | 3 | `<2`-species threshold duplicated as independent literal | low | proposal — left for user (refactor risk) |
 | 4 | efficiency-fix rationale duplicated across comment + docstring | trivial | **fixed** (docstring consolidation) |

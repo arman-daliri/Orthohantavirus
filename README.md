@@ -9,6 +9,81 @@ work.
 
 ---
 
+## RPI fitness-validation toolchain (`pipeline.py`)
+
+**Purpose.** `pipeline.py` is the single orchestrating entry point over the Reassortment
+Plausibility Index (RPI) toolchain built on top of the base pipeline above: it calibrates
+`M_pack`'s Boltzmann rescaling against a held-out isolate panel, scores a four-group
+discrimination panel (random fakes, within-species shuffles, cross-species sympatric
+shuffles, and real published/supported reassortants), and runs the `reals ~ b1 > b2 >
+random` pass criterion (Mann-Whitney U + Cliff's delta) over the result — see
+["Reassortment Plausibility Index — limitations"](#reassortment-plausibility-index--limitations)
+below for what the index does and does not claim.
+
+**How to run:**
+
+```bash
+python pipeline.py                       # same as `run`: calibrate -> discriminate -> stats -> report
+python pipeline.py run --recalibrate     # force-rebuild data/rpi_calibration.json
+python pipeline.py run --seed 20260829   # override the discrimination panel's seed (default shown)
+python pipeline.py validate --json output/validation/validation_report.json
+python pipeline.py diagnose-e            # one-off: is the reals~b1 tie E-driven?
+python pipeline.py diagnose-gate0        # one-off: gate0 junk_sequence false positives
+python -m unittest pipeline              # orchestration tests only (stage functions are stubbed)
+```
+
+`run` reuses the pinned calibration artifact (`data/rpi_calibration.json`) unless it is
+missing or `--recalibrate` is passed — calibration is a distinct, auditable step, not
+something a routine run silently redoes. A stage that raises halts the run there; each
+stage's input is the previous stage's output, so nothing downstream runs on a half-built
+result.
+
+**Headline results — from the post-`build_swap`-fix panel only** (seed 20260829, τ =
+3.914; see `notes_e_isolate_fix.md` for the full before/after record and
+`notes_evening.md` for this session's commit history):
+
+| comparison | p (two-sided Mann-Whitney U) | Cliff's δ | met expectation |
+|---|---|---|---|
+| `b2_cross_species_sympatric` > `a_random_fakes` | 4.68 × 10⁻⁹ | +0.953 (large) | ✅ True |
+| `b1_within_species_shuffle` > `b2_cross_species_sympatric` | 2.18 × 10⁻¹¹ | +0.961 (large) | ✅ True |
+| `c_real_positive` ~ `b1_within_species_shuffle` | 0.733 (not significant) | +0.078 (negligible) | plausible tie, not proven equivalent |
+
+**`overall_ranking_supported = True`.** Read this alongside the limitations below, not
+instead of them: the `reals_vs_b1` tie is an absence of evidence for a difference, not
+proof of equivalence (no formal equivalence margin is defined for RPI's own units — see
+`rpi_discrimination_stats.py`'s own docstring), and two of the index's four generation
+factors (`M_pack`, `M_pol`) carry real signal for only a minority of candidates (item 8
+below).
+
+**Known limitations** — the full, binding list is
+["Reassortment Plausibility Index — limitations"](#reassortment-plausibility-index--limitations)
+further down this file; do not quote a headline number from this toolchain without it.
+In brief: the index is relative, not an absolute probability; every in vitro anchor is
+Vero E6, not reservoir rodent cells; the constellation prior rests on ~35 total observed
+reassortants across two studies with confounded MOI; compatibility is directional but
+the metrics are largely symmetric; no gold-standard label set exists; `M_pack` is a real
+but small signal (Cliff's δ = +0.222); `M_pol` carries real signal only for an SNV
+backbone; the K stratum is a protein k-mer proxy, not parental nucleotide divergence, and
+is marked `rpi_k_stratum_provisional = true` on every row. Gate 1 also cannot see
+intra-species reassortment by construction (a validated, not a hidden, blind spot — see
+["Reassortment detector — validation against published reassortants"](#reassortment-detector--validation-against-published-reassortants)).
+
+**Docs map:**
+
+| Document | What it's for |
+|---|---|
+| `docs/PROJECT-STATE.md` | Single source of truth for session-to-session state: decisions of record (D1–D14), measured facts, what's done, the exact next action |
+| `docs/superpowers/specs/2026-08-24-reassortment-plausibility-index-design.md` | The RPI design spec — factor definitions, the limitations section this README's own RPI limitations section reproduces, the sensitivity sweep and rank-consistency checks |
+| `docs/superpowers/specs/2026-08-29-rpi-fitness-function-design.md` | WS3/WS4: τ calibration, M_pack/M_pol scoring, the discrimination panel and pass criterion this section reports on |
+| `docs/superpowers/specs/2026-08-30-rpi-e-geo-isolate-level-fix-design.md` | The Factor E isolate-level fix (this session's `build_swap` wiring builds on it) |
+| `docs/superpowers/specs/2026-08-12-reassortment-detector-design.md`, `2026-08-13-three-stage-pipeline-split-design.md` | Earlier design decisions for `reassortment_detector.py` and the base 3-stage split |
+| `notes_e_isolate_fix.md` | Implementation record + before/after panel numbers for the Factor E fix and its `build_swap` follow-up |
+| `notes_codereview.md` | This session's `/code-review` findings over the full branch diff, with fix/proposal disposition for each |
+| `notes_evening.md` | This session's own summary — commit hashes, what ran, what's still open |
+| `docs/My Library.csv` | The Zotero-exported citation library every claim in this README is checked against |
+
+---
+
 ## Step 0 — Download the data
 
 ```bash
