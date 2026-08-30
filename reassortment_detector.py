@@ -1365,6 +1365,24 @@ def ecological_opportunity(
     return worst
 
 
+def _isolates_with_usable_protein(
+    candidate_protein: str, segment: str, isolates: List["ah.IsolateRecord"],
+) -> List[Tuple["ah.IsolateRecord", str]]:
+    """The cheap part of `nearest_reference_isolate`: whether ANY isolate in `isolates`
+    has a usable `segment` protein to compare `candidate_protein` against, without
+    doing the k-mer profile / cosine-distance work. `nearest_reference_isolate` returns
+    None in exactly the case this returns empty (see its own docstring) -- factored out
+    so a caller that only needs to know IF resolution would succeed, not WHICH isolate
+    it would pick, can skip the expensive part.
+    """
+    attr = {"S": "s_protein_aa", "M": "m_protein_aa", "L": "l_protein_aa"}[segment]
+    candidates = [(isolate, getattr(isolate, attr)) for isolate in isolates]
+    candidates = [(isolate, protein) for isolate, protein in candidates if protein]
+    if not candidate_protein or not candidates:
+        return []
+    return candidates
+
+
 def nearest_reference_isolate(
     candidate_protein: str, segment: str, isolates: List["ah.IsolateRecord"],
 ) -> Optional["ah.IsolateRecord"]:
@@ -1378,10 +1396,8 @@ def nearest_reference_isolate(
     protein for `segment` -- the caller must treat that as unresolved (`insufficient_
     metadata`), never guess an isolate.
     """
-    attr = {"S": "s_protein_aa", "M": "m_protein_aa", "L": "l_protein_aa"}[segment]
-    candidates = [(isolate, getattr(isolate, attr)) for isolate in isolates]
-    candidates = [(isolate, protein) for isolate, protein in candidates if protein]
-    if not candidate_protein or not candidates:
+    candidates = _isolates_with_usable_protein(candidate_protein, segment, isolates)
+    if not candidates:
         return None
     profiles = [ah.kmer_profile(candidate_protein)] + [
         ah.kmer_profile(protein) for _isolate, protein in candidates]
@@ -1424,6 +1440,16 @@ def resolve_e_parent_isolates(
             return ({species: by_species[species] for species in implicated_species},
                     "actual_parents")
 
+    # Efficiency: ecological_opportunity returns neutral 1.0 for fewer than two
+    # implicated species WITHOUT ever reading `parent_isolates` -- only `isolate_basis`
+    # reaches the shipped row in that case (see its own docstring/early return). WHICH
+    # isolate resolution would have picked is therefore pure waste here; only whether it
+    # would have found one at all matters, and that is answered by the cheap filter in
+    # `_isolates_with_usable_protein` without the k-mer profile / cosine-distance work
+    # `nearest_reference_isolate` does after it (identical basis either way -- see
+    # `SkipsExpensiveResolutionWhenBasisOnlyMattersTest`).
+    skip_identity_resolution = len(implicated_species) < 2
+
     resolved: Dict[str, "ah.IsolateRecord"] = {}
     basis = "nearest_reference"
     for species in implicated_species:
@@ -1431,8 +1457,14 @@ def resolve_e_parent_isolates(
             (seg for seg in ("S", "M", "L")
              if gate1.top_hits.get(seg) and gate1.top_hits[seg][0].species == species), "")
         pool = _wild_isolates_of_species(isolates, species)
-        found = (nearest_reference_isolate(orf_proteins.get(segment, ""), segment, pool)
-                 if segment else None)
+        if not segment:
+            found = None
+        elif skip_identity_resolution:
+            available = _isolates_with_usable_protein(
+                orf_proteins.get(segment, ""), segment, pool)
+            found = available[0][0] if available else None
+        else:
+            found = nearest_reference_isolate(orf_proteins.get(segment, ""), segment, pool)
         if found is None:
             basis = "insufficient_metadata"
             continue
@@ -4509,6 +4541,80 @@ class ResolveEParentIsolatesTest(unittest.TestCase):
             m_pol=1.0, m_pol_status="scored", structural_intact=True)
         self.assertEqual(row["rpi_e_isolate_basis"], "nearest_reference")
         self.assertNotEqual(row["rpi_e_isolate_basis"], "actual_parents")
+
+
+class ResolveEParentIsolatesSkipsExpensiveResolutionTest(unittest.TestCase):
+    """Efficiency fix (2026-08-30): when fewer than two species are implicated,
+    ecological_opportunity discards `parent_isolates` and reads only `isolate_basis`
+    (see its own early return), so resolve_e_parent_isolates must not pay for
+    nearest_reference_isolate's k-mer profile / cosine-distance work in that case --
+    only whether an isolate WOULD be found matters, not which one. This is an
+    identical-output guard: the basis produced by the cheap path must match the basis
+    the old, always-expensive path would have produced, for both the found and
+    not-found cases."""
+
+    @staticmethod
+    def _gate1(species_by_segment: Dict[str, str]) -> "Gate1Result":
+        top_hits = {seg: [SpeciesHit(species=sp, distance=0.1)]
+                    for seg, sp in species_by_segment.items()}
+        implicated = sorted(set(species_by_segment.values()))
+        return Gate1Result(top_hits=top_hits, implicated_species=implicated)
+
+    def test_single_species_that_resolves_gets_nearest_reference_basis_without_kmer_work(self):
+        ref = _make_isolate("ref", "SpA", "MEQRSTVCLCLFLTGLLLW", "M" * 10, "M" * 10)
+        gate1 = self._gate1({"S": "SpA", "M": "SpA", "L": "SpA"})
+        with unittest.mock.patch.object(ah, "kmer_profile", wraps=ah.kmer_profile) as spy:
+            resolved, basis = resolve_e_parent_isolates(
+                gate1.implicated_species, [ref], gate1,
+                {"S": "MEQRSTVCLCLFLTGLLLW", "M": "M" * 10, "L": "M" * 10},
+                known_isolates=None)
+        spy.assert_not_called()
+        self.assertEqual(basis, "nearest_reference")
+        self.assertEqual(set(resolved), {"SpA"})
+
+    def test_single_species_with_no_usable_protein_gets_insufficient_metadata(self):
+        """Matches nearest_reference_isolate's own None case (empty pool) -- the cheap
+        filter must agree with what the expensive path would have decided."""
+        gate1 = self._gate1({"S": "SpA", "M": "SpA", "L": "SpA"})
+        resolved, basis = resolve_e_parent_isolates(
+            gate1.implicated_species, [], gate1,
+            {"S": "MEQRSTVCLCLFLTGLLLW", "M": "M" * 10, "L": "M" * 10},
+            known_isolates=None)
+        self.assertEqual(basis, "insufficient_metadata")
+        self.assertEqual(resolved, {})
+
+    def test_two_species_still_pays_for_full_resolution(self):
+        """Regression guard: the skip is scoped to fewer-than-two-species only -- a
+        genuinely discordant candidate (basis actually used by ecological_opportunity)
+        must still resolve the real nearest isolate, not a cheap placeholder."""
+        ref_a = _make_isolate("ref_a", "SpA", "MEQRSTVCLCLFLTGLLLW", "M" * 10, "M" * 10)
+        ref_b = _make_isolate("ref_b", "SpB", "M" * 10, "MEQRSTVCLCLFLTGLLLW", "M" * 10)
+        gate1 = self._gate1({"S": "SpA", "M": "SpB", "L": "SpB"})
+        with unittest.mock.patch.object(ah, "kmer_profile", wraps=ah.kmer_profile) as spy:
+            resolved, basis = resolve_e_parent_isolates(
+                gate1.implicated_species, [ref_a, ref_b], gate1,
+                {"S": "MEQRSTVCLCLFLTGLLLW", "M": "MEQRSTVCLCLFLTGLLLW", "L": "M" * 10},
+                known_isolates=None)
+        spy.assert_called()
+        self.assertEqual(basis, "nearest_reference")
+
+    def test_ecological_opportunity_row_identical_whether_or_not_identity_was_resolved(self):
+        """The row that ships (compute_rpi's return) is what must be provably unchanged
+        -- assert on it, not on the intermediate resolve_e_parent_isolates call, per
+        this project's own 'assert on the row that ships' rule."""
+        ref = _make_isolate("ref", "SpA", "MEQRSTVCLCLFLTGLLLW", "M" * 10, "M" * 10)
+        gate1 = self._gate1({"S": "SpA", "M": "SpA", "L": "SpA"})
+        resolved, basis = resolve_e_parent_isolates(
+            gate1.implicated_species, [ref], gate1,
+            {"S": "MEQRSTVCLCLFLTGLLLW", "M": "M" * 10, "L": "M" * 10},
+            known_isolates=None)
+        row = compute_rpi(
+            implicated_species=gate1.implicated_species, isolates=[ref],
+            parent_isolates=resolved, isolate_basis=basis,
+            odd_segment="M", identity=0.5, m_pack=1.0, m_pack_status="scored",
+            m_pol=1.0, m_pol_status="scored", structural_intact=True)
+        self.assertEqual(row["rpi_e_total"], 1.0)
+        self.assertEqual(row["rpi_e_isolate_basis"], "nearest_reference")
 
 
 class BoltzmannCompatibilityTest(unittest.TestCase):
