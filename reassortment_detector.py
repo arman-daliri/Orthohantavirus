@@ -4544,14 +4544,11 @@ class ResolveEParentIsolatesTest(unittest.TestCase):
 
 
 class ResolveEParentIsolatesSkipsExpensiveResolutionTest(unittest.TestCase):
-    """Efficiency fix (2026-08-30): when fewer than two species are implicated,
-    ecological_opportunity discards `parent_isolates` and reads only `isolate_basis`
-    (see its own early return), so resolve_e_parent_isolates must not pay for
-    nearest_reference_isolate's k-mer profile / cosine-distance work in that case --
-    only whether an isolate WOULD be found matters, not which one. This is an
-    identical-output guard: the basis produced by the cheap path must match the basis
-    the old, always-expensive path would have produced, for both the found and
-    not-found cases."""
+    """Identical-output guard for the `skip_identity_resolution` efficiency fix --
+    see resolve_e_parent_isolates's own inline comment (2026-08-30) for what is being
+    skipped and why. The basis produced by the cheap path must match the basis the
+    old, always-expensive path would have produced, for both the found and not-found
+    cases."""
 
     @staticmethod
     def _gate1(species_by_segment: Dict[str, str]) -> "Gate1Result":
