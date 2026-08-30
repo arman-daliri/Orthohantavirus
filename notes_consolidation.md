@@ -250,3 +250,92 @@ calls it by that name).
 All of these resolve correctly through the shims described above (each name
 used here is in its origin file's own top-level name set, so each shim's
 explicit re-export list covers it).
+
+## Phase 2 — shims, and two real circular-import bugs Phase 1 missed
+
+Commit `e19dc25`. Each of the six original files is replaced with a thin shim
+(`build_shims.py`) importing, from `rpi_core`, exactly the top-level names
+computed by walking that ORIGINAL file's own AST (public and private, tests
+included) — never `from rpi_core import *`, for the reason already stated
+above (module-scoping `python -m unittest <module>`'s test count).
+
+Phase 1's only test was compiling and importing `rpi_core.py` in isolation —
+that passed, but said nothing about what happens once the shims exist and
+Python has to resolve imports *through* them. Building the shims and actually
+importing them (not just compiling) surfaced two real bugs, both fixed in
+`rpi_core.py`/`build_rpi_core.py` as part of the Phase 2 commit, not deferred:
+
+**Bug 1 — rpi_core.py still imported its own five siblings.** The
+consolidated import block (built by deduplicating every import line across
+the six files) still contained `import validate_reassortment_detector as vd`
+and the other four sibling imports. Harmless as six separate files; once
+those five names became shims that import *from* `rpi_core`, importing
+`rpi_core` would try to import a shim, which would try to import `rpi_core`,
+which hadn't finished loading yet. Fixed: `build_rpi_core.py` now excludes
+these five lines entirely — the self-alias footer (`rd = cal = disc = stats
+= vd = sys.modules[__name__]`) already provides everything they did.
+
+**Bug 2 — pipeline.py's `diagnose_e_stratification`/`diagnose_gate0_junk`
+imports created a second, structurally different cycle.** These two are
+genuinely separate, non-merged modules — but `diagnose_e_stratification.py`
+itself does `from rpi_discrimination_stats import compare_groups`. That's
+fine when `pipeline.py` is a standalone leaf importer (the original,
+six-separate-files world); it becomes a real cycle once pipeline's code and
+`rpi_discrimination_stats`'s code share one module: importing the
+`rpi_discrimination_stats` *shim* first pulls in all of `rpi_core`
+(pipeline's own section included), which needs `diagnose_e_stratification`
+fully loaded, which needs the `rpi_discrimination_stats` shim fully loaded —
+the same import still in progress. Unlike Bug 1 or the def-time-default
+ordering constraint (Phase 1), **no physical placement inside `rpi_core.py`
+fixes this** — it's a cycle between two shims, not a definition-order
+problem. Fixed by making both imports **lazy**: moved out of module
+top-level into `_pipeline_main`'s own body, at the exact dispatch branch
+each is used (`if command == "diagnose-e": import diagnose_e_stratification
+as diag_e; diag_e.main()`, and likewise for `diagnose-gate0`), so importing
+`rpi_core` via any shim never touches either external module at load time.
+The two `MainDispatchTest` methods that patch `diag_e.main`/`diag_gate0.main`
+via `mock.patch.object` got their own local import added for the same
+reason — `diag_e` is no longer a module-level name they can reference
+directly, but a plain `import diagnose_e_stratification as diag_e` inside
+the test method itself is safe at test-execution time (by then every shim
+has finished loading, and `diagnose_e_stratification.py` has no dependency
+back on `rpi_core` at module level, only on the already-fully-loaded
+`rpi_discrimination_stats`).
+
+**Also corrected, found the same way (by importing, not by re-deriving the
+earlier AST analysis):** the self-alias assignment moved from the end of the
+file to immediately after the detector section. `rpi_calibration.py`'s
+`window_nt: int = rd.RPI_PANHANDLE_WINDOW_NT`-style parameter defaults are
+evaluated at *def-time*, in the enclosing scope — a footer-only alias left
+the NAME `rd` itself completely unbound at the exact line those defaults
+needed it (reordering detector before calibration, Phase 1's fix, made the
+underlying *value* `RPI_PANHANDLE_WINDOW_NT` exist in time, but did nothing
+for the alias name `rd` used to reach it). Placing the alias right after the
+detector section — the earliest point every later section's cross-references
+could need it — satisfies both requirements for every subsequent section.
+
+### Phase 3 verification (all three gates green — this is what gated the Phase 2 commit)
+
+- **(a) Full test suite through the shims**: `python -m unittest
+  reassortment_detector rpi_calibration rpi_discrimination
+  rpi_discrimination_stats pipeline validate_reassortment_detector` — 322
+  tests, green. Diffed against Phase 0's golden `test_log.txt` with only
+  timing normalized (`sed 's/Ran [0-9]* tests in [0-9.]*s/.../'`):
+  **identical**, not just same count.
+  (`output/consolidation_baseline/phase3_test_log.txt`)
+- **(b) Seeded panel through the shims**: `python rpi_discrimination.py
+  --seed 20260829 --json ...` — `diff` against Phase 0's golden
+  `discrimination_panel_golden.json`: **zero differences**, bit-identical.
+  (`output/consolidation_baseline/discrimination_panel_phase3.json`)
+- **(c) `python pipeline.py --help` / `run --help`**: byte-identical to
+  Phase 0's golden capture.
+
+Also spot-verified before committing: all six shims import individually and
+together in one process, in a different order than their natural dependency
+order (order-independence is exactly what a correctly-broken import cycle
+should give you); each shim's own `python -m unittest <module>` count
+matches its previously-documented figure — `rpi_calibration` 39,
+`rpi_discrimination` 18, `pipeline` 12, `rpi_discrimination_stats` 12,
+`validate_reassortment_detector` 0 (it has no `TestCase` classes at all,
+matching its pre-consolidation behavior, not a regression) — confirming no
+shim leaks another module's tests into its own count.
