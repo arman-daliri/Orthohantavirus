@@ -463,6 +463,12 @@ class CandidateInput:
     s_genomic: str
     m_genomic: str
     l_genomic: str
+    # Segment -> the REAL isolate that contributed that segment, when a caller already
+    # knows it (e.g. rpi_discrimination.py's group a/b1/b2 builders, which pick specific
+    # isolates on purpose). None (the default) for ordinary production candidates, whose
+    # true parent isolate is exactly what reassortment detection exists to resolve.
+    # Consumed only by resolve_e_parent_isolates -- see rpi_e_isolate_basis.
+    known_segment_isolates: Optional[Dict[str, "ah.IsolateRecord"]] = None
 
 
 def _reverse_complement(seq: str) -> str:
@@ -1257,13 +1263,30 @@ def _year_span(isolates: Sequence["ah.IsolateRecord"]) -> Optional[Tuple[int, in
 
 def ecological_opportunity(
     implicated_species: List[str], isolates: List["ah.IsolateRecord"],
+    parent_isolates: Dict[str, "ah.IsolateRecord"], isolate_basis: str,
     weights: Optional[Dict[str, Any]] = None,
-) -> Dict[str, float]:
+) -> Dict[str, Any]:
     """Factor E: relative opportunity for the implicated lineages to co-infect one cell.
 
     E = h_host * g_geo * t_time, over the WORST pair among all implicated species --
     deliberately unlike gate3_check, which reads implicated_species[:2] and has no
     temporal term. Disagreement between the two is expected and informative.
+
+    FIX (2026-08-30, docs/superpowers/specs/2026-08-30-rpi-e-geo-isolate-level-fix-
+    design.md): host/geo/time are computed from the ONE isolate that stands for each
+    implicated species IN THIS CANDIDATE (`parent_isolates`), never from that species'
+    full country/host/year union across the whole reference. The old species-wide union
+    let widely-distributed or border-spanning species (Puumala, Seoul) register "geo
+    opportunity" against every other species that shares ANY of their many countries,
+    even when the two specific parent isolates being scored were sampled continents
+    apart -- see the design doc and notes_diagnosis.md for the confirmed mechanism.
+
+    `parent_isolates` and `isolate_basis` are REQUIRED, not defaulted (same reasoning
+    `m_pack_status`/`m_pol_status` already use): a caller must state which single
+    isolate stands for each species and where it came from
+    (see resolve_e_parent_isolates) rather than let this function silently guess one.
+    `isolate_basis` is echoed back verbatim as `rpi_e_isolate_basis` -- every row must
+    declare which basis its E actually used, never leave it implicit.
 
     Returns 1.0 (neutral) when fewer than two species are implicated: there is no
     co-infection requirement to test, so E must not penalise.
@@ -1271,55 +1294,58 @@ def ecological_opportunity(
     table = _weights(weights)
     floor = table["eco_floor"]
     if len(implicated_species) < 2:
-        return {"rpi_e_host": 1.0, "rpi_e_geo": 1.0, "rpi_e_time": 1.0, "rpi_e_total": 1.0}
+        return {"rpi_e_host": 1.0, "rpi_e_geo": 1.0, "rpi_e_time": 1.0, "rpi_e_total": 1.0,
+                "rpi_e_isolate_basis": isolate_basis}
 
     all_species_present = {isolate.species_name for isolate in isolates}
-    by_species: Dict[str, List["ah.IsolateRecord"]] = defaultdict(list)
-    for isolate in isolates:
-        if isolate.is_lab_derived or isolate.is_vaccine_strain:
-            continue
-        if isolate.species_name in implicated_species:
-            by_species[isolate.species_name].append(isolate)
+    wild_species_present = {
+        isolate.species_name for isolate in isolates
+        if not isolate.is_lab_derived and not isolate.is_vaccine_strain}
 
     worst = {"rpi_e_host": 1.0, "rpi_e_geo": 1.0, "rpi_e_time": 1.0}
     for index, species_a in enumerate(implicated_species):
         for species_b in implicated_species[index + 1:]:
-            members_a, members_b = by_species.get(species_a), by_species.get(species_b)
-            if not members_a or not members_b:
-                # Two distinct absence cases, checked against the UNFILTERED isolates
-                # list so they aren't conflated:
+            isolate_a = parent_isolates.get(species_a)
+            isolate_b = parent_isolates.get(species_b)
+            if isolate_a is None or isolate_b is None:
+                # Same two absence cases the old species-wide union distinguished,
+                # checked against the UNFILTERED isolates list so they aren't conflated
+                # -- now evaluated per species that failed to resolve, since a resolved
+                # isolate on one side and an absent species on the other is still
+                # informative:
                 #  (a) the species IS present in the reference, but every one of its
-                #      isolates is lab- or vaccine-derived: there is genuinely no wild
-                #      population, so no natural ecological route -- the host term
-                #      takes the floor rather than defaulting to full opportunity.
+                #      isolates is lab- or vaccine-derived (so resolution correctly
+                #      found none): there is genuinely no wild population, so no
+                #      natural ecological route -- the host term takes the floor rather
+                #      than defaulting to full opportunity.
                 #  (b) the species does not appear in the reference AT ALL (novel, or
                 #      simply never sampled): that is unknown, not separated. Scoring
                 #      it as impossible would contradict gate3_check's own
                 #      "ecology_unknown" treatment of this exact situation and would
                 #      punish a candidate for lack of data rather than lack of
                 #      plausibility -- stay neutral and leave `worst` untouched.
-                if species_a not in all_species_present or species_b not in all_species_present:
-                    continue
-                worst["rpi_e_host"] = min(worst["rpi_e_host"], floor)
+                for species, isolate in ((species_a, isolate_a), (species_b, isolate_b)):
+                    if isolate is not None:
+                        continue
+                    if species not in all_species_present:
+                        continue
+                    if species not in wild_species_present:
+                        worst["rpi_e_host"] = min(worst["rpi_e_host"], floor)
                 continue
 
-            best_host = max(
-                table["host_decay"][host_rank_proximity(a, b)]
-                for a in members_a for b in members_b
-            )
-            countries_a = {i.country for i in members_a if i.country}
-            countries_b = {i.country for i in members_b if i.country}
-            # Missing-means-neutral takes precedence: an empty country set on either
-            # side is unknown, not separated, so it must be checked before the floor
-            # branch could otherwise apply.
-            if not countries_a or not countries_b:
+            host = table["host_decay"][host_rank_proximity(isolate_a, isolate_b)]
+            country_a, country_b = isolate_a.country, isolate_b.country
+            # Missing-means-neutral takes precedence: an empty country on either side
+            # is unknown, not separated, so it must be checked before the floor branch
+            # could otherwise apply.
+            if not country_a or not country_b:
                 geo = 1.0
-            elif countries_a & countries_b:
+            elif country_a == country_b:
                 geo = 1.0
             else:
                 geo = floor
 
-            span_a, span_b = _year_span(members_a), _year_span(members_b)
+            span_a, span_b = _year_span([isolate_a]), _year_span([isolate_b])
             if span_a and span_b:
                 # +1: inclusive-year spans that merely touch (e.g. 2001 vs 2002, a
                 # one-year gap between point samples) count as overlapping -- point
@@ -1330,12 +1356,88 @@ def ecological_opportunity(
             else:
                 time = 1.0
 
-            worst["rpi_e_host"] = min(worst["rpi_e_host"], best_host)
+            worst["rpi_e_host"] = min(worst["rpi_e_host"], host)
             worst["rpi_e_geo"] = min(worst["rpi_e_geo"], geo)
             worst["rpi_e_time"] = min(worst["rpi_e_time"], time)
 
     worst["rpi_e_total"] = worst["rpi_e_host"] * worst["rpi_e_geo"] * worst["rpi_e_time"]
+    worst["rpi_e_isolate_basis"] = isolate_basis
     return worst
+
+
+def nearest_reference_isolate(
+    candidate_protein: str, segment: str, isolates: List["ah.IsolateRecord"],
+) -> Optional["ah.IsolateRecord"]:
+    """The isolate (already filtered to one species) whose own `segment` protein is
+    nearest `candidate_protein` by k-mer cosine distance -- the nearest-reference-isolate
+    proxy `resolve_e_parent_isolates` falls back to for Factor E when a candidate's true
+    parent isolate is unknown (design doc section 1a). Mirrors `nearest_species_by_kmer`'s
+    method, at isolate instead of species granularity.
+
+    Returns None if `candidate_protein` is empty or no candidate isolate has a usable
+    protein for `segment` -- the caller must treat that as unresolved (`insufficient_
+    metadata`), never guess an isolate.
+    """
+    attr = {"S": "s_protein_aa", "M": "m_protein_aa", "L": "l_protein_aa"}[segment]
+    candidates = [(isolate, getattr(isolate, attr)) for isolate in isolates]
+    candidates = [(isolate, protein) for isolate, protein in candidates if protein]
+    if not candidate_protein or not candidates:
+        return None
+    profiles = [ah.kmer_profile(candidate_protein)] + [
+        ah.kmer_profile(protein) for _isolate, protein in candidates]
+    matrix, _vocab = ah.profiles_to_matrix(profiles)
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    unit = matrix / norms
+    similarity = np.clip(unit[0] @ unit[1:].T, -1.0, 1.0)
+    distances = 1.0 - similarity
+    best_index = int(np.argmin(distances))
+    return candidates[best_index][0]
+
+
+def resolve_e_parent_isolates(
+    implicated_species: List[str], isolates: List["ah.IsolateRecord"],
+    gate1: "Gate1Result", orf_proteins: Dict[str, str],
+    known_isolates: Optional[Dict[str, "ah.IsolateRecord"]] = None,
+) -> Tuple[Dict[str, "ah.IsolateRecord"], str]:
+    """(species -> the one isolate standing for it, basis) for `ecological_opportunity`
+    (design doc section 1a).
+
+    `known_isolates` (segment -> the REAL isolate that contributed that segment) is
+    supplied only by a caller that already knows the truth -- e.g. rpi_discrimination.py's
+    group a/b1/b2 builders, which construct candidates from specific isolates on
+    purpose. When every implicated species is covered by it, basis is "actual_parents".
+
+    Otherwise (ordinary production candidates, and WS4 group c's real positives, whose
+    true OTHER parent is exactly what reassortment detection exists to resolve) this
+    falls back to the k-mer-nearest wild reference isolate of each implicated species,
+    on the segment gate1 top-matched that species against -- the same "nearest
+    well-defined ground truth, since the real one is unknown" reasoning
+    species_consensus_panhandle_window (D3) already uses for M_pack/M_pol, applied per
+    isolate instead of per species-consensus. basis is "nearest_reference" when every
+    species resolves this way (or a mix of actual+fallback), "insufficient_metadata"
+    when at least one species resolves neither way.
+    """
+    if known_isolates:
+        by_species = {isolate.species_name: isolate for isolate in known_isolates.values()}
+        if all(species in by_species for species in implicated_species):
+            return ({species: by_species[species] for species in implicated_species},
+                    "actual_parents")
+
+    resolved: Dict[str, "ah.IsolateRecord"] = {}
+    basis = "nearest_reference"
+    for species in implicated_species:
+        segment = next(
+            (seg for seg in ("S", "M", "L")
+             if gate1.top_hits.get(seg) and gate1.top_hits[seg][0].species == species), "")
+        pool = _wild_isolates_of_species(isolates, species)
+        found = (nearest_reference_isolate(orf_proteins.get(segment, ""), segment, pool)
+                 if segment else None)
+        if found is None:
+            basis = "insufficient_metadata"
+            continue
+        resolved[species] = found
+    return resolved, basis
 
 
 # Gas constant x RNAcofold's default temperature (37 C = 310.15 K), in kcal/mol so the
@@ -1957,6 +2059,7 @@ def _rpi_decimals(floor_value: float) -> int:
 
 def compute_rpi(
     implicated_species: List[str], isolates: List["ah.IsolateRecord"],
+    parent_isolates: Dict[str, "ah.IsolateRecord"], isolate_basis: str,
     odd_segment: str, identity: float, m_pack: float, m_pack_status: str, m_pol: float,
     m_pol_status: str, structural_intact: bool,
     weights: Optional[Dict[str, Any]] = None,
@@ -1976,14 +2079,17 @@ def compute_rpi(
     `m_pack_status` is REQUIRED, not defaulted, on the same reasoning `m_pol_status`
     already is: a caller must state where its m_pack value came from (see
     score_m_pack's four statuses) rather than let a constant land in the report dressed
-    as a measurement.
+    as a measurement. `parent_isolates`/`isolate_basis` (design doc
+    2026-08-30-rpi-e-geo-isolate-level-fix-design.md) are REQUIRED for the same reason --
+    see resolve_e_parent_isolates and ecological_opportunity's own docstring.
     """
     # Every lookup below goes through `table`, and every helper is handed it
     # explicitly. Nothing on this path reads the RPI_WEIGHTS global directly, which is
     # what lets the sensitivity sweep score a perturbed table without reassigning it.
     table = _weights(weights)
     floor = table["eco_floor"]
-    eco = ecological_opportunity(implicated_species, isolates, weights=table)
+    eco = ecological_opportunity(
+        implicated_species, isolates, parent_isolates, isolate_basis, weights=table)
     stratum = divergence_stratum(identity, weights=table)
     k_value = constellation_prior(stratum, weights=table)[odd_segment]
     f_value = retention_factor(odd_segment, structural_intact, weights=table)
@@ -2407,8 +2513,14 @@ def _score_panel(
     table = _weights(weights)
     generation, retention = [], []
     for candidate in panel:
+        # This synthetic panel already models "one isolate stands for this species"
+        # directly in candidate["isolates"] -- its own known, real parent, not a
+        # production-style unknown -- so it maps straight to parent_isolates/
+        # "actual_parents" with no fallback resolution needed.
+        parent_isolates = {isolate.species_name: isolate for isolate in candidate["isolates"]}
         row = compute_rpi(
-            candidate["implicated_species"], candidate["isolates"], candidate["odd_segment"],
+            candidate["implicated_species"], candidate["isolates"],
+            parent_isolates, "actual_parents", candidate["odd_segment"],
             candidate["identity"], candidate["m_pack"], "scored", candidate["m_pol"], "scored",
             candidate["structural_intact"], weights=table,
         )
@@ -2924,9 +3036,19 @@ def score_candidate(
         candidate, reference, gate1, gate1.discordant_segment or "M")
     m_pol_value, m_pol_status = score_m_pol(
         candidate_cds, reference, gate1, gate1.discordant_segment or "M")
+    # Factor E isolate-level fix (design doc 2026-08-30-rpi-e-geo-isolate-level-fix):
+    # resolve ONE isolate per implicated species -- the candidate's real known parent
+    # when the caller supplied one (CandidateInput.known_segment_isolates), otherwise
+    # the k-mer-nearest wild reference isolate proxy. `isolate_basis` travels into the
+    # row as rpi_e_isolate_basis so no row's E is ever silently on a proxy.
+    parent_isolates, isolate_basis = resolve_e_parent_isolates(
+        gate1.implicated_species, reference.isolates, gate1, gate0.orf_proteins,
+        known_isolates=candidate.known_segment_isolates)
     result.update(compute_rpi(
         implicated_species=gate1.implicated_species,
         isolates=reference.isolates,
+        parent_isolates=parent_isolates,
+        isolate_basis=isolate_basis,
         # DEFAULT "M" when gate1 named no discordant segment. Not arbitrary: M is the
         # modal odd segment in both strata of the constellation prior, so it is the
         # least surprising assumption -- and it keeps compute_rpi total for candidates
@@ -4164,71 +4286,113 @@ class DivergenceStratumTest(unittest.TestCase):
             divergence_stratum(-0.1)
 
 
+def _parent_map(*isolates: "ah.IsolateRecord") -> Dict[str, "ah.IsolateRecord"]:
+    """species -> isolate, for tests that already have exactly one isolate per
+    implicated species and want to hand it to ecological_opportunity as its real,
+    known parent (basis "actual_parents")."""
+    return {isolate.species_name: isolate for isolate in isolates}
+
+
 class EcologicalOpportunityTest(unittest.TestCase):
+    """FIX (2026-08-30): ecological_opportunity now takes ONE isolate per implicated
+    species (parent_isolates) instead of fanning out to every isolate of that species in
+    the reference -- see design doc 2026-08-30-rpi-e-geo-isolate-level-fix-design.md and
+    notes_diagnosis.md for the bug this replaces (a widely-distributed species' full
+    country union defeated a "different continents" construction guarantee). Every test
+    below supplies parent_isolates explicitly, matching how a real caller
+    (resolve_e_parent_isolates) would resolve it."""
+
     def test_same_host_genus_same_country_same_years_scores_high(self):
-        isolates = [
-            _eco_isolate("A", "USA", "2001"),
-            _eco_isolate("B", "USA", "2002"),
-        ]
-        result = ecological_opportunity(["A", "B"], isolates)
+        a = _eco_isolate("A", "USA", "2001")
+        b = _eco_isolate("B", "USA", "2002")
+        result = ecological_opportunity(
+            ["A", "B"], [a, b], _parent_map(a, b), "actual_parents")
         self.assertGreater(result["rpi_e_total"], 0.4)
         self.assertEqual(result["rpi_e_geo"], 1.0)
         self.assertEqual(result["rpi_e_time"], 1.0)
+        self.assertEqual(result["rpi_e_isolate_basis"], "actual_parents")
 
     def test_disjoint_countries_drive_geo_term_down(self):
-        isolates = [
-            _eco_isolate("A", "USA", "2001"),
-            _eco_isolate("B", "Chile", "2002"),
-        ]
-        result = ecological_opportunity(["A", "B"], isolates)
+        a = _eco_isolate("A", "USA", "2001")
+        b = _eco_isolate("B", "Chile", "2002")
+        result = ecological_opportunity(
+            ["A", "B"], [a, b], _parent_map(a, b), "actual_parents")
         self.assertLess(result["rpi_e_geo"], 1.0)
 
+    def test_same_species_country_pool_but_different_parent_isolates_still_separates(self):
+        """THE FIX ITSELF: a species with reference isolates in MANY countries (Puumala/
+        Seoul-style) must not register geo opportunity against another species just
+        because the two species' country sets overlap SOMEWHERE in the corpus -- only
+        the two ACTUAL parent isolates' own countries matter. Species A has isolates in
+        both USA and China; species B has isolates in both Chile and China. The specific
+        parent pair scored here (USA x Chile) never co-occurs, even though 'China' is a
+        country both species are seen in elsewhere in the reference."""
+        a_near = _eco_isolate("A", "China", "2001")
+        a_far = _eco_isolate("A", "USA", "2001")
+        b_near = _eco_isolate("B", "China", "2001")
+        b_far = _eco_isolate("B", "Chile", "2001")
+        isolates = [a_near, a_far, b_near, b_far]
+        # The OLD species-wide-union behaviour would find China in both species' sets
+        # and score geo = 1.0 no matter which isolate pair is actually implicated.
+        result = ecological_opportunity(
+            ["A", "B"], isolates, _parent_map(a_far, b_far), "actual_parents")
+        self.assertLess(result["rpi_e_geo"], 1.0)
+        # The near pair (both China) DOES have a real route -- same fixture pool,
+        # different parent pair, opposite answer. Confirms the function reads
+        # `parent_isolates`, not incidental structure of the wider isolates list.
+        near_result = ecological_opportunity(
+            ["A", "B"], isolates, _parent_map(a_near, b_near), "actual_parents")
+        self.assertEqual(near_result["rpi_e_geo"], 1.0)
+
     def test_disjoint_decades_drive_time_term_down(self):
-        isolates = [
-            _eco_isolate("A", "USA", "1985"),
-            _eco_isolate("B", "USA", "2020"),
-        ]
-        result = ecological_opportunity(["A", "B"], isolates)
+        a = _eco_isolate("A", "USA", "1985")
+        b = _eco_isolate("B", "USA", "2020")
+        result = ecological_opportunity(
+            ["A", "B"], [a, b], _parent_map(a, b), "actual_parents")
         self.assertLess(result["rpi_e_time"], 1.0)
 
     def test_no_factor_is_ever_exactly_zero(self):
         """A zero in a multiplicative index is a hidden hard gate. Ecological
         impossibility must approach zero, never reach it."""
-        isolates = [
-            _eco_isolate("A", "USA", "1985", host_order="Rodentia"),
-            _eco_isolate("B", "Chile", "2020", host_order="Soricomorpha",
-                         host_family="Soricidae", host_name="Sorex araneus"),
-        ]
-        result = ecological_opportunity(["A", "B"], isolates)
+        a = _eco_isolate("A", "USA", "1985", host_order="Rodentia")
+        b = _eco_isolate("B", "Chile", "2020", host_order="Soricomorpha",
+                         host_family="Soricidae", host_name="Sorex araneus")
+        result = ecological_opportunity(
+            ["A", "B"], [a, b], _parent_map(a, b), "actual_parents")
         for key in ("rpi_e_host", "rpi_e_geo", "rpi_e_time", "rpi_e_total"):
             self.assertGreater(result[key], 0.0, key)
         self.assertLess(result["rpi_e_total"], 0.01)
 
     def test_covers_all_implicated_species_not_just_first_two(self):
         """gate3_check reads implicated_species[:2]. Factor E must not."""
-        isolates = [
-            _eco_isolate("A", "USA", "2001"),
-            _eco_isolate("B", "USA", "2001"),
-            _eco_isolate("C", "Chile", "1980", host_order="Soricomorpha",
-                         host_family="Soricidae", host_name="Sorex araneus"),
-        ]
-        two = ecological_opportunity(["A", "B"], isolates)
-        three = ecological_opportunity(["A", "B", "C"], isolates)
+        a = _eco_isolate("A", "USA", "2001")
+        b = _eco_isolate("B", "USA", "2001")
+        c = _eco_isolate("C", "Chile", "1980", host_order="Soricomorpha",
+                         host_family="Soricidae", host_name="Sorex araneus")
+        isolates = [a, b, c]
+        two = ecological_opportunity(
+            ["A", "B"], isolates, _parent_map(a, b), "actual_parents")
+        three = ecological_opportunity(
+            ["A", "B", "C"], isolates, _parent_map(a, b, c), "actual_parents")
         self.assertLess(three["rpi_e_total"], two["rpi_e_total"])
 
     def test_lab_and_vaccine_strains_are_excluded(self):
+        """B has no WILD isolate, so a real resolver never puts it in parent_isolates --
+        the floor-host branch must still fire from the unfiltered `isolates` list."""
         wild = _eco_isolate("A", "USA", "2001")
         lab = _eco_isolate("B", "USA", "2001")
         lab.is_lab_derived = True
-        result = ecological_opportunity(["A", "B"], [wild, lab])
+        result = ecological_opportunity(
+            ["A", "B"], [wild, lab], _parent_map(wild), "insufficient_metadata")
         self.assertLess(result["rpi_e_total"], 0.5)
 
     def test_species_absent_from_reference_entirely_stays_neutral(self):
         """A species with no isolate of any kind (wild, lab, or vaccine) is unknown to
         the reference -- novel or simply unsampled -- not ecologically separated.
         gate3_check already treats this as 'ecology_unknown'; Factor E must agree."""
-        isolates = [_eco_isolate("A", "USA", "2001")]
-        result = ecological_opportunity(["A", "B"], isolates)
+        a = _eco_isolate("A", "USA", "2001")
+        result = ecological_opportunity(
+            ["A", "B"], [a], _parent_map(a), "insufficient_metadata")
         self.assertEqual(result["rpi_e_total"], 1.0)
 
     def test_unknown_host_metadata_stays_neutral_not_maximal_separation(self):
@@ -4237,17 +4401,114 @@ class EcologicalOpportunityTest(unittest.TestCase):
         fails and no biosample host is available (all_hanta.py:1560-1565, flagged
         'missing_host') -- that is unknown, not separated. It must not fall through
         to 'different_order' (0.01), the harshest value in the ladder."""
-        isolates = [
-            _eco_isolate("A", "USA", "2001"),
-            _eco_isolate("B", "USA", "2001", host_order="", host_family="", host_name=""),
-        ]
-        result = ecological_opportunity(["A", "B"], isolates)
+        a = _eco_isolate("A", "USA", "2001")
+        b = _eco_isolate("B", "USA", "2001", host_order="", host_family="", host_name="")
+        result = ecological_opportunity(
+            ["A", "B"], [a, b], _parent_map(a, b), "actual_parents")
         self.assertEqual(result["rpi_e_host"], 1.0)
 
     def test_single_implicated_species_returns_neutral_one(self):
-        isolates = [_eco_isolate("A", "USA", "2001")]
-        result = ecological_opportunity(["A"], isolates)
+        a = _eco_isolate("A", "USA", "2001")
+        result = ecological_opportunity(["A"], [a], _parent_map(a), "actual_parents")
         self.assertEqual(result["rpi_e_total"], 1.0)
+        self.assertEqual(result["rpi_e_isolate_basis"], "actual_parents")
+
+
+class NearestReferenceIsolateTest(unittest.TestCase):
+    """nearest_reference_isolate is the fallback resolve_e_parent_isolates uses when a
+    candidate's true parent isolate is unknown (design doc section 1a)."""
+
+    def test_picks_the_isolate_whose_protein_is_closest(self):
+        close = _make_isolate("close", "SpA", "MEQRSTVCLCLFLTGLLLWNPSESRN", "M" * 10, "M" * 10)
+        far = _make_isolate("far", "SpA", "AAAAAAAAAAAAAAAAAAAAAAAAAA", "M" * 10, "M" * 10)
+        found = nearest_reference_isolate(
+            "MEQRSTVCLCLFLTGLLLWNPSESRN", "S", [far, close])
+        self.assertEqual(found.isolate_key, "close")
+
+    def test_returns_none_for_empty_candidate_protein(self):
+        isolate = _make_isolate("i1", "SpA", "MEQ", "MEQ", "MEQ")
+        self.assertIsNone(nearest_reference_isolate("", "S", [isolate]))
+
+    def test_returns_none_when_pool_has_no_usable_protein_for_the_segment(self):
+        isolate = _make_isolate("i1", "SpA", "", "MEQ", "MEQ")  # empty s_protein_aa
+        self.assertIsNone(nearest_reference_isolate("MEQ", "S", [isolate]))
+
+    def test_returns_none_for_an_empty_pool(self):
+        self.assertIsNone(nearest_reference_isolate("MEQ", "S", []))
+
+
+class ResolveEParentIsolatesTest(unittest.TestCase):
+    """resolve_e_parent_isolates (design doc section 1a): the caller-facing function
+    score_candidate uses to decide, per candidate, whether Factor E gets the real known
+    parent isolates or the k-mer-nearest-reference proxy -- and to declare which, via
+    rpi_e_isolate_basis, so a proxy row is always flagged, never silent."""
+
+    @staticmethod
+    def _gate1(species_by_segment: Dict[str, str]) -> "Gate1Result":
+        top_hits = {seg: [SpeciesHit(species=sp, distance=0.1)]
+                    for seg, sp in species_by_segment.items()}
+        implicated = sorted(set(species_by_segment.values()))
+        return Gate1Result(top_hits=top_hits, implicated_species=implicated)
+
+    def test_known_isolates_covering_every_species_gives_actual_parents(self):
+        donor = _make_isolate("donor", "Donor", "MEQRSTVCLCLFLTGLLLW", "M" * 10, "M" * 10)
+        backbone = _make_isolate("backbone", "Backbone", "M" * 10, "MEQRSTVCLCLFLTGLLLW", "M" * 10)
+        gate1 = self._gate1({"S": "Donor", "M": "Backbone", "L": "Backbone"})
+        known = {"S": donor, "M": backbone, "L": backbone}
+        resolved, basis = resolve_e_parent_isolates(
+            gate1.implicated_species, [donor, backbone], gate1,
+            {"S": "MEQRSTVCLCLFLTGLLLW", "M": "MEQRSTVCLCLFLTGLLLW", "L": "M" * 10},
+            known_isolates=known)
+        self.assertEqual(basis, "actual_parents")
+        self.assertEqual(resolved, {"Donor": donor, "Backbone": backbone})
+
+    def test_known_isolates_missing_a_species_falls_back_for_the_whole_row(self):
+        """WS4 group c's own real isolate is known, but the discordant segment's
+        inferred donor species is NOT -- resolve_e_parent_isolates must not silently
+        mix "real" and "proxy" isolates within one row; the whole row uses the
+        fallback."""
+        own = _make_isolate("own", "OwnSpecies", "MEQRSTVCLCLFLTGLLLW", "M" * 10, "M" * 10)
+        donor_ref = _make_isolate(
+            "donor_ref", "DonorSpecies", "MEQRSTVCLCLFLTGLLLW", "M" * 10, "M" * 10)
+        gate1 = self._gate1({"S": "DonorSpecies", "M": "OwnSpecies", "L": "OwnSpecies"})
+        known = {"S": own, "M": own, "L": own}  # the real isolate, on every segment
+        resolved, basis = resolve_e_parent_isolates(
+            gate1.implicated_species, [own, donor_ref], gate1,
+            {"S": "MEQRSTVCLCLFLTGLLLW", "M": "M" * 10, "L": "M" * 10},
+            known_isolates=known)
+        self.assertEqual(basis, "nearest_reference")
+        self.assertEqual(set(resolved), {"DonorSpecies", "OwnSpecies"})
+
+    def test_no_known_isolates_falls_back_to_nearest_reference_or_insufficient(self):
+        ref = _make_isolate("ref", "SpA", "MEQRSTVCLCLFLTGLLLW", "M" * 10, "M" * 10)
+        # SpB has no isolate anywhere in the reference pool passed in.
+        gate1 = self._gate1({"S": "SpA", "M": "SpB", "L": "SpB"})
+        resolved, basis = resolve_e_parent_isolates(
+            gate1.implicated_species, [ref], gate1,
+            {"S": "MEQRSTVCLCLFLTGLLLW", "M": "M" * 10, "L": "M" * 10},
+            known_isolates=None)
+        self.assertEqual(basis, "insufficient_metadata")
+        self.assertEqual(set(resolved), {"SpA"})
+
+    def test_proxy_basis_is_flagged_on_the_shipped_row_not_silent(self):
+        """The whole point of rpi_e_isolate_basis: a row scored on the proxy must SAY
+        so on the row that ships, never present itself as if it used real known
+        parents. Asserted on compute_rpi's returned dict, not on an intermediate."""
+        ref_a = _make_isolate("ref_a", "SpA", "MEQRSTVCLCLFLTGLLLW", "M" * 10, "M" * 10)
+        ref_b = _make_isolate("ref_b", "SpB", "M" * 10, "MEQRSTVCLCLFLTGLLLW", "M" * 10)
+        gate1 = self._gate1({"S": "SpA", "M": "SpB", "L": "SpB"})
+        resolved, basis = resolve_e_parent_isolates(
+            gate1.implicated_species, [ref_a, ref_b], gate1,
+            {"S": "MEQRSTVCLCLFLTGLLLW", "M": "MEQRSTVCLCLFLTGLLLW", "L": "M" * 10},
+            known_isolates=None)
+        self.assertEqual(basis, "nearest_reference")
+        row = compute_rpi(
+            implicated_species=gate1.implicated_species, isolates=[ref_a, ref_b],
+            parent_isolates=resolved, isolate_basis=basis,
+            odd_segment="M", identity=0.5, m_pack=1.0, m_pack_status="scored",
+            m_pol=1.0, m_pol_status="scored", structural_intact=True)
+        self.assertEqual(row["rpi_e_isolate_basis"], "nearest_reference")
+        self.assertNotEqual(row["rpi_e_isolate_basis"], "actual_parents")
 
 
 class BoltzmannCompatibilityTest(unittest.TestCase):
@@ -4997,6 +5258,13 @@ class RpiAssemblyTest(unittest.TestCase):
             structural_intact=True,
         )
         defaults.update(kwargs)
+        # This fixture's `isolates` is already exactly one isolate per implicated
+        # species -- its own known parent, not a production-style unknown -- so unless
+        # a test overrides parent_isolates/isolate_basis itself, derive them the same
+        # way _score_panel does.
+        defaults.setdefault(
+            "parent_isolates", _parent_map(*defaults["isolates"]))
+        defaults.setdefault("isolate_basis", "actual_parents")
         return compute_rpi(**defaults)
 
     def test_emits_every_column_from_spec_section_9(self):
@@ -5021,7 +5289,8 @@ class RpiAssemblyTest(unittest.TestCase):
                              host_family="Cricetidae", host_name="Peromyscus maniculatus")
         far_b = _eco_isolate("SpB", "Chile", "2004", host_order="Soricomorpha",
                              host_family="Soricidae", host_name="Sorex araneus")
-        row = compute_rpi(["SpA", "SpB"], [far_a, far_b], "M", 0.9, 1.0, "fixed_constant",
+        row = compute_rpi(["SpA", "SpB"], [far_a, far_b], _parent_map(far_a, far_b),
+                          "actual_parents", "M", 0.9, 1.0, "fixed_constant",
                           1.0, "fixed_constant", True)
         self.assertGreater(row["rpi_e_total"], 0.0)
         self.assertGreater(row["rpi_generation"], 0.0)
@@ -5034,7 +5303,8 @@ class RpiAssemblyTest(unittest.TestCase):
                              host_family="Cricetidae", host_name="Peromyscus maniculatus")
         far_b = _eco_isolate("SpB", "Chile", "2004", host_order="Soricomorpha",
                              host_family="Soricidae", host_name="Sorex araneus")
-        row = compute_rpi(["SpA", "SpB"], [far_a, far_b], "S", 0.5,
+        row = compute_rpi(["SpA", "SpB"], [far_a, far_b], _parent_map(far_a, far_b),
+                          "actual_parents", "S", 0.5,
                           RPI_WEIGHTS["eco_floor"], "fixed_constant",
                           RPI_WEIGHTS["eco_floor"], "fixed_constant", False)
         self.assertEqual(row["rpi_generation"], RPI_WEIGHTS["eco_floor"] ** 4)
@@ -5054,9 +5324,10 @@ class RpiAssemblyTest(unittest.TestCase):
         seen_fractional = False
         for odd_segment in ("S", "M", "L"):
             for identity in (0.5, 0.9):
-                row = compute_rpi(["SpA", "SpB"], [near_a, near_b], odd_segment,
-                                  identity, 1.0, "fixed_constant", 1.0, "fixed_constant",
-                                  True)
+                row = compute_rpi(["SpA", "SpB"], [near_a, near_b],
+                                  _parent_map(near_a, near_b), "actual_parents",
+                                  odd_segment, identity, 1.0, "fixed_constant", 1.0,
+                                  "fixed_constant", True)
                 components = (row["rpi_e_host"], row["rpi_e_geo"], row["rpi_e_time"])
                 if any(0.0 < c < 1.0 for c in components):
                     seen_fractional = True
@@ -5080,7 +5351,9 @@ class RpiAssemblyTest(unittest.TestCase):
         seen_strict = False
         for odd_segment in ("S", "M", "L"):
             for intact in (True, False):
-                row = compute_rpi(["SpA", "SpB"], [far_a, far_b], odd_segment, 0.9,
+                row = compute_rpi(["SpA", "SpB"], [far_a, far_b],
+                                  _parent_map(far_a, far_b), "actual_parents",
+                                  odd_segment, 0.9,
                                   1.0, "fixed_constant", 1.0, "fixed_constant", intact)
                 if row["rpi_retention"] < row["rpi_generation"]:
                     seen_strict = True
@@ -5204,9 +5477,11 @@ class VerdictUnchangedRegressionTest(unittest.TestCase):
         post-processing (i.e. NOT inside combine_verdict, so CombineVerdictTest and the
         test above would both stay green) would actually break. Asserted directly,
         without needing full score_candidate fixtures/reference data."""
+        isolate_a, isolate_b = _eco_isolate("A", "USA", "2001"), _eco_isolate("B", "USA", "2002")
         row = compute_rpi(
             implicated_species=["A", "B"],
-            isolates=[_eco_isolate("A", "USA", "2001"), _eco_isolate("B", "USA", "2002")],
+            isolates=[isolate_a, isolate_b],
+            parent_isolates=_parent_map(isolate_a, isolate_b), isolate_basis="actual_parents",
             odd_segment="M", identity=0.85,
             m_pack=1.0, m_pack_status="scored", m_pol=1.0, m_pol_status="scored",
             structural_intact=True,
@@ -5456,9 +5731,9 @@ class ScorePanelDoesNotMutateGlobalWeightsTest(unittest.TestCase):
         key, which is inside the loop body, with the perturbed table installed under the
         old implementation."""
         def unperturbed_row():
-            return compute_rpi(["A", "B"],
-                               [_eco_isolate("A", "USA", "2001"),
-                                _eco_isolate("B", "USA", "2002")],
+            isolate_a, isolate_b = _eco_isolate("A", "USA", "2001"), _eco_isolate("B", "USA", "2002")
+            return compute_rpi(["A", "B"], [isolate_a, isolate_b],
+                               _parent_map(isolate_a, isolate_b), "actual_parents",
                                "M", 0.85, 1.0, "scored", 1.0, "scored", True)
 
         reference_row = unperturbed_row()

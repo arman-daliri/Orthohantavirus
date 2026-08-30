@@ -73,7 +73,49 @@ for (only) the first two sorted species. Per `ecological_opportunity`'s own docs
 ("Disagreement between the two is expected and informative"), this is consistent with
 the model's existing design, not a new inconsistency introduced by this change — it is
 one more concrete instance of the already-deferred Factor E rebuild, to be picked up
-together with gate 3's "first two of N" limitation, not fixed piecemeal here.
+together with gate 3's "first two of N" limitation, not fixed piecemeal here. This new
+disagreement must be logged in `docs/PROJECT-STATE.md`'s known-limitations section,
+pointing at the Factor E rebuild, once the fix lands.
+
+## 1a. The fallback for unknown true parents (approved addition, 2026-08-30)
+
+`ecological_opportunity`'s isolate-level terms need ONE isolate per implicated species to
+compare, not a species-wide union. For candidates built by a caller that already knows
+which real isolate contributed each segment (WS4's group a/b1/b2 builders in
+`rpi_discrimination.py`, which deliberately pick specific isolates), that isolate is the
+right input and is used directly.
+
+For every other candidate — WS4 group (c)'s real positives (both the all_hanta
+genome-wide surveillance rows and the published inter-species lab crosses) and, above
+all, ordinary production scoring through `score_candidate`'s CLI entry point — the
+candidate's true parent isolate is exactly the unknown the whole exercise exists to
+resolve. There is no honest way to name "the" parent isolate for those rows.
+
+**The fallback, made explicit:** for an implicated species whose true contributing
+isolate is unknown, use **the k-mer-nearest wild reference isolate of that species** to
+the candidate's own segment (the same segment gate1 top-matched that species on) as a
+proxy parent. This is the identical reasoning `species_consensus_panhandle_window` /
+`species_consensus_cds_window` (D3) already use for M_pack/M_pol — "the nearest
+well-defined ground truth, since the real one is unknown" — applied at isolate
+granularity instead of species-consensus granularity, because Factor E's geo/host/time
+terms need one concrete isolate's metadata, not a consensus sequence.
+
+**Every row must declare which basis its E actually used**, via a new status column,
+`rpi_e_isolate_basis`, one of:
+
+  - `actual_parents` — every implicated species resolved to its real, known parent
+    isolate (only possible when the caller supplies that information, e.g. the WS4
+    group a/b1/b2 builders).
+  - `nearest_reference` — at least one implicated species fell back to the k-mer-nearest
+    wild reference isolate proxy.
+  - `insufficient_metadata` — at least one implicated species could not be resolved even
+    via the fallback (no wild isolate of that species carries a usable protein for the
+    electing segment, or none exists in the reference at all).
+
+Rows scored on a proxy are marked, never silently presented as if they used the real
+parent. This status column is additive — it changes no existing `gate*_`/`rpi_generation`
+semantics beyond what section 1's fix already does; it only makes explicit, per row,
+which of the two inputs (real vs proxy) fed that row's E.
 
 ## 3. Expected consequence
 

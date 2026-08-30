@@ -11,9 +11,9 @@ A fresh session should need this file, `CLAUDE.md`, and the two documents in
 | | |
 |---|---|
 | **Branch** | `04-rpi-fitness-validation`, pushed, tracking `origin/` |
-| **HEAD** | `1e0b9aa` (WS4 Task 13/14, IN PROGRESS — see section 7c) |
+| **HEAD** | WS4 Task 13/14's `reals_vs_b1` gap diagnosed AND the Factor E isolate-level fix landed (2026-08-30) — see the "Factor E isolate-level fix" subsection in section 7 below; `overall_ranking_supported` is now **True**, with a caveat, not an unqualified pass |
 | **`main`** | `e7d9f44`, pushed (was 4 commits behind at session start) |
-| **Test suite** | **228 tests** (`reassortment_detector`) + **39 tests** (`rpi_calibration`) + **29 tests, ~7 s** (`rpi_discrimination` + `rpi_discrimination_stats`, NEW this session), all pass |
+| **Test suite** | **237 tests** (`reassortment_detector`) + **39 tests** (`rpi_calibration`) + **18 tests** (`rpi_discrimination`) + **12 tests** (`rpi_discrimination_stats`), all pass |
 | **Validation harness** | **PASS** — sensitivity 19/19, specificity 27/27, blind spot 5/5, adversarial 4/4 (unchanged since Task 12) |
 | **Working tree** | Clean except `Mydocs/My Library.csv`, deleted by an external process; user said leave it |
 | **Unpushed** | `3947f1c`..`1e0b9aa` — WS3.1 through WS4 Task 13/14 (in progress), committed locally, **not pushed** |
@@ -434,6 +434,72 @@ numbers above did not come from the usual Bash path.
 
 `b2_vs_random`'s wrong-sign result (previous section) is still undiagnosed — separate
 from this finding and not addressed by it.
+
+### Factor E isolate-level fix — IMPLEMENTED, 2026-08-30. `overall_ranking_supported`
+now True, with a caveat on how it got there. Full record: `notes_e_isolate_fix.md`.
+
+Root cause (diagnosed read-only in `notes_diagnosis.md`, this session): `ecological_
+opportunity`'s geo/host/time terms were computed from the WHOLE SPECIES' isolate
+population in the reference (`by_species[species]`), not from the two specific parent
+isolates actually implicated in a candidate — so a widely-distributed or
+border-spanning species (Puumala, Seoul) registered "geo opportunity" against any other
+species sharing so much as one country anywhere in the corpus, defeating
+`build_group_a_random`'s own different-continents construction guarantee.
+
+Fix, per `docs/superpowers/specs/2026-08-30-rpi-e-geo-isolate-level-fix-design.md`
+(approved with one addition before code was written — the fallback below):
+`ecological_opportunity` now takes ONE isolate per implicated species
+(`parent_isolates`) and computes host/geo/time from that pair directly. For
+candidates whose true parent isolate is known (WS4's group a/b1/b2 builders, which
+construct candidates from specific real isolates on purpose — now via
+`CandidateInput.known_segment_isolates`), that real isolate is used
+(`rpi_e_isolate_basis="actual_parents"`). For every other candidate — ordinary
+production scoring, and WS4 group c's real positives, whose donor parent is exactly the
+unknown reassortment detection exists to resolve — `resolve_e_parent_isolates` falls
+back to the k-mer-nearest wild reference isolate of that species
+(`nearest_reference_isolate`), basis `"nearest_reference"`, or `"insufficient_
+metadata"` if even that fails. Every row declares its basis; nothing is silently on a
+proxy. `RPI_WEIGHTS` unchanged; this is a bug fix, not a retune.
+
+**Before/after, seeded panel (seed 20260829), `evaluate_pass_criterion`:**
+
+| comparison | before | after |
+|---|---|---|
+| `b2_vs_random` | p=0.153, δ=−0.225 (wrong sign) | p=4.7e-09, δ=+0.953 (large, correct) |
+| `b1_vs_b2` | p=0.052, δ=+0.275 (borderline) | p=2.2e-11, δ=+0.961 (large) |
+| `reals_vs_b1` | p=0.048, δ=−0.430 (significant, wrong direction) | p=0.733, δ=+0.078 (negligible — a tie) |
+| `overall_ranking_supported` | **False** | **True** |
+
+`a_random_fakes`'s `rpi_generation` mean collapsed 0.331 → 0.000138 (`rpi_e_total` was
+`{1.0: 14, 0.01: 5, 0.000625: 1}`, now suppressed on all 20/20) — exactly the mechanism
+the design doc predicted, confirmed via the basis column (20/20 `actual_parents`).
+
+**Caveat, checked and confirmed, not assumed:** the `reals_vs_b1` tie is NOT a clean
+confirmation of the fix's own mechanism. 3 of `c_real_positive`'s 4 `nearest_reference`-
+basis rows (RIZVANOV2004 ×2, HANDKE2010 — published inter-species lab crosses) moved
+from the pre-fix floor (~0.004) to 0.35–0.47 because their resolved PROXY isolate
+(picked by protein similarity alone) happened to carry NO country/host/year metadata at
+all, so `ecological_opportunity`'s pre-existing "missing metadata means neutral" rule
+fired — not because isolate-level geography found real ecological overlap. See
+`notes_e_isolate_fix.md` for the full per-case diagnosis (reproduced directly against
+the real reference data, not inferred). The basis column correctly flags these rows as
+proxy-based, so nothing is misrepresented, but pulling them out would likely move the
+result back toward the old (low) `reals_vs_b1` reading. Reported as measured, not edited
+toward the preferred outcome — per this task's own honesty protocol.
+
+**Two new known limitations, both logged, neither fixed here:**
+- **E vs gate3 disagreement, extended.** `ecological_opportunity` now reads isolate-level
+  geography for the actual pair; `gate3_check` (verdict-bearing, deliberately untouched)
+  still reads species-wide geography for only the first two sorted implicated species —
+  one more concrete instance of the already-deferred Factor E rebuild.
+- **`nearest_reference_isolate` has no preference for metadata completeness** — it picks
+  the nearest isolate by k-mer protein distance only, so it can resolve to a
+  sparsely-annotated GenBank deposit and go neutral by omission rather than by evidence.
+  A future fix could prefer the nearest isolate WITH usable geo/host/year metadata, or
+  report `insufficient_metadata` instead of a metadata-empty proxy.
+
+Full suite after the change: 237 tests (`reassortment_detector`, was 228), all pass.
+`rpi_discrimination`: 18 tests, pass. `rpi_calibration`: 39 tests, pass, unaffected.
 
 ### gate0 junk_sequence diagnostic — RUN, 2026-08-30. Outcome: real incomplete deposits, not a bug.
 

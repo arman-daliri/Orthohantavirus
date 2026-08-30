@@ -150,14 +150,25 @@ def _candidate_from_isolates(
         segment_sources: Dict[str, "ah.IsolateRecord"]) -> "rd.CandidateInput":
     """A CandidateInput whose S/M/L each come from `segment_sources[seg]` -- one isolate
     per segment, which may be the same isolate for all three (a real, unmodified genome)
-    or three different ones (a constructed shuffle)."""
+    or three different ones (a constructed shuffle).
+
+    `known_segment_isolates=segment_sources` (design doc 2026-08-30-rpi-e-geo-isolate-
+    level-fix): every case this module builds already knows exactly which real isolate
+    contributed each segment, so Factor E's geo/host/time terms should read those real
+    isolates directly (rpi_e_isolate_basis="actual_parents") rather than fall back to a
+    nearest-reference proxy. For group c's supported_reassortment_candidate rows, the
+    SAME isolate stands for all three segments -- resolve_e_parent_isolates only
+    recognises this as covering an implicated species when gate1 actually names that
+    isolate's own species, so the (unknown) OTHER/donor species in a genuinely
+    discordant real candidate still correctly falls through to the proxy fallback.
+    """
     genomic = {
         seg: cal.genomic_sequence(reference, cal.segment_accession(isolate, seg))
         for seg, isolate in segment_sources.items()
     }
     return rd.CandidateInput(
         candidate_id=candidate_id, s_genomic=genomic["S"], m_genomic=genomic["M"],
-        l_genomic=genomic["L"])
+        l_genomic=genomic["L"], known_segment_isolates=dict(segment_sources))
 
 
 def _label(isolate: "ah.IsolateRecord") -> str:
@@ -480,8 +491,8 @@ def score_cases(
         row = dict(case)
         row.pop("candidate")  # not JSON-serialisable and not needed past this point
         for key in ("rpi_generation", "rpi_retention", "rpi_m_pack", "rpi_m_pack_status",
-                    "rpi_m_pol", "rpi_m_pol_status", "rpi_e_total", "rpi_k_stratum",
-                    "gate1_pattern", "gate1_discordant_segment",
+                    "rpi_m_pol", "rpi_m_pol_status", "rpi_e_total", "rpi_e_isolate_basis",
+                    "rpi_k_stratum", "gate1_pattern", "gate1_discordant_segment",
                     "gate1_implicated_species", "verdict"):
             row[key] = result.get(key)
         scored.append(row)
@@ -660,6 +671,23 @@ class FindSympatricSpeciesPairsTest(unittest.TestCase):
         a, _ = _fixture_isolate("SpA", "i1", country="China", year="2010")
         b, _ = _fixture_isolate("SpA", "i2", country="China", year="2010")
         self.assertEqual(find_sympatric_species_pairs([a, b]), [])
+
+
+class CandidateFromIsolatesTest(unittest.TestCase):
+    def test_known_segment_isolates_is_wired_through_for_factor_e(self):
+        """Design doc 2026-08-30-rpi-e-geo-isolate-level-fix: this module's own group
+        builders already know the real parent isolate per segment, so the CandidateInput
+        they hand to score_candidate must carry it -- otherwise Factor E would fall back
+        to the nearest-reference proxy even for candidates whose true parents ARE
+        known, which is exactly the silent-basis failure the fix's own honesty
+        protocol forbids."""
+        s_pair = _fixture_isolate("SpA", "s")
+        m_pair = _fixture_isolate("SpB", "m")
+        l_pair = _fixture_isolate("SpB", "l")
+        reference = _fixture_reference(s_pair, m_pair, l_pair)
+        sources = {"S": s_pair[0], "M": m_pair[0], "L": l_pair[0]}
+        candidate = _candidate_from_isolates("TEST", reference, sources)
+        self.assertEqual(candidate.known_segment_isolates, sources)
 
 
 class BuildGroupARandomTest(unittest.TestCase):

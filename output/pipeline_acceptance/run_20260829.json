@@ -1,0 +1,85 @@
+{
+  "tau": 3.914078624686338,
+  "group_summary": {
+    "a_random_fakes": {
+      "n": 20,
+      "n_scored": 20,
+      "rpi_generation_mean": 0.33138266507999997,
+      "rpi_generation_min": 0.0002948113,
+      "rpi_generation_max": 0.4716981132
+    },
+    "b1_within_species_shuffle": {
+      "n": 30,
+      "n_scored": 30,
+      "rpi_generation_mean": 0.3238468748466667,
+      "rpi_generation_min": 0.0907802799,
+      "rpi_generation_max": 0.4716981132
+    },
+    "b2_cross_species_sympatric": {
+      "n": 36,
+      "n_scored": 36,
+      "rpi_generation_mean": 0.2518534650888889,
+      "rpi_generation_min": 0.0117614192,
+      "rpi_generation_max": 0.4716981132
+    },
+    "c_real_positive": {
+      "n": 11,
+      "n_scored": 9,
+      "rpi_generation_mean": 0.19472255105555555,
+      "rpi_generation_min": 0.0034940601,
+      "rpi_generation_max": 0.4716981132
+    }
+  },
+  "pass_criterion": {
+    "b2_vs_random": {
+      "a_label": "b2_cross_species_sympatric",
+      "b_label": "a_random_fakes",
+      "expect": "b2 > random: the weak floor -- even ecologically sympatric cross-species fakes should beat isolates assembled with no ecological or molecular plausibility at all.",
+      "n_a": 36,
+      "n_b": 20,
+      "a_median": 0.24827900674999998,
+      "b_median": 0.4716981132,
+      "u_statistic": 279.0,
+      "z": -1.4281942260231377,
+      "p_two_sided": 0.15323596209118673,
+      "significant_at_alpha_0_05": false,
+      "cliffs_delta": -0.225,
+      "cliffs_delta_magnitude": "small",
+      "met_expectation": false
+    },
+    "b1_vs_b2": {
+      "a_label": "b1_within_species_shuffle",
+      "b_label": "b2_cross_species_sympatric",
+      "expect": "b1 > b2: THE REAL TEST. Factor E cannot separate these (b2 is ecologically sympatric by construction), so a gap here is M_pack + M_pol's own discrimination, not ecology's.",
+      "n_a": 30,
+      "n_b": 36,
+      "a_median": 0.34697589149999997,
+      "b_median": 0.24827900674999998,
+      "u_statistic": 688.5,
+      "z": 1.9429089094433083,
+      "p_two_sided": 0.052027165265055686,
+      "significant_at_alpha_0_05": false,
+      "cliffs_delta": 0.275,
+      "cliffs_delta_magnitude": "small",
+      "met_expectation": false
+    },
+    "reals_vs_b1": {
+      "a_label": "c_real_positive",
+      "b_label": "b1_within_species_shuffle",
+      "expect": "reals ~ b1: NOT a claim of separation. RPI measures plausibility, not occurrence (decision D7) -- real reassortants and plausible within-species shuffles are expected to be indistinguishable to this index; separating them is gate 4's job.",
+      "n_a": 9,
+      "n_b": 30,
+      "a_median": 0.050441775,
+      "b_median": 0.34697589149999997,
+      "u_statistic": 77.0,
+      "z": -1.9735148851769524,
+      "p_two_sided": 0.04843693036686303,
+      "significant_at_alpha_0_05": true,
+      "cliffs_delta": -0.42962962962962964,
+      "cliffs_delta_magnitude": "medium",
+      "plausible_tie_not_proven_equivalent": false,
+      "equivalence_caveat": "A non-significant U-test is ABSENCE OF EVIDENCE of a difference, not PROOF of equivalence -- no formal equivalence margin is defined for RPI's own units. 'plausible_tie_not_proven_equivalent' names exactly what is and is not being claimed here."
+    },
+    "overall_ranking_supported": false
+  }
+}
