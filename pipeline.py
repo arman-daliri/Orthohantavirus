@@ -102,6 +102,7 @@ def _stage_report(
     payload = {
         "tau": calibration["rescaling"]["parameters"]["tau"],
         "group_summary": disc.summarise_groups(scored_groups),
+        "groups": scored_groups,
         "pass_criterion": stats_result,
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -281,6 +282,7 @@ class StageReportTest(unittest.TestCase):
         written = json.loads(self.tmp.read_text(encoding="utf-8"))
         self.assertAlmostEqual(written["tau"], 3.914)
         self.assertIn("a_random_fakes", written["group_summary"])
+        self.assertEqual(written["groups"], scored_groups)
         self.assertEqual(written["pass_criterion"], stats_result)
 
 
