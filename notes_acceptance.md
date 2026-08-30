@@ -4,9 +4,8 @@
 
 - Commit at start of session: `7ddd3bf` (Add pipeline.py, unpushed, branch
   `04-rpi-fitness-validation`).
-- Fix commit (this session): see `git log -1` after this file is committed — adds
-  `"groups": scored_groups` to `pipeline._stage_report`'s payload and updates
-  `StageReportTest` to assert on it.
+- Fix commit (this session): `2cb0a70` — adds `"groups": scored_groups` to
+  `pipeline._stage_report`'s payload and updates `StageReportTest` to assert on it.
 - Verdict: **PASS**. Per-row scores were already byte-identical between
   `pipeline._stage_discriminate` and `rpi_discrimination.py`'s own panel build (step 1
   below). The wrapper gap was that `pipeline.py run`'s written report only ever included
