@@ -138,6 +138,67 @@ over ones without it. Logged as a known limitation below and in PROJECT-STATE.md
 per the design doc's own honesty protocol and the standing "do not chase a compensating
 change" instruction, this is NOT fixed here.
 
+## Rerun after `build_swap` wiring (2026-08-30, evening)
+
+`build_swap` (`validate_reassortment_detector.py`, used by
+`load_published_inter_species_crosses` to build the 4 published-cross rows in group c)
+was found, by a `/code-review` pass over this fix, to construct its `CandidateInput`
+WITHOUT `known_segment_isolates` -- so the 4 published crosses never got the isolate-
+level basis this fix intended; they always fell back to the `nearest_reference` proxy,
+even though `build_swap` already holds the real backbone/donor isolate objects in
+scope. Fixed (commit `98bc10a`): `build_swap` now passes
+`known_segment_isolates={seg: backbone for seg in kept segments} | {donated: donor}`.
+
+Before = `discrimination_panel_after_e_fix_pre_build_swap.json` (preserved copy of the
+prior section's `discrimination_panel_after_fix.json`, i.e. the isolate-level E fix
+WITHOUT the `build_swap` wiring). After =
+`discrimination_panel_after_build_swap_fix.json` (same seed 20260829, same reference
+data, this fix added on top).
+
+### Group c stratified by `rpi_e_isolate_basis` (after `build_swap` fix)
+
+| basis | n | n scored | mean `rpi_generation` |
+|---|---|---|---|
+| `actual_parents` | 8 | 8 | 0.3314 |
+| `nearest_reference` | 1 | 1 | 0.3669 |
+| unscored (gate 0/1 rejected) | 2 | 0 | -- |
+
+Before this fix, group c's basis split was 5 `actual_parents` (the concordant
+real-isolate rows) / 4 `nearest_reference` (all 4 published crosses). After: 8
+`actual_parents` (5 concordant rows + 3 of the 4 published crosses whose gate1-implicated
+species now match `build_swap`'s own backbone/donor species labels) / 1 `nearest_reference`
+(`RODRIGUEZ1998_SNV_NMR11sl_x_BCCVm` -- gate1's k-mer species assignment for this
+specific cross does not exactly match the backbone/donor species names `build_swap`
+passes, a pre-existing gate1 labelling mismatch, not something this fix touches).
+
+### `rpi_generation` before/after -- NUMERICALLY IDENTICAL, every row
+
+Checked directly, row by row, not assumed: every one of group c's 11 rows (and every
+row in a/b1/b2, which `build_swap` does not touch) has the EXACT SAME `rpi_generation`
+value before and after this fix -- including the 3 rows whose basis label flipped from
+`nearest_reference` to `actual_parents`. Reason, confirmed by inspection: the pre-fix
+`nearest_reference` fallback was searching for the k-mer-nearest isolate to the
+candidate's OWN donated-segment protein, and that protein IS the true donor isolate's
+protein verbatim (`build_swap` copies it directly, no mutation) -- so the "nearest"
+isolate the proxy found, by construction, always WAS the true donor, at k-mer distance
+zero. The fix therefore changes `rpi_e_isolate_basis` from a misleadingly cautious label
+to the honest one on those 3 rows, but changes no `rpi_generation` value and no group
+summary statistic.
+
+### Task 14 pass criterion -- UNCHANGED
+
+| comparison | pre-`build_swap`-fix | post-`build_swap`-fix |
+|---|---|---|
+| `b2_vs_random` | p=4.68e-09, delta=+0.953, met_expectation=True | p=4.68e-09, delta=+0.953, met_expectation=True |
+| `b1_vs_b2` | p=2.18e-11, delta=+0.961, met_expectation=True | p=2.18e-11, delta=+0.961, met_expectation=True |
+| `reals_vs_b1` | p=0.733, delta=+0.078, not significant | p=0.733, delta=+0.078, not significant |
+| `overall_ranking_supported` | **True** | **True** |
+
+Per the standing instruction ("if the rerun moves `reals_vs_b1` or the overall verdict,
+record it and continue, no compensating change"): it did not move. This rerun is a pure
+data-quality/honesty correction to `rpi_e_isolate_basis` on 3 rows, with zero effect on
+any number the pass criterion depends on.
+
 The fourth row (RODRIGUEZ1998 SNV x BCCV) is different in kind: its resolved proxies
 both carry a REAL, non-missing `country="USA"` -- not a metadata gap. At country-level
 granularity (this codebase's existing geo resolution, unchanged by this fix) SNV
