@@ -36,19 +36,12 @@ import tempfile
 import unittest
 import unittest.mock
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
-import reassortment_detector as rd
-import validate_reassortment_detector as vd
 from typing import Any, Dict, List, Optional, Sequence, Tuple
-import rpi_calibration as cal
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 import unittest.mock as mock
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
-import diagnose_e_stratification as diag_e
-import diagnose_gate0_junk as diag_gate0
-import rpi_discrimination as disc
-import rpi_discrimination_stats as stats
 
 # --- Original per-module docstrings, preserved as named constants so each
 # module's own argparse `description=` text is unchanged (see below) ---
@@ -6255,6 +6248,21 @@ class SensitivityAndRankTest(unittest.TestCase):
 
 
 ###############################################################################
+# Cross-module aliases: every original module's own `import X as alias`
+# (rd/cal/disc/stats/vd) resolves here to THIS module, since every name any
+# of the six files reached via such an alias is defined either directly
+# above (detector) or in a LATER section below -- safe for later sections'
+# own def-time-evaluated defaults (e.g. rpi_calibration.py's `window_nt:
+# int = rd.RPI_PANHANDLE_WINDOW_NT`) because `rd` is bound here, before any
+# of them execute, and safe for every body-deferred (call-time) reference
+# regardless of section order, verified with an AST scan before this merge.
+# The two exceptions (main, build_panel colliding as bare top-level names)
+# were fixed by renaming instead, since a self-alias can't disambiguate two
+# different things sharing one attribute name on the same object.
+###############################################################################
+rd = cal = disc = stats = vd = sys.modules[__name__]
+
+###############################################################################
 # rpi_calibration.py -- tau calibration against a held-out isolate panel.
 ###############################################################################
 
@@ -9419,9 +9427,11 @@ def _pipeline_main(argv: Optional[Sequence[str]] = None) -> int:
     if command == "validate":
         return _validate_main(rest)
     if command == "diagnose-e":
+        import diagnose_e_stratification as diag_e
         diag_e.main()
         return 0
     if command == "diagnose-gate0":
+        import diagnose_gate0_junk as diag_gate0
         diag_gate0.main()
         return 0
     return run(_parse_run_args(rest))
@@ -9562,12 +9572,14 @@ class MainDispatchTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
 
     def test_diagnose_e_command_dispatches_with_no_args(self):
+        import diagnose_e_stratification as diag_e
         with mock.patch.object(diag_e, "main") as fake_diag:
             exit_code = _pipeline_main(["diagnose-e"])
         fake_diag.assert_called_once_with()
         self.assertEqual(exit_code, 0)
 
     def test_diagnose_gate0_command_dispatches_with_no_args(self):
+        import diagnose_gate0_junk as diag_gate0
         with mock.patch.object(diag_gate0, "main") as fake_diag:
             exit_code = _pipeline_main(["diagnose-gate0"])
         fake_diag.assert_called_once_with()
@@ -9576,15 +9588,3 @@ class MainDispatchTest(unittest.TestCase):
 
 
 
-###############################################################################
-# Cross-module aliases: every original module's own `import X as alias`
-# (rd/cal/disc/stats/vd) resolves here to THIS module, since every name any
-# of the six files reached via such an alias is now defined directly above.
-# Safe because every one of those qualified accesses is evaluated inside a
-# function/method body (deferred to call time, after this line has already
-# run) -- verified with an AST scan before this merge; the two exceptions
-# (main, build_panel colliding as bare top-level names) were fixed above by
-# renaming instead, since a self-alias can't disambiguate two different
-# things sharing one attribute name on the same object.
-###############################################################################
-rd = cal = disc = stats = vd = sys.modules[__name__]

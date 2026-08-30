@@ -98,13 +98,53 @@ for fname, prefix in SECTIONS:
     all_import_lines.extend(imports)
 
 # ---------------------------------------------------------------------------
-# Deduplicated import block (order-preserving, first-seen wins)
+# Deduplicated import block (order-preserving, first-seen wins), EXCLUDING:
+#
+# (a) each module's imports of ONE ANOTHER (e.g. "import
+#     validate_reassortment_detector as vd") -- these five are exactly what
+#     the self-alias footer replaces. Kept inside rpi_core.py, they cause a
+#     circular import once Phase 2's shims exist (rpi_core imports a shim,
+#     which imports names FROM rpi_core, which hasn't finished executing yet).
+#
+# (b) pipeline.py's two EXTERNAL imports (diagnose_e_stratification,
+#     diagnose_gate0_junk) -- these are genuinely separate modules, not part
+#     of this merge, but diagnose_e_stratification.py itself does `from
+#     rpi_discrimination_stats import compare_groups`, reaching back into the
+#     shim ecosystem. That is harmless for pipeline.py alone (a standalone
+#     leaf importer), but becomes a genuine CYCLE once pipeline's code shares
+#     one module with rpi_discrimination_stats's: importing the
+#     rpi_discrimination_stats SHIM first pulls in all of rpi_core (pipeline's
+#     own section included), which would need diagnose_e_stratification fully
+#     loaded, which needs the rpi_discrimination_stats shim fully loaded --
+#     the same still-in-progress import that started the chain. No physical
+#     placement inside rpi_core.py fixes this (it isn't a definition-order
+#     problem, unlike (a) or the def-time-default cases -- it's a cycle
+#     between two shims). Fixed instead by making both imports LAZY: moved
+#     from module top-level into _pipeline_main's own body (and the two
+#     dispatch tests that patch them), at the exact point each is used -- see
+#     the pipeline-specific fixups below.
+#
+# Neither exclusion was assumed safe -- both were caught by actually running
+# the shims' own test suites/imports, not by reasoning alone.
 # ---------------------------------------------------------------------------
+SIBLING_IMPORTS = {
+    "import reassortment_detector as rd",
+    "import validate_reassortment_detector as vd",
+    "import rpi_calibration as cal",
+    "import rpi_discrimination as disc",
+    "import rpi_discrimination_stats as stats",
+}
+DEFERRED_EXTERNAL_IMPORTS = [
+    "import diagnose_e_stratification as diag_e",
+    "import diagnose_gate0_junk as diag_gate0",
+]
 seen = set()
 dedup_imports = []
 for line in all_import_lines:
     key = line.rstrip("\n")
-    if key and key not in seen:
+    if key in DEFERRED_EXTERNAL_IMPORTS:
+        continue
+    if key and key not in seen and key not in SIBLING_IMPORTS:
         seen.add(key)
         dedup_imports.append(key)
 
@@ -200,6 +240,48 @@ for name, count in [
     pipeline_body = sub_exact(
         pipeline_body, re.escape(f'"pipeline.{name}"'), f'__name__ + ".{name}"',
         count, f"pipeline: mock.patch string path for {name}")
+# diag_e/diag_gate0: originally module-top imports of two genuinely SEPARATE
+# (non-merged) modules. diagnose_e_stratification.py itself reaches back into
+# the shim ecosystem (`from rpi_discrimination_stats import compare_groups`),
+# which is fine when pipeline.py is its own standalone module (no dependency
+# in the other direction) but becomes a real circular import once pipeline's
+# code and rpi_discrimination_stats's code share ONE module: importing the
+# rpi_discrimination_stats shim first pulls in all of rpi_core (pipeline's
+# section included), which would need diagnose_e_stratification fully loaded,
+# which needs rpi_discrimination_stats's shim fully loaded -- but that's the
+# still-in-progress import that started this chain. No section reordering
+# fixes this (it isn't a def-time-vs-call-time timing issue, it's a genuine
+# cycle across two shims). Fixed by making the import LAZY -- local to
+# _pipeline_main's body, at the exact dispatch branch that needs it, so
+# `import rpi_core` (via any shim) never touches diagnose_e_stratification /
+# diagnose_gate0_junk at module-load time at all. The two dispatch tests that
+# patch `diag_e.main`/`diag_gate0.main` via a pre-existing module-level name
+# get their own local import instead (safe at TEST-EXECUTION time -- by then
+# rpi_core/all shims have finished loading; diagnose_e_stratification.py
+# itself has no dependency back on rpi_core at module level, only on
+# rpi_discrimination_stats, which is fully loaded by the time tests run).
+pipeline_body = sub_exact(
+    pipeline_body, re.escape('    if command == "diagnose-e":\n        diag_e.main()\n'),
+    '    if command == "diagnose-e":\n'
+    '        import diagnose_e_stratification as diag_e\n'
+    '        diag_e.main()\n',
+    1, "pipeline: lazy diag_e import in _pipeline_main")
+pipeline_body = sub_exact(
+    pipeline_body, re.escape('    if command == "diagnose-gate0":\n        diag_gate0.main()\n'),
+    '    if command == "diagnose-gate0":\n'
+    '        import diagnose_gate0_junk as diag_gate0\n'
+    '        diag_gate0.main()\n',
+    1, "pipeline: lazy diag_gate0 import in _pipeline_main")
+pipeline_body = sub_exact(
+    pipeline_body, re.escape('        with mock.patch.object(diag_e, "main") as fake_diag:'),
+    '        import diagnose_e_stratification as diag_e\n'
+    '        with mock.patch.object(diag_e, "main") as fake_diag:',
+    1, "pipeline: lazy diag_e import in its dispatch test")
+pipeline_body = sub_exact(
+    pipeline_body, re.escape('        with mock.patch.object(diag_gate0, "main") as fake_diag:'),
+    '        import diagnose_gate0_junk as diag_gate0\n'
+    '        with mock.patch.object(diag_gate0, "main") as fake_diag:',
+    1, "pipeline: lazy diag_gate0 import in its dispatch test")
 results["pipeline.py"]["body"] = pipeline_body
 
 # ---------------------------------------------------------------------------
@@ -244,7 +326,7 @@ for line in doc_constants:
     out.append(line)
 out.append("\n")
 
-for fname, prefix in SECTIONS:
+for i, (fname, prefix) in enumerate(SECTIONS):
     banner = BANNERS[fname]
     out.append("#" * 79 + "\n")
     out.append(f"# {banner}\n")
@@ -252,18 +334,37 @@ for fname, prefix in SECTIONS:
     out.append(results[fname]["body"])
     out.append("\n\n")
 
-out.append("#" * 79 + "\n")
-out.append("# Cross-module aliases: every original module's own `import X as alias`\n")
-out.append("# (rd/cal/disc/stats/vd) resolves here to THIS module, since every name any\n")
-out.append("# of the six files reached via such an alias is now defined directly above.\n")
-out.append("# Safe because every one of those qualified accesses is evaluated inside a\n")
-out.append("# function/method body (deferred to call time, after this line has already\n")
-out.append("# run) -- verified with an AST scan before this merge; the two exceptions\n")
-out.append("# (main, build_panel colliding as bare top-level names) were fixed above by\n")
-out.append("# renaming instead, since a self-alias can't disambiguate two different\n")
-out.append("# things sharing one attribute name on the same object.\n")
-out.append("#" * 79 + "\n")
-out.append("rd = cal = disc = stats = vd = sys.modules[__name__]\n")
+    if fname == "reassortment_detector.py":
+        # Cross-module aliases placed HERE, right after the base (detector)
+        # section, not at the end of the file. Detector itself uses none of
+        # rd/cal/disc/stats/vd (it has no cross-module references at all), so
+        # this is the earliest point every later section's def-time-evaluated
+        # cross-references (rpi_calibration.py's `window_nt: int =
+        # rd.RPI_PANHANDLE_WINDOW_NT` parameter defaults, evaluated
+        # immediately when that `def` executes, NOT deferred into the
+        # function body) can already find `rd` bound AND
+        # `RPI_PANHANDLE_WINDOW_NT` already defined on it. A footer placed
+        # after ALL SIX sections (the first version of this script) leaves
+        # `rd` completely undefined at the exact line those defaults need it
+        # -- caught by actually importing the shims, not assumed safe. Every
+        # LATER section's own def-time cross-references (rpi_discrimination.py
+        # and pipeline.py's `cal.DEFAULT_ARTIFACT_PATH`) are satisfied the
+        # same way, since calibration's section runs to completion before
+        # either of those.
+        out.append("#" * 79 + "\n")
+        out.append("# Cross-module aliases: every original module's own `import X as alias`\n")
+        out.append("# (rd/cal/disc/stats/vd) resolves here to THIS module, since every name any\n")
+        out.append("# of the six files reached via such an alias is defined either directly\n")
+        out.append("# above (detector) or in a LATER section below -- safe for later sections'\n")
+        out.append("# own def-time-evaluated defaults (e.g. rpi_calibration.py's `window_nt:\n")
+        out.append("# int = rd.RPI_PANHANDLE_WINDOW_NT`) because `rd` is bound here, before any\n")
+        out.append("# of them execute, and safe for every body-deferred (call-time) reference\n")
+        out.append("# regardless of section order, verified with an AST scan before this merge.\n")
+        out.append("# The two exceptions (main, build_panel colliding as bare top-level names)\n")
+        out.append("# were fixed by renaming instead, since a self-alias can't disambiguate two\n")
+        out.append("# different things sharing one attribute name on the same object.\n")
+        out.append("#" * 79 + "\n")
+        out.append("rd = cal = disc = stats = vd = sys.modules[__name__]\n\n")
 
 final = "".join(out)
 with open("rpi_core.py", "w", encoding="utf-8") as f:
