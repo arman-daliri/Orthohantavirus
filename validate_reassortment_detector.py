@@ -354,11 +354,15 @@ def build_swap(builder: PanelBuilder, spec: Dict[str, Any]) -> Optional[Dict[str
                  and hint_b.lower() in f"{backbone.isolate} {backbone.strain}".lower()
                  and hint_d.lower() in f"{donor.isolate} {donor.strain}".lower())
 
+    segment_sources = {seg: backbone for seg in kept}
+    segment_sources[donated] = donor
+
     return {
         **spec,
         "candidate": rd.CandidateInput(
             candidate_id=spec["case_id"],
-            s_genomic=segments["S"], m_genomic=segments["M"], l_genomic=segments["L"]),
+            s_genomic=segments["S"], m_genomic=segments["M"], l_genomic=segments["L"],
+            known_segment_isolates=segment_sources),
         "backbone_strain": PanelBuilder.label(backbone),
         "donor_strain": PanelBuilder.label(donor),
         "backbone_accessions": {s: builder._accession(backbone, s) for s in kept},
