@@ -93,7 +93,7 @@ intra-species reassortment by construction (a validated, not a hidden, blind spo
 | `notes_codereview.md` | This session's `/code-review` findings over the full branch diff, with fix/proposal disposition for each |
 | `notes_evening.md` | This session's own summary — commit hashes, what ran, what's still open |
 | `notes_consolidation.md` | The `rpi_core.py` module consolidation: every rename/reference-fixup the merge required, the two circular-import bugs found while building the shims, and the verification gate each phase passed |
-| `build_rpi_core.py`, `build_shims.py` | The scripts that built `rpi_core.py` and the six shim files, kept for reproducibility/review of exactly what the merge did. Not meant to be re-run against the current (already-shimmed) tree — they read the six files' pre-consolidation content |
+| (build_rpi_core.py / build_shims.py — deleted) | These generator scripts built rpi_core.py and the six shim files during the consolidation; deleted once the merge was verified and the shims were no longer needed. See `notes_consolidation.md`'s Phase 4 section for what was deleted and why |
 | `docs/My Library.csv` | The Zotero-exported citation library every claim in this README is checked against |
 
 ---
@@ -809,7 +809,7 @@ data, because segments from the same outbreak are near-identical to each other.
 
 ## Reassortment Plausibility Index — limitations
 
-`reassortment_detector.py` computes a Reassortment Plausibility Index (RPI) —
+`rpi_core.py` computes a Reassortment Plausibility Index (RPI) —
 `rpi_generation` and `rpi_retention` — for candidates it scores. This section is
 deliberately first in the design spec it comes from, and any Methods paragraph describing
 it must reproduce it. Every number this index produces inherits these constraints:
@@ -852,7 +852,7 @@ it must reproduce it. Every number this index produces inherits these constraint
      against the **backbone species' own reference consensus** (never the candidate
      compared to itself). τ = 3.914 is *derived*, not chosen — the robust p5–p95 span of
      ΔΔG over a 42-isolate, 14-species, 756-fold calibration panel disjoint from every
-     validation group below (`rpi_calibration.py`, `data/rpi_calibration.json`). **The
+     validation group below (`rpi_core.py calibrate`, `data/rpi_calibration.json`). **The
      signal is real but small**: only 62% of the calibration panel's observations have
      non-cognate duplexes weaker than cognate ones in the expected direction, and 38%
      have ΔΔG ≤ 0, where M_pack saturates at exactly 1.0 and contributes nothing (Cliff's
