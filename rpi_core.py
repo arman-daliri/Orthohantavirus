@@ -3291,7 +3291,7 @@ def _detector_main(argv=None) -> int:
 #
 # Merged from test_detector_gates.py, test_detector_reference.py,
 # test_reassortment_detector.py, and test_reassortment_reference_data.py.
-# Run with: python3 -m unittest reassortment_detector -v
+# Run with: python -m unittest rpi_core -v
 
 
 

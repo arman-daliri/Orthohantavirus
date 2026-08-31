@@ -339,3 +339,26 @@ matches its previously-documented figure — `rpi_calibration` 39,
 `validate_reassortment_detector` 0 (it has no `TestCase` classes at all,
 matching its pre-consolidation behavior, not a regression) — confirming no
 shim leaks another module's tests into its own count.
+
+## Phase 4 — single-file finish (2026-08-31)
+
+The six Phase-2 shims, the two generator scripts (`build_rpi_core.py`,
+`build_shims.py`), and the scripts outside the six-module set
+(`capture_raw_scored_groups.py`, `diagnose_e_stratification.py`,
+`diagnose_gate0_junk.py`) are deleted. `rpi_core.py` gained a `__main__`
+guard and two subcommands the dispatcher was missing: `calibrate`
+(→ `_calibration_main`, previously reachable only via `python
+rpi_calibration.py` directly) and `score` (→ `_detector_main`, previously
+reachable only via `python reassortment_detector.py` directly — this one was
+a real gap in the original consolidation, not just a doc nit: nothing in
+`pipeline.py`'s `COMMANDS` ever routed to it). The two permanent diagnostics
+(`diagnose-e`, `diagnose-gate0`) moved from lazy cross-file imports to
+functions defined directly in `rpi_core.py`.
+
+Repo root is now three stage files: `all_hanta.py`, `phylogeny.py`,
+`rpi_core.py`. Verification: `python -m unittest rpi_core` — 322 tests,
+green; seeded panel (`--seed 20260829`) bit-identical to Phase 0's golden
+baseline; all five CLI subcommands' `--help` sane; both diagnostics
+smoke-tested and cross-checked against the pre-deletion standalone scripts.
+See `docs/superpowers/specs/2026-08-31-single-file-consolidation-design.md`
+for the full design.

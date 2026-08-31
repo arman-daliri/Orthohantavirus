@@ -134,12 +134,13 @@ Full detail in `tools/VERSIONS.txt` and `requirements-pip.txt`. Summary:
 ## Running things
 
 ```bash
-python -m unittest rpi_calibration                # 39 tests, <1 s
-python rpi_calibration.py                         # rebuilds data/rpi_calibration.json (~12 s)
-python rpi_calibration.py --stability             # branch across seeds x windows (~2 min)
-python -m unittest reassortment_detector          # 194 tests, ~13.5 min (gate 4 is slow)
-python validate_reassortment_detector.py --json output/validation/validation_report.json
-python reassortment_detector.py --rpi-report ...  # writes rpi_validation_report.json
+python -m unittest rpi_core                        # 322 tests, ~13.5 min (gate 4 is slow)
+python rpi_core.py                                 # same as `run`: calibrate -> discriminate -> stats -> report
+python rpi_core.py run --recalibrate               # force-rebuild data/rpi_calibration.json
+python rpi_core.py calibrate                       # rebuild data/rpi_calibration.json directly (~12 s)
+python rpi_core.py calibrate --stability           # branch across seeds x windows (~2 min)
+python rpi_core.py validate --json output/validation/validation_report.json
+python rpi_core.py score --reference-input . --candidate ... --rpi-report
 ```
 
 ## Known limitations to keep in mind

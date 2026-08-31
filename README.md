@@ -9,27 +9,31 @@ work.
 
 ---
 
-## RPI fitness-validation toolchain (`pipeline.py`)
+## RPI fitness-validation toolchain (`rpi_core.py`)
 
-**Purpose.** `pipeline.py` is the single orchestrating entry point over the Reassortment
-Plausibility Index (RPI) toolchain built on top of the base pipeline above: it calibrates
-`M_pack`'s Boltzmann rescaling against a held-out isolate panel, scores a four-group
-discrimination panel (random fakes, within-species shuffles, cross-species sympatric
-shuffles, and real published/supported reassortants), and runs the `reals ~ b1 > b2 >
-random` pass criterion (Mann-Whitney U + Cliff's delta) over the result — see
+**Purpose.** `rpi_core.py` is the single module and CLI entry point over the
+Reassortment Plausibility Index (RPI) toolchain built on top of the base
+pipeline above: it calibrates `M_pack`'s Boltzmann rescaling against a
+held-out isolate panel, scores a four-group discrimination panel (random
+fakes, within-species shuffles, cross-species sympatric shuffles, and real
+published/supported reassortants), and runs the `reals ~ b1 > b2 > random`
+pass criterion (Mann-Whitney U + Cliff's delta) over the result — see
 ["Reassortment Plausibility Index — limitations"](#reassortment-plausibility-index--limitations)
 below for what the index does and does not claim.
 
 **How to run:**
 
 ```bash
-python pipeline.py                       # same as `run`: calibrate -> discriminate -> stats -> report
-python pipeline.py run --recalibrate     # force-rebuild data/rpi_calibration.json
-python pipeline.py run --seed 20260829   # override the discrimination panel's seed (default shown)
-python pipeline.py validate --json output/validation/validation_report.json
-python pipeline.py diagnose-e            # one-off: is the reals~b1 tie E-driven?
-python pipeline.py diagnose-gate0        # one-off: gate0 junk_sequence false positives
-python -m unittest pipeline              # orchestration tests only (stage functions are stubbed)
+python rpi_core.py                       # same as `run`: calibrate -> discriminate -> stats -> report
+python rpi_core.py run --recalibrate     # force-rebuild data/rpi_calibration.json
+python rpi_core.py run --seed 20260829   # override the discrimination panel's seed (default shown)
+python rpi_core.py calibrate             # rebuild data/rpi_calibration.json directly
+python rpi_core.py calibrate --stability # branch the calibration across seeds x windows
+python rpi_core.py validate --json output/validation/validation_report.json
+python rpi_core.py score --reference-input . --candidate id:s.fasta,m.fasta,l.fasta
+python rpi_core.py diagnose-e            # one-off: is the reals~b1 tie E-driven?
+python rpi_core.py diagnose-gate0        # one-off: gate0 junk_sequence false positives
+python -m unittest rpi_core              # full suite, 322 tests
 ```
 
 `run` reuses the pinned calibration artifact (`data/rpi_calibration.json`) unless it is
@@ -38,17 +42,13 @@ something a routine run silently redoes. A stage that raises halts the run there
 stage's input is the previous stage's output, so nothing downstream runs on a half-built
 result.
 
-**Module layout.** `pipeline.py` and the other five files it orchestrates
-(`reassortment_detector.py`, `rpi_calibration.py`, `rpi_discrimination.py`,
-`rpi_discrimination_stats.py`, `validate_reassortment_detector.py`) are consolidated into
-one real module, `rpi_core.py` — each of the six original filenames is now a thin shim
-that re-exports its own original public surface from there, so every command above and
-every `python -m unittest <file>` invocation behaves exactly as it did before the
-consolidation (verified bit-identical against a pre-consolidation baseline, not assumed;
-see `notes_consolidation.md` for the full mechanical record, including the two
-circular-import bugs that surfaced only once the shims existed and were fixed as part of
-building them). Import whichever original filename fits the context you're working in —
-`rpi_core.py` itself is a library module, not a CLI entry point.
+**Module layout.** `rpi_core.py` is the only file for this toolchain — the
+six modules this consolidated from (`reassortment_detector.py`,
+`rpi_calibration.py`, `rpi_discrimination.py`, `rpi_discrimination_stats.py`,
+`validate_reassortment_detector.py`, `pipeline.py`) and the shims that
+briefly stood in for them during the consolidation are gone; see
+`notes_consolidation.md` for the full mechanical record of how the merge was
+done and verified bit-identical at each phase.
 
 **Headline results — from the post-`build_swap`-fix panel only** (seed 20260829, τ =
 3.914; see `notes_e_isolate_fix.md` for the full before/after record and
@@ -159,7 +159,7 @@ package exists. No stage requires another stage to have already run:
 |---|---|---|---|
 | 1 | `all_hanta.py` | `pandas`/`numpy` only | The core tables above, including `ortho_ml_sequence_table.csv` |
 | 2 | `phylogeny.py` | `mafft`/`iqtree` on PATH, Biopython, `dendropy` | `ortho_reassortment_table.csv`, `phylogenetics/<species>/<segment>/`, `phylogenetics_phylogroup/<phylogroup>/<segment>/` |
-| 3 | `reassortment_detector.py` | `mafft`/`iqtree` on PATH, Biopython, `dendropy` | Score a new, not-yet-published candidate genome against the 5-gate framework |
+| 3 | `rpi_core.py score` | `mafft`/`iqtree` on PATH, Biopython, `dendropy` | Score a new, not-yet-published candidate genome against the 5-gate framework |
 
 `ortho_risk_table.csv` (Stage 1) is always phylo-blind: it never changes based on whether Stage 2
 ran. To combine the two, join `ortho_reassortment_table.csv` on `isolate_key`. The two scripts do
@@ -903,11 +903,11 @@ at `docs/superpowers/specs/2026-08-24-reassortment-plausibility-index-design.md`
 
 ## Reassortment detector — validation against published reassortants
 
-`validate_reassortment_detector.py` scores a panel whose ground truth is known
+`rpi_core.py validate` scores a panel whose ground truth is known
 independently of the detector, and reports a confusion matrix. Run it with:
 
 ```bash
-python validate_reassortment_detector.py --json output/validation/validation_report.json
+python rpi_core.py validate --json output/validation/validation_report.json
 ```
 
 **Result (54 candidates, all built from real sequences in `all_hanta/`):**
@@ -973,7 +973,7 @@ discordant-segment columns are the signal being measured, not the verdict.** Re-
    of a record are now kept (translated to the last complete codon). Junk detection is
    unaffected: random 3600 nt still yields only a 94 aa ORF.
 
-Run `reassortment_detector.py --rpi-report` to write `rpi_validation_report.json` alongside
+Run `rpi_core.py score --rpi-report` to write `rpi_validation_report.json` alongside
 the candidate table. It collects the validation entry points — retrospective reproduction
 (§11.1) with one leave-one-pair-out run per contributing pair, the rank-consistency check
 (§11.2), the gate3-veto vs continuous-Factor-E cross-layer check (§11.3), and the
