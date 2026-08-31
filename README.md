@@ -38,6 +38,18 @@ something a routine run silently redoes. A stage that raises halts the run there
 stage's input is the previous stage's output, so nothing downstream runs on a half-built
 result.
 
+**Module layout.** `pipeline.py` and the other five files it orchestrates
+(`reassortment_detector.py`, `rpi_calibration.py`, `rpi_discrimination.py`,
+`rpi_discrimination_stats.py`, `validate_reassortment_detector.py`) are consolidated into
+one real module, `rpi_core.py` — each of the six original filenames is now a thin shim
+that re-exports its own original public surface from there, so every command above and
+every `python -m unittest <file>` invocation behaves exactly as it did before the
+consolidation (verified bit-identical against a pre-consolidation baseline, not assumed;
+see `notes_consolidation.md` for the full mechanical record, including the two
+circular-import bugs that surfaced only once the shims existed and were fixed as part of
+building them). Import whichever original filename fits the context you're working in —
+`rpi_core.py` itself is a library module, not a CLI entry point.
+
 **Headline results — from the post-`build_swap`-fix panel only** (seed 20260829, τ =
 3.914; see `notes_e_isolate_fix.md` for the full before/after record and
 `notes_evening.md` for this session's commit history):
@@ -80,6 +92,8 @@ intra-species reassortment by construction (a validated, not a hidden, blind spo
 | `notes_e_isolate_fix.md` | Implementation record + before/after panel numbers for the Factor E fix and its `build_swap` follow-up |
 | `notes_codereview.md` | This session's `/code-review` findings over the full branch diff, with fix/proposal disposition for each |
 | `notes_evening.md` | This session's own summary — commit hashes, what ran, what's still open |
+| `notes_consolidation.md` | The `rpi_core.py` module consolidation: every rename/reference-fixup the merge required, the two circular-import bugs found while building the shims, and the verification gate each phase passed |
+| `build_rpi_core.py`, `build_shims.py` | The scripts that built `rpi_core.py` and the six shim files, kept for reproducibility/review of exactly what the merge did. Not meant to be re-run against the current (already-shimmed) tree — they read the six files' pre-consolidation content |
 | `docs/My Library.csv` | The Zotero-exported citation library every claim in this README is checked against |
 
 ---
