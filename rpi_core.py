@@ -9417,6 +9417,132 @@ def _parse_run_args(argv: Sequence[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+E_THRESHOLD = 0.5  # chosen after inspecting the distribution below -- see printed histogram
+
+
+def _diagnose_e_main(argv: Optional[Sequence[str]] = None) -> None:
+    """Standalone diagnostic (WS4 Task 13/14, PROJECT-STATE.md section 7c).
+
+    Loads an already-generated discrimination panel JSON (does NOT regenerate it),
+    stratifies groups.c_real_positive by rpi_e_total, and re-runs
+    stats.compare_groups for reals(E~1) vs b1 only -- to check whether
+    the reals-vs-b1 tie reported by evaluate_pass_criterion is driven by the
+    published inter-species lab crosses (which carry a near-zero Factor E
+    ecological prior) diluting an otherwise-intra-species real-positive panel.
+
+    Pure read-and-recompute: does not modify any scoring logic, only calls
+    the public compare_groups().
+    """
+    argv = list(sys.argv[1:] if argv is None else argv)
+    path = argv[0] if argv else "output/discrimination_scratch/discrimination_panel.json"
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    groups = data["groups"]
+    c_real = groups["c_real_positive"]
+    b1 = groups["b1_within_species_shuffle"]
+
+    scored_real = [row for row in c_real if row.get("rpi_generation") is not None]
+    unscored_real = len(c_real) - len(scored_real)
+
+    e_counts = Counter(row["rpi_e_total"] for row in scored_real)
+    print(f"Loaded: {path}")
+    print(f"c_real_positive: n={len(c_real)}, scored={len(scored_real)}, "
+          f"unscored/junk_sequence={unscored_real}")
+    print()
+    print("rpi_e_total distribution across scored c_real_positive rows:")
+    for value, count in sorted(e_counts.items(), key=lambda kv: kv[0]):
+        print(f"  rpi_e_total = {value!r}: {count} case(s)")
+    print()
+    print(f"Chosen threshold: rpi_e_total >= {E_THRESHOLD} "
+          f"(distribution is bimodal -- 1.0 vs 0.01 -- this threshold falls cleanly "
+          f"in the gap and does not need tuning)")
+    print()
+
+    reals_e1 = [row for row in scored_real if row["rpi_e_total"] >= E_THRESHOLD]
+    reals_e_low = [row for row in scored_real if row["rpi_e_total"] < E_THRESHOLD]
+    print(f"reals(E~1) stratum: n={len(reals_e1)} -- case_ids: "
+          f"{[row['case_id'] for row in reals_e1]}")
+    print(f"reals(E-low) stratum (excluded from this comparison): n={len(reals_e_low)} -- "
+          f"case_ids: {[row['case_id'] for row in reals_e_low]}")
+    print()
+
+    b1_values = [row["rpi_generation"] for row in b1 if row.get("rpi_generation") is not None]
+    reals_e1_values = [row["rpi_generation"] for row in reals_e1]
+
+    result = stats.compare_groups(
+        reals_e1_values, b1_values,
+        "c_real_positive(E>=0.5)", "b1_within_species_shuffle",
+        expect="reals(E~1) ~ b1: same D7 tie-expectation as the unstratified "
+               "reals_vs_b1 comparison, restricted to the intra-species subset of "
+               "reals to check whether Factor E composition (not M_pack/M_pol) drove "
+               "the original result.")
+    result["plausible_tie_not_proven_equivalent"] = (
+        not result["significant_at_alpha_0_05"]
+        or result["cliffs_delta_magnitude"] == "negligible")
+
+    print("compare_groups(reals(E>=0.5), b1) result:")
+    print(json.dumps(result, indent=2))
+
+
+ISOLATE_KEYS = [
+    "t2|Orthohantavirus sinnombreense|202003197",
+    "t2|unclassified Orthohantavirus|msb89863",
+]
+
+
+def _diagnose_gate0_main() -> None:
+    """Read-only diagnostic (roadmap Step 1): why REAL_ORTHO_sinnombreense_005
+    (isolate_key t2|Orthohantavirus sinnombreense|202003197) and
+    REAL_ORTHO_Orthohantavirus_006 (isolate_key t2|unclassified Orthohantavirus|msb89863)
+    hit gate0's junk_sequence verdict in the c_real_positive group.
+
+    Does not modify any scoring logic -- calls the public gate0_check /
+    _build_precomputed / load_reference_data only.
+    """
+    reference = rd.load_reference_data(Path("all_hanta"))
+    precomputed = rd._build_precomputed(reference)
+    by_key = {i.isolate_key: i for i in reference.isolates}
+
+    for key in ISOLATE_KEYS:
+        isolate = by_key.get(key)
+        print("=" * 100)
+        print(f"isolate_key: {key}")
+        if isolate is None:
+            print("  NOT FOUND in reference.isolates")
+            continue
+        print(f"  species_name: {isolate.species_name}")
+        print(f"  s_accession/m/l: {isolate.s_accession} / {isolate.m_accession} / {isolate.l_accession}")
+        print(f"  s/m/l_completeness: {isolate.s_completeness} / {isolate.m_completeness} / {isolate.l_completeness}")
+        print(f"  s/m/l_nt_length: {isolate.s_nt_length} / {isolate.m_nt_length} / {isolate.l_nt_length}")
+        print(f"  triplet_status: {isolate.triplet_status}, has_complete_triplet: {isolate.has_complete_triplet}")
+        print(f"  warnings: {isolate.warnings}")
+
+        genomic = {
+            seg: cal.genomic_sequence(reference, cal.segment_accession(isolate, seg))
+            for seg in ("S", "M", "L")
+        }
+        for seg, seq in genomic.items():
+            print(f"  {seg} genomic length actually loaded: {len(seq) if seq else 'EMPTY/None'}")
+
+        candidate = rd.CandidateInput(
+            candidate_id=key, s_genomic=genomic["S"], m_genomic=genomic["M"], l_genomic=genomic["L"])
+        gate0 = rd.gate0_check(
+            candidate, precomputed["protein_len_ranges"], precomputed["panhandle_consensus"],
+            precomputed["protein_profiles"])
+        print(f"  gate0.passed_structure: {gate0.passed_structure}")
+        print(f"  gate0.passed_identity_floor: {gate0.passed_identity_floor}")
+        print(f"  gate0.best_kmer_identity: {gate0.best_kmer_identity}")
+        print("  gate0.failures:")
+        for f in gate0.failures:
+            print(f"    - {f}")
+        print("  gate0.warnings:")
+        for w in gate0.warnings:
+            print(f"    - {w}")
+        for seg, protein in gate0.orf_proteins.items():
+            print(f"  {seg} longest_orf_protein length: {len(protein)}")
+
+
 def _pipeline_main(argv: Optional[Sequence[str]] = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] in COMMANDS:
@@ -9431,12 +9557,10 @@ def _pipeline_main(argv: Optional[Sequence[str]] = None) -> int:
     if command == "score":
         return _detector_main(rest)
     if command == "diagnose-e":
-        import diagnose_e_stratification as diag_e
-        diag_e.main()
+        _diagnose_e_main(rest)
         return 0
     if command == "diagnose-gate0":
-        import diagnose_gate0_junk as diag_gate0
-        diag_gate0.main()
+        _diagnose_gate0_main()
         return 0
     return run(_parse_run_args(rest))
 
@@ -9587,16 +9711,14 @@ class MainDispatchTest(unittest.TestCase):
         fake_detector.assert_called_once_with(["--reference-input", ".", "--candidate", "x"])
         self.assertEqual(exit_code, 0)
 
-    def test_diagnose_e_command_dispatches_with_no_args(self):
-        import diagnose_e_stratification as diag_e
-        with mock.patch.object(diag_e, "main") as fake_diag:
-            exit_code = _pipeline_main(["diagnose-e"])
-        fake_diag.assert_called_once_with()
+    def test_diagnose_e_command_dispatches_with_remaining_args(self):
+        with mock.patch(__name__ + "._diagnose_e_main") as fake_diag:
+            exit_code = _pipeline_main(["diagnose-e", "some/panel.json"])
+        fake_diag.assert_called_once_with(["some/panel.json"])
         self.assertEqual(exit_code, 0)
 
     def test_diagnose_gate0_command_dispatches_with_no_args(self):
-        import diagnose_gate0_junk as diag_gate0
-        with mock.patch.object(diag_gate0, "main") as fake_diag:
+        with mock.patch(__name__ + "._diagnose_gate0_main") as fake_diag:
             exit_code = _pipeline_main(["diagnose-gate0"])
         fake_diag.assert_called_once_with()
         self.assertEqual(exit_code, 0)
