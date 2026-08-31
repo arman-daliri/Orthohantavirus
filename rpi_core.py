@@ -9312,7 +9312,7 @@ def _validate_main(argv=None) -> int:
 
 
 
-COMMANDS = ("run", "validate", "diagnose-e", "diagnose-gate0")
+COMMANDS = ("run", "validate", "calibrate", "score", "diagnose-e", "diagnose-gate0")
 
 
 class PipelineStageError(RuntimeError):
@@ -9426,6 +9426,10 @@ def _pipeline_main(argv: Optional[Sequence[str]] = None) -> int:
 
     if command == "validate":
         return _validate_main(rest)
+    if command == "calibrate":
+        return _calibration_main(rest)
+    if command == "score":
+        return _detector_main(rest)
     if command == "diagnose-e":
         import diagnose_e_stratification as diag_e
         diag_e.main()
@@ -9571,6 +9575,18 @@ class MainDispatchTest(unittest.TestCase):
         fake_validate.assert_called_once_with(["--json", "out.json"])
         self.assertEqual(exit_code, 0)
 
+    def test_calibrate_command_passes_through_remaining_args(self):
+        with mock.patch(__name__ + "._calibration_main", return_value=0) as fake_calibrate:
+            exit_code = _pipeline_main(["calibrate", "--stability"])
+        fake_calibrate.assert_called_once_with(["--stability"])
+        self.assertEqual(exit_code, 0)
+
+    def test_score_command_passes_through_remaining_args(self):
+        with mock.patch(__name__ + "._detector_main", return_value=0) as fake_detector:
+            exit_code = _pipeline_main(["score", "--reference-input", ".", "--candidate", "x"])
+        fake_detector.assert_called_once_with(["--reference-input", ".", "--candidate", "x"])
+        self.assertEqual(exit_code, 0)
+
     def test_diagnose_e_command_dispatches_with_no_args(self):
         import diagnose_e_stratification as diag_e
         with mock.patch.object(diag_e, "main") as fake_diag:
@@ -9586,5 +9602,5 @@ class MainDispatchTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
 
 
-
-
+if __name__ == "__main__":
+    sys.exit(_pipeline_main())
