@@ -3578,7 +3578,7 @@ class Gate1CheckTest(unittest.TestCase):
         cannot tell a sorted list from a luckily-ordered one. This runs the same call in
         subprocesses under different seeds, which is the only way to see it."""
         source = (
-            "import json, reassortment_detector as rd\n"
+            "import json, rpi_core as rd\n"
             "ref = {seg: [('SpA','M'*50), ('SpB','W'*50), ('SpC','Y'*50)]\n"
             "       for seg in ('S','M','L')}\n"
             "r = rd.gate1_check({'S':'M'*50,'M':'W'*50,'L':'Y'*50}, ref)\n"
