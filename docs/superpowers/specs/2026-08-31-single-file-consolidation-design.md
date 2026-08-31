@@ -47,6 +47,27 @@ via `run`'s `_stage_calibrate`. No change to `_calibration_main` itself.
 New `COMMANDS`: `("run", "validate", "calibrate", "diagnose-e",
 "diagnose-gate0")`.
 
+### 2a. `score` — the single-candidate detector CLI, previously reachable only via the shim
+
+`reassortment_detector.py`'s own CLI (`_detector_main` / `parse_args` at
+`rpi_core.py:3142`: `--reference-input`, `--candidate` /
+`--candidates-manifest`, `--mafft-bin`, `--iqtree-bin`, `--bootstrap`,
+`--min-bootstrap-support`, `--phylo-min-taxa`, `--phylo-seed`,
+`--phylo-threads`, `--rpi-report`, `--verbose`) was **never** wired into
+`pipeline.py`'s `COMMANDS` dispatch — it only worked because the shim's own
+`__main__` guard called `_detector_main` directly, with no subcommand layer
+in front of it. This is README's Stage 3 ("score a new, not-yet-published
+candidate genome against the 5-gate framework"). Discovered while mapping
+doc updates for this phase — not in the original spec draft.
+
+Fix: add `"score"` to `COMMANDS`, dispatching to `_detector_main(rest)` —
+`python rpi_core.py score --reference-input ... --candidate ...` reproduces
+`python reassortment_detector.py --reference-input ... --candidate ...`
+exactly, same flags, same behavior.
+
+Final `COMMANDS`: `("run", "validate", "calibrate", "score", "diagnose-e",
+"diagnose-gate0")`.
+
 ### 3. The two permanent diagnostics move into `rpi_core.py`
 
 `diagnose_e_stratification.py`'s `main()` (reads a panel JSON path from
@@ -110,6 +131,7 @@ python -m unittest rpi_core                        # all tests
 python rpi_core.py run [--recalibrate] [--seed N]
 python rpi_core.py calibrate [--stability]
 python rpi_core.py validate --json ...
+python rpi_core.py score --reference-input ... --candidate ... [--rpi-report]
 python rpi_core.py diagnose-e [panel.json]
 python rpi_core.py diagnose-gate0
 ```
