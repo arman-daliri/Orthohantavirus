@@ -631,28 +631,85 @@ def _cached_reference_kmer_profile(protein: str) -> Dict[str, int]:
     return ah.kmer_profile(protein)
 
 
+# id(reference_profiles) -> (the list itself, unit-normalized reference matrix,
+# kmer -> column index). Keying on id() alone would be unsafe: once a reference_profiles
+# list is garbage-collected, Python is free to reuse its id for an unrelated new list, and
+# a lookup for that new list would then silently return the OLD list's stale matrix (this
+# was caught live by Gate1CheckTest.test_implicated_species_come_back_in_a_stable_order --
+# a later test's small literal reference dict reused a dead id from an earlier test's).
+# Storing the list itself in the cache entry holds a strong reference to it for the rest
+# of the process, which pins its id and makes id() collision-proof for anything that stays
+# in this cache -- the standard fix for id-keyed caches. reference_profiles lists built
+# once in _build_precomputed for a real run are meant to live this long anyway; the same
+# is now (harmlessly) true of every list a test passes in, since maxsize is unbounded.
+_REFERENCE_KMER_MATRIX_CACHE: Dict[int, Tuple[List[Tuple[str, str]], Any, Dict[str, int]]] = {}
+
+
+def _cached_reference_kmer_matrix(
+    reference_profiles: List[Tuple[str, str]],
+) -> Tuple[Any, Dict[str, int]]:
+    """Build (once per reference_profiles list) the unit-normalized k-mer matrix over
+    JUST the reference proteins, plus a kmer->column map. Was previously rebuilt from
+    scratch -- full vocabulary + full matrix -- on every single _kmer_identity_to_reference
+    / nearest_species_by_kmer call, even though the reference side never changes within a
+    run; profiled at ~70% of a GA search's wall time (docs/superpowers, 2026-09-04).
+
+    Splitting reference-only from candidate math is safe because L1-then-L2
+    normalization is scale-invariant (the L1 step cancels out under L2 division), so each
+    row's unit vector -- and every pairwise cosine similarity -- depends only on that
+    row's OWN k-mer counts, never on which other proteins happen to share the matrix. See
+    KmerIdentityAndNearestSpeciesGoldenMasterTest for the guard.
+    """
+    key = id(reference_profiles)
+    cached = _REFERENCE_KMER_MATRIX_CACHE.get(key)
+    if cached is not None:
+        return cached[1], cached[2]
+    profiles = [_cached_reference_kmer_profile(protein) for _species, protein in reference_profiles]
+    matrix, vocabulary = ah.profiles_to_matrix(profiles)
+    position = {kmer: i for i, kmer in enumerate(vocabulary)}
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    unit = matrix / norms
+    _REFERENCE_KMER_MATRIX_CACHE[key] = (reference_profiles, unit, position)
+    return unit, position
+
+
+def _candidate_similarity_to_reference(
+    candidate_protein: str, reference_profiles: List[Tuple[str, str]],
+) -> Any:
+    """Cosine similarity of candidate_protein against every row of reference_profiles,
+    in reference_profiles order. Projects the candidate's own k-mer counts onto the
+    cached reference vocabulary (out-of-vocabulary candidate k-mers can only ever pair
+    with a zero on the reference side, so dropping them from the dot product changes
+    nothing -- see _cached_reference_kmer_matrix's docstring), then normalizes by the
+    candidate's OWN full-vocabulary L2 norm, matching what the old combined-vocabulary
+    matrix computed.
+    """
+    unit, position = _cached_reference_kmer_matrix(reference_profiles)
+    candidate_profile = ah.kmer_profile(candidate_protein)
+    candidate_norm = math.sqrt(sum(count * count for count in candidate_profile.values()))
+    if candidate_norm == 0:
+        return np.zeros(unit.shape[0], dtype=np.float64)
+    vec = np.zeros(unit.shape[1], dtype=np.float64)
+    for kmer, count in candidate_profile.items():
+        col = position.get(kmer)
+        if col is not None:
+            vec[col] = count
+    return np.clip((vec @ unit.T) / candidate_norm, -1.0, 1.0)
+
+
 def _kmer_identity_to_reference(protein: str, reference_profiles: List[Tuple[str, str]]) -> float:
     """1 - minimum cosine distance from `protein` to any reference isolate's protein for
-    this segment. Vectorized like nearest_species_by_kmer: one candidate-vs-all matrix,
-    one batch of dot products, instead of a fresh 2-row profiles_to_matrix +
-    cosine_distance_matrix call per reference isolate. The per-isolate loop this
-    replaced paid that full pairwise-matrix cost once per reference isolate (thousands
-    per segment), measured at several minutes per candidate against the real reference
-    set -- this pays it once, using the same _cached_reference_kmer_profile memoization
-    the loop already relied on.
+    this segment.
     """
     if not protein or not reference_profiles:
         return 0.0
     candidate_profile = ah.kmer_profile(protein)
     if not candidate_profile:
         return 0.0
-    profiles = [candidate_profile] + [
-        _cached_reference_kmer_profile(ref_protein) for _species, ref_protein in reference_profiles]
-    matrix, _vocab = ah.profiles_to_matrix(profiles)
-    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
-    unit = matrix / norms
-    similarity = np.clip(unit[0] @ unit[1:].T, -1.0, 1.0)
+    similarity = _candidate_similarity_to_reference(protein, reference_profiles)
+    if similarity.size == 0:
+        return 0.0
     distances = 1.0 - similarity
     return float(max(0.0, 1.0 - distances.min()))
 
@@ -797,16 +854,18 @@ def nearest_species_by_kmer(
     full O(N^2) cost up front. Confirmed by direct measurement against the real
     reference set (thousands of profiles per segment): the O(N^2) call took several
     seconds per invocation where this takes a fraction of that.
+
+    The reference-side matrix itself is cached per reference_profiles list (see
+    _cached_reference_kmer_matrix) rather than rebuilt on every call -- previously the
+    dominant cost of a GA search (profiled 2026-09-04). Deliberately does NOT early-return
+    on an empty candidate k-mer profile (only on an empty candidate_protein STRING or
+    empty reference_profiles): a non-empty protein shorter than KMER_K still reaches here
+    and must report every species at distance 1.0, not an empty hit list -- see
+    KmerIdentityAndNearestSpeciesGoldenMasterTest's short_below_k case.
     """
     if not candidate_protein or not reference_profiles:
         return []
-    profiles = [ah.kmer_profile(candidate_protein)] + [
-        ah.kmer_profile(protein) for _species, protein in reference_profiles]
-    matrix, _vocab = ah.profiles_to_matrix(profiles)
-    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
-    unit = matrix / norms
-    similarity = np.clip(unit[0] @ unit[1:].T, -1.0, 1.0)
+    similarity = _candidate_similarity_to_reference(candidate_protein, reference_profiles)
     distances = 1.0 - similarity
 
     best_per_species: Dict[str, float] = {}
