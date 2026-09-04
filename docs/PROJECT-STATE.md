@@ -15,7 +15,7 @@ A fresh session should need this file, `CLAUDE.md`, and the two documents in
 | **`main`** | `e7d9f44`, pushed (was 4 commits behind at session start) |
 | **Test suite** | **237 tests** (`reassortment_detector`) + **39 tests** (`rpi_calibration`) + **18 tests** (`rpi_discrimination`) + **12 tests** (`rpi_discrimination_stats`), all pass |
 | **Validation harness** | **PASS** — sensitivity 19/19, specificity 27/27, blind spot 5/5, adversarial 4/4 (unchanged since Task 12) |
-| **Working tree** | Clean except `Mydocs/My Library.csv`, deleted by an external process; user said leave it |
+| **Working tree** | `My Library.csv` restored to `docs/` (2026-09-04, `Mydocs/` cleanup) |
 | **Unpushed** | `3947f1c`..`1e0b9aa` — WS3.1 through WS4 Task 13/14 (in progress), committed locally, **not pushed** |
 
 **Current goal:** make the Reassortment Plausibility Index (RPI) work end-to-end and
@@ -631,4 +631,6 @@ E-vs-M_pack finding in §3, and the work in §5.
 - `docs/superpowers/specs/2026-08-29-rpi-fitness-function-design.md`
 - `docs/superpowers/plans/*.md`
 - `docs/superpowers/notes/2026-08-14-reassortment-detector-reconsolidation.md`
-- `Mydocs/TEACHME.html`, `PUBLIC_RELEASE.md`, `README.md`
+- `PUBLIC_RELEASE.md`, `README.md` — `TEACHME.html`'s content was folded into the
+  README's "Known limitations" section and the standalone file deleted (2026-09-04,
+  `Mydocs/` cleanup); its defect-by-defect detail remains at `git show b8f5f0c`

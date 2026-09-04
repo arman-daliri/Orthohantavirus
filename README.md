@@ -89,12 +89,10 @@ intra-species reassortment by construction (a validated, not a hidden, blind spo
 | `docs/superpowers/specs/2026-08-29-rpi-fitness-function-design.md` | WS3/WS4: τ calibration, M_pack/M_pol scoring, the discrimination panel and pass criterion this section reports on |
 | `docs/superpowers/specs/2026-08-30-rpi-e-geo-isolate-level-fix-design.md` | The Factor E isolate-level fix (this session's `build_swap` wiring builds on it) |
 | `docs/superpowers/specs/2026-08-12-reassortment-detector-design.md`, `2026-08-13-three-stage-pipeline-split-design.md` | Earlier design decisions for `reassortment_detector.py` and the base 3-stage split |
-| `notes_e_isolate_fix.md` | Implementation record + before/after panel numbers for the Factor E fix and its `build_swap` follow-up |
-| `notes_codereview.md` | This session's `/code-review` findings over the full branch diff, with fix/proposal disposition for each |
-| `notes_evening.md` | This session's own summary — commit hashes, what ran, what's still open |
-| `notes_consolidation.md` | The `rpi_core.py` module consolidation: every rename/reference-fixup the merge required, the two circular-import bugs found while building the shims, and the verification gate each phase passed |
-| (build_rpi_core.py / build_shims.py — deleted) | These generator scripts built rpi_core.py and the six shim files during the consolidation; deleted once the merge was verified and the shims were no longer needed. See `notes_consolidation.md`'s Phase 4 section for what was deleted and why |
+| `docs/superpowers/specs/2026-08-31-single-file-consolidation-design.md` | The `rpi_core.py` single-file module consolidation this branch (`05-module-consolidation`) completed |
 | `docs/My Library.csv` | The Zotero-exported citation library every claim in this README is checked against |
+
+Session work-logs (`notes_*.md`, `suggesting.md`, the consolidation generator scripts) were deleted once superseded by this docs map and `docs/PROJECT-STATE.md`; their content remains in git history (`git log --all -- notes_consolidation.md`, etc.) if ever needed.
 
 ---
 
@@ -806,6 +804,28 @@ data, because segments from the same outbreak are near-identical to each other.
 - **1,728 records have no host**, and 3,703 have no collection date.
 - Grouping tiers 4 and 5 rarely fire, because the `strain` field is only populated from BioSample.
 - The pipeline resolves only the first BioSample accession in a record.
+
+### Debugging habits from an early defect-fixing session
+
+An early session (commit `b8f5f0c`, 2026-07-30, before the RPI/consolidation work above)
+found seven defects in `all_hanta.py` by reading the whole file once rather than
+pattern-matching, then checking every one of the code's own logged claims against
+`ortho_summary.json`. Two habits from that session proved worth keeping and still apply
+to this codebase:
+
+- **Distributions catch what code review misses.** A five-tier grouping cascade read
+  correctly in the source; only a tier-count table with three populated rows where five
+  were expected exposed that two tiers never fired. If a function branches on data, log
+  how often each branch fires.
+- **Measure a fix before committing to its direction.** Twice in that session the
+  "obvious" fix was wrong — once tightening a length constant to match its own citation
+  would have demoted a genuine record to `unresolved`; once the more aggressive label-
+  normalization strategy would have silently merged distinct samples. In both cases a
+  measurement, not which side looked more like a bug, decided the direction.
+
+The full defect-by-defect writeup (`TEACHME.html`) described a dataset snapshot
+(15,991 records) since superseded by later NCBI re-downloads; its per-defect detail is
+recoverable via `git show b8f5f0c` if needed.
 
 ## Reassortment Plausibility Index — limitations
 
