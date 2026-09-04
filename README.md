@@ -866,7 +866,7 @@ it must reproduce it. Every number this index produces inherits these constraint
      gone). `rpi_m_pol_status` reports whatever `polymerase_compatibility` actually
      returns — `scored` or `no_signal_beyond_tag` — rather than the forced
      `fixed_constant` shipped before this task. **The signal exists only for one
-     species.** Mir & Panganiban's genus-9-vs-SNV-23 asymmetry is the only wired
+     species.** Mir & Panganiban's [8] genus-9-vs-SNV-23 asymmetry is the only wired
      footprint length (`RPI_N_FOOTPRINT_NT`); every other species defaults to 9 nt, which
      falls *entirely inside* the invariant 14-nt tag, so `M_pol` reports
      `no_signal_beyond_tag` (neutral 1.0) for any backbone species that is not
@@ -1000,3 +1000,6 @@ sensitivity sweep (§12). The flag is off by default, so existing runs are uncha
 7. NCBI. Datasets virus data report schema (technical reference for the input package this
    pipeline reads, not a biological claim).
    <https://www.ncbi.nlm.nih.gov/datasets/docs/v2/reference-docs/data-reports/virus/>
+8. Mir MA, Brown B, Hjelle B, Duran WA, Panganiban AT (2006). Hantavirus N Protein Exhibits
+   Genus-Specific Recognition of the Viral RNA Panhandle. *J Virol* 80(22):11283–11292.
+   DOI: [10.1128/jvi.00820-06](https://doi.org/10.1128/jvi.00820-06)
