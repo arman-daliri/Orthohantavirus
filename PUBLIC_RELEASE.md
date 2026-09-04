@@ -33,22 +33,22 @@ private. It is the reason public release must be a copy, not a visibility change
 
 ## COPY to the future public repo
 
-- `reassortment_detector.py`, `all_hanta.py`, `phylogeny.py` — the pipeline
-- `validate_reassortment_detector.py` — validation harness
-- `rpi_calibration.py` and `data/rpi_calibration.json` — the pinned ΔΔG calibration panel
-  and the τ derived from it. **Both, not just the script.** The spec's defence of τ is
-  that it comes from a versioned panel shipped in the repo rather than being picked by
-  eye, and a reviewer cannot check that without the artifact. It records the fold
-  mechanism and ViennaRNA version, the panel's composition, and the pre-registered D1
-  decision rule with every input to it. Contains no sequence data — only public
-  GenBank-derived accessions and isolate keys.
+- `all_hanta.py`, `phylogeny.py`, `rpi_core.py` — the pipeline. As of the
+  `05-module-consolidation` branch, `rpi_core.py` is a single file containing what used
+  to be `reassortment_detector.py`, `validate_reassortment_detector.py`, and
+  `rpi_calibration.py` — those three no longer exist as separate files; do not look for
+  them.
+- `data/rpi_calibration.json` — the pinned ΔΔG calibration panel and the τ derived from
+  it. The spec's defence of τ is that it comes from a versioned panel shipped in the repo
+  rather than being picked by eye, and a reviewer cannot check that without the artifact.
+  It records the fold mechanism and ViennaRNA version, the panel's composition, and the
+  pre-registered D1 decision rule with every input to it. Contains no sequence data —
+  only public GenBank-derived accessions and isolate keys.
 - `README.md` — including the RPI limitations and validation sections
-- `environment.yml`
-- `Mydocs/*.md` — reader-facing docs (`MyReport.md`, `Orthohantavirus_01.md`,
-  `Pipeline_Report.md`, `Reassortment_Report.md`,
-  `Reassortment_Candidate_Scoring_Pipeline_v2.md`,
-  `reference-notes-goodfellow-ortiz.md`)
-- `Mydocs/TEACHME.html`
+- `CLAUDE.md` — repo policy and environment notes are useful context for a downstream
+  team too; the resume-pointer content in it is not (it points at `docs/PROJECT-STATE.md`,
+  which is internal)
+- `environment.yml`, `requirements-pip.txt`
 - `docs/superpowers/specs/` and `docs/superpowers/plans/` — design specs and plans
   (**review each before copying**; they are internal working documents)
 - **Small example data only** — a handful of candidate FASTAs sufficient to run the
@@ -61,16 +61,21 @@ private. It is the reason public release must be a copy, not a visibility change
 
 - `docs/claude-sessions-backup-*/` — session transcripts; exposes a contributor's local
   paths, and is working material, not a research artifact
-- `Mydocs/*.pdf` — publisher PDFs. Both current ones are CC BY so redistribution would be
-  *permitted*, but cite the DOI instead of shipping bytes; the rule stays simple so a
-  future non-CC-BY PDF is not waved through by habit.
+- Publisher PDFs of any cited paper. Redistribution may be *permitted* for an Open
+  Access / CC BY paper, but cite the DOI instead of shipping bytes; the rule stays simple
+  so a future non-CC-BY PDF is not waved through by habit.
 - `all_hanta.zip` — 14 MB, duplicates the extracted `all_hanta/` tree
 - `all_hanta/` — the full NCBI package, ~100 MB and regenerable with
   `datasets download virus genome taxon 1980442`
 - `output/` — every pipeline product (~40 MB+), all regenerable by running the pipeline
 - `output/*.log` — carries absolute paths from whichever machine ran it
 - `.superpowers/` — SDD ledger; already gitignored
-- `suggesting.md`, `docs/My Library.csv`, `docs/*.xlsx` — scratch/working notes
+- `docs/PROJECT-STATE.md` — internal session-resume state, not reader-facing
+- `docs/My Library.csv`, `docs/*.xlsx` — the Zotero citation-checking library; internal
+  working material
+- `tools/dist/`, `tools/mafft-win/`, `tools/iqtree-3.1.3-Windows/` — already gitignored
+  binaries; `tools/CHECKSUMS.sha256` and `tools/VERSIONS.txt` document the pin without
+  shipping the archives
 - `__pycache__/`, `*.pyc`
 - Anything the pipeline regenerates. **If it can be rebuilt, it does not ship.**
 
@@ -92,8 +97,10 @@ private. It is the reason public release must be a copy, not a visibility change
 
 ## Reference PDFs removed from this repo
 
-Both Open Access; re-downloadable from their DOIs. Content extracted to
-`Mydocs/reference-notes-goodfellow-ortiz.md`.
+Both Open Access; re-downloadable from their DOIs. Extracted notes on both
+(`reference-notes-goodfellow-ortiz.md`) were themselves deleted 2026-09-04 once their
+findings were folded into README/`docs/PROJECT-STATE.md`; recoverable via
+`git log --all -- Mydocs/reference-notes-goodfellow-ortiz.md` if needed again.
 
 | File | Paper | Licence |
 |---|---|---|
