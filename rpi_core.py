@@ -1892,6 +1892,13 @@ def species_consensus_panhandle_window(
     return five if end == "5" else three
 
 
+# (id(reference), species, segment, window) -> consensus window string, plus a
+# ref-pinning dict so a garbage-collected ReferenceData's id can never be reused by an
+# unrelated later one -- see species_consensus_cds_window's docstring.
+_SPECIES_CDS_WINDOW_CACHE: Dict[Tuple[int, str, str, int], str] = {}
+_SPECIES_CDS_WINDOW_CACHE_REFS: Dict[int, "ReferenceData"] = {}
+
+
 def species_consensus_cds_window(
         reference: ReferenceData, species: str, segment: str,
         window: int = RPI_MPOL_CDS_WINDOW_NT) -> str:
@@ -1907,12 +1914,29 @@ def species_consensus_cds_window(
     Returns "" if the species has no usable wild reference sequence for this segment --
     the caller MUST treat that as `no_parental_sequence`, never compare against an
     empty window.
+
+    Cached per (id(reference), species, segment, window): this depends only on the fixed
+    reference set and which backbone species score_m_pol picked, never on the candidate
+    itself, yet was recomputed from scratch on every score_m_pol call -- profiled at ~25%
+    of a GA search's wall time (docs/superpowers, 2026-09-04). Keying on id(reference)
+    rather than trusting callers to pass one shared ReferenceData per process guards the
+    same failure mode _cached_reference_kmer_matrix's docstring describes: without pinning
+    a strong reference to the object behind the id, a garbage-collected ReferenceData's id
+    could be reused by an unrelated later one and return its stale cached windows --
+    exactly the risk SpeciesConsensusCdsWindowGoldenMasterTest's
+    test_different_reference_objects_are_not_confused_by_the_cache exercises (mirroring
+    how SpeciesConsensusCdsWindowTest's own fixtures reuse the species name "SpA" across
+    several distinct ReferenceData objects).
     """
+    key = (id(reference), species, segment, window)
+    cached = _SPECIES_CDS_WINDOW_CACHE.get(key)
+    if cached is not None:
+        return cached
+    _SPECIES_CDS_WINDOW_CACHE_REFS[id(reference)] = reference
     windows = _wild_species_cds_windows(reference, species, segment, window)
-    if not windows:
-        return ""
-    five, _three = empirical_panhandle_consensus(windows, n=window)
-    return five
+    result = "" if not windows else empirical_panhandle_consensus(windows, n=window)[0]
+    _SPECIES_CDS_WINDOW_CACHE[key] = result
+    return result
 
 
 def rpi_species_assignment(
