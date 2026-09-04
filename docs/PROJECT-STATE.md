@@ -527,6 +527,14 @@ patched around (e.g. do not relax `SEGMENT_LENGTH_RANGE` to force a score out of
 
 ## 7d. GA search runtime fix + overnight full run — DONE, 2026-09-05 (branch `05-module-consolidation`)
 
+> ⚠️ **READ §7e FIRST. The runtime work below is sound and verified; its EMPIRICAL NUMBERS
+> ARE NOT TRUSTWORTHY.** A `/code-review` after the fact found the GA searches
+> `Algorithm.build_pool`'s 192 isolates instead of the canonical `rpi_core.usable_pool`'s
+> 272 — 51% of what it searched fails terminal-completeness, and 65% of the real pool was
+> never searched. Every count, rate, and winner list below must be re-derived after that
+> is fixed. The *speedup* measurements and the *mechanism* of the 25/53 ceiling do not
+> depend on the pool and survive unchanged.
+
 **Problem:** `Algorithm.py`'s default GA search (population=150, generations=100, over
 `rpi_core.score_candidate`) was taking up to 10 hours.
 
@@ -670,6 +678,123 @@ is not selecting a best candidate, it is accumulating ties.
    divergence — which would let the `distant` stratum become reachable and would change
    K's ceiling to 0.92. **(c) changes scores and must not be done as a "fix" without a
    design decision and re-calibration**, per §8.
+
+---
+
+## 7e. `/code-review high` on §7d's work — 2026-09-05. **One finding invalidates §7d's pool. NOTHING FIXED YET.**
+
+Run after the §7d runtime work and the ceiling analysis, per the standing "review before
+trusting an outcome" habit. **No code was changed in response** — every finding below
+either changes scores or needs a design decision, and §8's rule is that only
+provably-score-neutral fixes land autonomously. These are proposals awaiting a decision.
+
+### 🔴 FINDING 1 (HIGH) — the GA searches the WRONG isolate pool. §7d's numbers stand on it.
+
+`Algorithm.py:build_pool` filters only on `has_complete_triplet` / `is_lab_derived` /
+`is_vaccine_strain`. The project's canonical pool is `rpi_core.usable_pool`, whose
+docstring **explicitly forbids a second implementation** and additionally requires
+`terminally_complete_isolates` (all three segments full-length AND carrying both panhandle
+tags) plus dropping unclassified species — "because 48%+ of deposits are trimmed of their
+true termini and would corrupt any panhandle-adjacent computation." **That is exactly the
+M_pack term the GA optimises.**
+
+Measured against real `all_hanta/` (verified independently, not taken on the reviewer's word):
+
+| | count |
+|---|---|
+| `Algorithm.build_pool` (what the GA actually searched) | **192** |
+| `rpi_core.usable_pool` (canonical) | **272** |
+| In the GA pool but NOT canonical — **contaminated** | **98 (51% of what it searched)** |
+| Canonical but never searched — **missed** | **178 (65% of the real pool)** |
+| Overlap | 94 |
+
+**Consequence:** every number in §7d — the 5m16s and 18m31s runs, the 25/53 ceiling
+observations, the 1.7% ceiling-hit rate, both winner lists — was produced over a pool that
+is **half contaminated and missing two-thirds of the legitimate isolates.** The
+*mechanism* explained in §7d (K caps at 25/53 for the close stratum; E/M_pack/M_pol
+saturate) is a property of the scoring formula and does NOT depend on the pool, so that
+conclusion survives. The *empirical* figures do not. **Do not quote §7d's counts,
+rates, or winner lists until this is fixed and the runs are redone.**
+
+Proposed fix: `build_pool` calls `rc.usable_pool(reference, reserved)`. This CHANGES
+SCORES (different pool → different candidates), so it is a decision, not a cleanup — and
+the re-run afterwards is mandatory, not optional.
+
+### 🟠 FINDING 2 (HIGH) — `--with-phylogeny` cannot ever succeed
+
+`confirm_winners` builds `Namespace(..., mafft_bin=None, iqtree_bin=None, ...)`, so
+`gate4_check` → `run_mafft` → `subprocess.run([None, "--auto", ...])` → `TypeError`. Every
+winner gets `gate4_error` while the function still returns `"attempted: per-winner gate4
+fields recorded"` and `main` prints that as though confirmation ran. **This is the §8
+defect shape again — a success message over a value that failed.** `rc._score_args` shows
+the working form (`mafft_bin="mafft"`, `iqtree_bin="iqtree3"`); `ph.resolve_binary` would
+be better still. Never exercised by §7d's runs (the flag was not passed), so it does not
+affect those results.
+
+### 🟡 FINDING 3 (MEDIUM) — missing calibration artifact silently un-reserves the 42
+
+`load_reserved_isolate_keys` returns `set()` when `data/rpi_calibration.json` is absent,
+and resolves the path relative to CWD. `rc.reserved_calibration_isolate_keys` deliberately
+RAISES instead. Run `Algorithm.py` from any other directory and the 42 calibration-reserved
+isolates silently re-enter the search — the exact tau-tuned-on-the-validation-set
+circularity §7b exists to prevent — signalled only by `"calibration_reserved_excluded": 0`
+buried in the output JSON. (§7d's runs were from the repo root and DID exclude 42, verified
+in the payload.) Should raise, or at minimum refuse to run.
+
+### 🟡 FINDING 4 (MEDIUM) — `--diversity` can hang forever
+
+`while len(unique) < population_size:` accepts only unseen random triplets; with fewer than
+`population_size` distinct triplets available (`len(pool)**3 < population_size`) it never
+terminates — an unattended run spins at 100% CPU, silently. Needs a bounded attempt budget
+(the pattern `build_group_a_random` already uses).
+
+### 🟡 FINDING 5 (MEDIUM) — §7d's caches retain ~750 MB for the process lifetime
+
+Caused by §7d's own optimisation. Independently measured here (`unit.nbytes`, real
+`all_hanta/`): S `(6234, 5547)` 263.8 MB + M `(4205, 7424)` 238.2 MB + L `(4152, 7884)`
+249.7 MB = **751.7 MB** across 3 cache entries, held for the process lifetime because the
+entry pins the `reference_profiles` list. *(The review reported 788.3 MB; the ~36 MB gap
+is measurement basis, not disagreement — the direction and order of magnitude match.)*
+`_SPECIES_CDS_WINDOW_CACHE_REFS` additionally pins whole `ReferenceData` objects. Before
+the change each matrix was transient (~277 MB peak, one segment at a time, freed after the
+call), so steady-state RSS roughly triples and never drops. A process building two
+`_build_precomputed` results over `all_hanta` pays it twice (~1.6 GB) — which
+`python -m unittest rpi_core` now does, since `KmerIdentityAndNearestSpeciesGoldenMasterTest`
+builds its own. The correctness of the caches is not in question (the L1-then-L2
+scale-invariance argument holds, and the review confirmed it); the **retention policy** is
+what needs a bound or an explicit eviction hook. Note the trade-off: eviction costs back
+part of §7d's 9.5x speedup, so this is a decision, not an obvious win.
+
+### 🟢 FINDINGS 9–11 (LOW) — robustness, not correctness
+
+- **9.** Every winner reuses `candidate_id="ga-confirm"`, so with `--with-phylogeny` all
+  ten winners write gate4 artifacts to the same directory; only the last survives and none
+  can be attributed. Use the triplet or winner index in the id.
+- **10.** A *systemic* scoring failure (bad `--reference-input`, factory `KeyError` on
+  every candidate) is indistinguishable from a flat landscape: §7d's new `except Exception`
+  scores 0.0 and the run "succeeds" with best fitness 0.0, exit 0, and one stderr line that
+  scrolls past unattended. Should abort when the error rate crosses a threshold (e.g. all
+  of generation 0 failed). *This is the §8 defect shape sneaking back in via the
+  resilience fix — worth fixing for that reason alone.*
+- **11.** `--elitism 0` is accepted and removes the guarantee that the incumbent survives,
+  so the reported "best" (taken from the final population) can be worse than the best
+  actually scored (still sitting in `oracle.cache`). Track best-ever, or reject `< 1`.
+
+### ⚪ FINDINGS 6–8 — the uncommitted `CLAUDE.md` / `PUBLIC_RELEASE.md` move (NOT this session's work, NOT touched)
+
+The working tree deletes root `CLAUDE.md` / `PUBLIC_RELEASE.md` and adds copies under
+`docs/`. **Claude Code auto-loads `CLAUDE.md` from the repo root, not from `docs/`** — so
+as committed this would silently stop applying the repo policy it carries (stays private,
+never rewrite history / force-push, the assert-on-shipped-output note) to every future
+session. `docs/PUBLIC_RELEASE.md`'s own COPY list (lines 48, 58) and `docs/PROJECT-STATE.md:4`
+still name both files at the repo root, so a release built by literally copying that list
+would omit them. Separately, `Algorithm.py` appears in **neither** the COPY nor the NEVER
+list, and in no README module map — an unlisted file, which §8's explicit-file-list rule
+says must be resolved rather than guessed.
+
+**These changes were already in the working tree at session start and are NOT mine.
+Deliberately left untouched** — reverting or committing someone else's uncommitted work
+unasked is not a call to make autonomously. Needs an explicit decision.
 
 ---
 
