@@ -595,20 +595,81 @@ The previously-quoted "up to 10 hours" was for a full 100-generation run that ne
 actually completes in practice — this pool's population plateaus and the search
 self-terminates at generation 21 long before generation 100. **The true, measured,
 apples-to-apples number for what the CLI's default settings actually do, on this
-codebase, today, is ~5 minutes.** A forced 100-generation run (`--plateau 100` or
-higher) would take roughly `100/21 × 5m16s ≈ 25 min` by extrapolation — not measured,
-flagged as an estimate, not a fact, per §8's rule below.
+codebase, today, is ~5 minutes.**
 
-**Not yet interpreted:** whether a single fitness value (0.4717) discovered at
-generation 0 and never displaced by 150 individuals over 21 generations reflects a
-genuinely narrow/well-defined optimum in this search space, or a fitness landscape too
-flat for the GA's mutation/crossover to escape a local plateau, is a separate question
-from the runtime fix this section documents — raise it before treating 0.4717 as *the*
-answer to "what is the most plausible triplet." A high RPI score establishes
-PLAUSIBILITY, not occurrence (the tree detector in gate 4, not the index alone,
-establishes that — see §3), and the top 3 winners above all carry `gate1_pattern`/verdict
-values (`insufficient_comparators`, `undetectable_by_design`) that need reading alongside
-the fitness number, not instead of it.
+*(Superseded estimate, kept as a worked example of why §8 says flag estimates: this
+section originally extrapolated a forced 100-generation run at `100/21 × 5m16s ≈ 25 min`.
+The forced run was then actually measured — **300** generations in **18m 31.586s**, i.e.
+~3.7 s/generation against the 21-generation run's ~15 s/generation. The linear
+extrapolation was wrong because per-generation cost FALLS as the population converges:
+fewer distinct triplets per generation means more `Oracle.cache` hits. Prefer the measured
+number; see the resolution subsection below.)*
+
+**Why 0.4717 is never beaten — RESOLVED, 2026-09-05. It is a structural ceiling, not a
+converged optimum, and the GA is behaving correctly.**
+
+`rpi_generation = E × M_pack × M_pol × K` (see `compute_rpi`). E, M_pack and M_pol each
+saturate at 1.0, so the achievable maximum is set entirely by **K**, and
+
+```
+K = constellation_prior(stratum)[odd_segment]
+constellation_counts["close"] = {M: 12, S: 12, L: 1},  jeffreys_alpha = 0.5
+  -> K_close[M] = K_close[S] = (12 + 0.5) / (25 + 1.5) = 12.5 / 26.5 = 25/53
+                                                        = 0.4716981132...
+```
+
+**0.4716981132 is exactly 25/53** — the close-stratum M/S constellation prior, reached
+whenever E = M_pack = M_pol = 1.0. Nothing in the GA's search space can exceed it.
+
+**Why every GA candidate is in the `close` stratum:** `divergence_stratum` returns
+`"close"` when `identity >= stratum_identity_boundary` (0.8), and `identity` is
+`gate0.best_kmer_identity` — protein k-mer identity to the nearest reference isolate.
+`Algorithm.py` builds candidates by **recombining existing reference isolates**, never by
+synthesizing sequence, so each segment's protein IS a reference protein and scores
+identity ≈ 1.0. The `distant` stratum (where `K[M] = 0.92`, nearly double) is therefore
+**structurally unreachable by this search**, and `rpi_k_stratum_provisional` is set on
+every row precisely because this `identity` is not the parental nucleotide divergence
+spec §7 intends to stratify on (see the SCAFFOLDING comment at `score_candidate`'s
+`identity=` argument).
+
+**Empirical confirmation, three independent ways:**
+
+| Check | Result |
+|---|---|
+| 120 random triplets from the 192-isolate pool, scored directly | max = exactly 25/53, **0 exceeded it**, 1.7% (2/120) hit it exactly, all 120 in `close` stratum |
+| **Forced long run** — 300 generations, plateau early-stop disabled, seed 20260904 (`output/ga_search_long_2026-09-05/`) | best fitness **identical at 25/53 for all 300 generations, never once improved**; 0 scoring errors; wall time **18m 31.586s** |
+| Overnight default run (§ table above), 21 generations | same value, same stratum, all 10 winners tied |
+
+With a 1.7% ceiling-hit rate and population=150, the chance generation 0 already contains
+a ceiling-hitter is `1 - (1 - 0.017)^150 ≈ 92%` — which is exactly why "best" appears at
+generation 0 and never moves. **The GA is not stuck; there is nowhere higher to go.**
+
+**The fitness landscape is NOT flat, but the top of it is.** The same 120-triplet sample
+produced **86 distinct fitness values**, so the index discriminates perfectly well *below*
+the ceiling. The problem is at the top: ceiling-hitters tie at *exactly* 25/53, so the GA
+**cannot rank among them at all.** Over 300 generations the population collapsed from 150
+distinct triplets to 34, with median = best = the ceiling from ~generation 5 onward — it
+is not selecting a best candidate, it is accumulating ties.
+
+**Consequences — read before quoting any GA "winner":**
+1. **The "top 10 winners" list is an arbitrary tie-break, not a ranking.** All ten scored
+   identically in both runs. Which ten appear is an artifact of population order and
+   `dict`/list traversal, not of any measured difference between them.
+2. **Running longer buys nothing.** 300 generations (18.5 min) found exactly what 21
+   generations (5 min) found. Do not spend hours on bigger runs expecting improvement.
+3. A high RPI still establishes **PLAUSIBILITY, not occurrence** (the gate-4 tree
+   detector, not the index, establishes that — see §3). Both runs' winners carry
+   `insufficient_comparators` (8–9 of 10) or `undetectable_by_design` verdicts, which must
+   be read alongside the fitness number, never instead of it.
+4. **Open question, deliberately not answered here:** whether the GA is the right
+   instrument at all if its objective saturates on ~1.7% of the search space. Options, in
+   rough order of how much they change the science: (a) rank ceiling-hitters by a
+   documented tie-breaker (e.g. `rpi_retention`, which multiplies by F and is *not*
+   saturated); (b) report the ceiling set as an unordered candidate set rather than a
+   ranked top-10; (c) revisit whether `identity` should be real parental nucleotide
+   divergence — which would let the `distant` stratum become reachable and would change
+   K's ceiling to 0.92. **(c) changes scores and must not be done as a "fix" without a
+   design decision and re-calibration**, per §8.
 
 ---
 
