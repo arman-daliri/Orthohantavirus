@@ -1,0 +1,65 @@
+{
+  "config": {
+    "reference_input": "all_hanta",
+    "output": "output/ga_search_smoketest",
+    "seed": 20260904,
+    "population": 6,
+    "generations": 3,
+    "mutation_rate": 0.02,
+    "tournament_size": 3,
+    "elitism": 2,
+    "plateau": 3,
+    "top": 10,
+    "diversity": false,
+    "with_phylogeny": false
+  },
+  "calibration_reserved_excluded": 42,
+  "pool_size": 192,
+  "generations_run": 3,
+  "stopped_on_plateau": false,
+  "log": [
+    {
+      "generation": 0,
+      "best": 0.0003103514,
+      "mean": 9.190695000000001e-05,
+      "median": 2.6532999999999998e-05,
+      "distinct_triplets": 6
+    },
+    {
+      "generation": 1,
+      "best": 0.0003103514,
+      "mean": 0.00021940638333333337,
+      "median": 0.00025411765,
+      "distinct_triplets": 4
+    },
+    {
+      "generation": 2,
+      "best": 0.0003103514,
+      "mean": 0.0003103514,
+      "median": 0.0003103514,
+      "distinct_triplets": 1
+    }
+  ],
+  "winners": [
+    {
+      "triplet": [
+        "t2|Orthohantavirus seoulense|hbcd55 2021",
+        "t2|Orthohantavirus hantanense|aa16 19 p",
+        "t2|Orthohantavirus hantanense|aa 09 189"
+      ],
+      "fitness": 0.0003103514,
+      "verdict": "undetectable_by_design",
+      "rpi_generation": 0.0003103514,
+      "rpi_retention": 4.65527e-05,
+      "rpi_e_total": 0.0025,
+      "rpi_e_isolate_basis": "actual_parents",
+      "rpi_m_pack": 0.2632,
+      "rpi_m_pol": 1.0,
+      "rpi_k_stratum": "close",
+      "gate1_pattern": "undetectable_by_design",
+      "gate1_discordant_segment": "S",
+      "gate1_implicated_species": "Orthohantavirus hantanense;Orthohantavirus seoulense"
+    }
+  ],
+  "confirmation": "deferred: full-gate confirmation not requested (re-run with --with-phylogeny on a machine with mafft/iqtree)"
+}
