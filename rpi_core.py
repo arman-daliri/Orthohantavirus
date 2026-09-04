@@ -5406,6 +5406,67 @@ class SpeciesConsensusCdsWindowTest(unittest.TestCase):
             species_consensus_cds_window(reference, "Nobody", "M", window=30), "")
 
 
+class SpeciesConsensusCdsWindowGoldenMasterTest(unittest.TestCase):
+    """Golden-master guard for caching species_consensus_cds_window per (reference,
+    species, segment, window) -- profiled 2026-09-04: its _wild_species_cds_windows /
+    _longest_orf_span_with_terminus recomputation was ~25% of a GA search's wall time
+    (the rest was the kmer-matrix rebuild fixed by
+    KmerIdentityAndNearestSpeciesGoldenMasterTest), because it depends only on the fixed
+    reference set and which backbone species score_m_pol picked -- never on the candidate
+    itself -- yet was rebuilt from scratch on every score_m_pol call. Values below were
+    captured against the REAL all_hanta/ reference set with the pre-caching
+    implementation."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.reference = load_reference_data(Path("all_hanta"))
+
+    def test_matches_golden_values_for_real_species(self):
+        golden = {
+            "Orthohantavirus (genus-level only)": {
+                "S": "", "M": "ATGTTGAAGGAAATATTACGTGATGAGTTA",
+                "L": "ATGAGGAACACTTATTTAAATTCCCCTGTA"},
+            "Orthohantavirus andesense": {
+                "S": "ATGAGCACCCTCCAAGAATTACAAGAAAAC", "M": "ATGGAAGCGTCGTATGTTGTTGTTCTTGCA",
+                "L": "ATGGAAAAGTACAGAGAGATTCATCAGAGA"},
+            "Orthohantavirus artybashense": {
+                "S": "ATGGATGATATCAAACAATTAGAAGCAGAG", "M": "ATGGGATTAGTTGAGAGACTAGTTCAAAGT",
+                "L": "ATGTCAAGAAAGTTAAAAAAATACATTAAG"},
+            "Orthohantavirus asamaense": {
+                "S": "ATGGACAACATTGAGGACATCCAAGAGGAG", "M": "ATGAAAGTAGAGTGTAGACAAATAATAGGT",
+                "L": "ATGGAGAAAAAGCTTATACCAAACAATCAT"},
+            "Orthohantavirus asikkalaense": {
+                "S": "ATGGGTGACATTAAAGAGTTGGAGAGAGAG", "M": "ATGGAAATAGTGAATGTACTAGTTTCCGCT",
+                "L": "ATGTCTAGAAAATTAAAAAAATATATAAAT"},
+            "Orthohantavirus bayoui": {
+                "S": "ATGAGCACCCTCAAAGAAGTTCAAGAAAAT", "M": "ATGGGCAGGTTTTGTCTGATGGTGCTTGGA",
+                "L": "ATGGAGAAATACAGAGAGATACATCAGAGA"},
+        }
+        for species, by_segment in golden.items():
+            for segment, expected in by_segment.items():
+                with self.subTest(species=species, segment=segment):
+                    self.assertEqual(
+                        species_consensus_cds_window(self.reference, species, segment, window=30),
+                        expected)
+
+    def test_different_reference_objects_are_not_confused_by_the_cache(self):
+        """The real risk in caching this by (species, segment, window) alone: two
+        DIFFERENT ReferenceData objects (e.g. two separate tests, or two separate runs in
+        one process) that happen to share a species name must never share a cached
+        result. Mirrors how SpeciesConsensusCdsWindowTest reuses the species name 'SpA'
+        across several small, differently-built reference fixtures."""
+        seq_a = _orf_seq("CCCCCCCCC")
+        ref_a = _genomic_reference(
+            [_genomic_isolate("SpA", "i1", m_seq=seq_a)], {"SpA:i1_M": seq_a})
+        seq_b = _orf_seq("TTTTTTTTT")
+        ref_b = _genomic_reference(
+            [_genomic_isolate("SpA", "i1", m_seq=seq_b)], {"SpA:i1_M": seq_b})
+        window_a = species_consensus_cds_window(ref_a, "SpA", "M", window=30)
+        window_b = species_consensus_cds_window(ref_b, "SpA", "M", window=30)
+        self.assertEqual(_beyond_tag(window_a, 23), "CCCCCCCCC")
+        self.assertEqual(_beyond_tag(window_b, 23), "TTTTTTTTT")
+
+
 class ScoreMPolTest(unittest.TestCase):
     """D3/Task 11 (WS3.4). Backbone species is the REAL "Orthohantavirus sinnombreense"
     (footprint 23, via the real n_recognition_footprint lookup) so these tests exercise
