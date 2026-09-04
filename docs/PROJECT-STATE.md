@@ -525,6 +525,93 @@ patched around (e.g. do not relax `SEGMENT_LENGTH_RANGE` to force a score out of
 
 ---
 
+## 7d. GA search runtime fix + overnight full run — DONE, 2026-09-05 (branch `05-module-consolidation`)
+
+**Problem:** `Algorithm.py`'s default GA search (population=150, generations=100, over
+`rpi_core.score_candidate`) was taking up to 10 hours.
+
+**Diagnosis (profiled, not guessed):** `cProfile` on a small sample (population=20,
+generations=3, real `all_hanta/` data) showed ~70% of `score_candidate`'s time in
+`gate0_check`/`gate1_check`'s k-mer cosine-similarity matrix (`profiles_to_matrix`) and
+~25% in `score_m_pol`'s `species_consensus_cds_window` — both rebuilding data that
+depends ONLY on the fixed reference set, from scratch, on every single candidate call,
+even though candidates are existing reference isolates recombined (never synthesized),
+so the same reference-side work repeats thousands of times.
+
+**Fix (2 commits, each preceded by its own golden-master regression test against real
+`all_hanta/` data, `6a6ab6a`/`765970b` and `618a4d8`/`b0b5761`):**
+- `_kmer_identity_to_reference` / `nearest_species_by_kmer`: the reference-side k-mer
+  matrix is now built once per `reference_profiles` list and cached, instead of rebuilt
+  per call. Provably score-neutral: L1-then-L2 normalization is scale-invariant, so each
+  row's unit vector depends only on its own counts.
+- `species_consensus_cds_window`: cached per `(reference, species, segment, window)`.
+
+**A real bug caught mid-implementation, not just a review nit:** both caches key on
+`id(...)`. Naively, a garbage-collected object's id can be reused by an unrelated new
+object, returning a stale cached result for a completely different input — this actually
+happened (`Gate1CheckTest.test_implicated_species_come_back_in_a_stable_order` failed
+when first implemented, and would have hit `species_consensus_cds_window` the same way
+via `SpeciesConsensusCdsWindowTest`'s repeated `"SpA"` fixture). Fixed by having each
+cache hold a strong reference to the object behind its key, pinning the id for the
+process's life. **Anyone adding another `id(...)`-keyed cache to this codebase must do
+the same, or add tests proving two different objects sharing a name/label are not
+confused by it.**
+
+**Verification, in order:**
+1. Golden-master unit tests (real data, hand-picked edge cases including a candidate
+   protein shorter than `KMER_K`) — pass before AND after each fix.
+2. Full `rpi_core` suite: 326 tests before the fixes existed, 328 after (the 2 new
+   golden-master tests) — all pass, both times.
+3. **Discrimination panel re-run, seed 20260829, 97 candidates across all 4 groups**, at
+   the pre-optimization commit (`ecaa1d4`) and post-optimization HEAD, in an isolated
+   `git worktree` (no working-tree disruption): summary stats byte-identical, **every
+   individual scored row identical, zero diffs.** Also matches the independent
+   pre-existing `output/consolidation_baseline/discrimination_panel_golden.json`.
+
+**Measured speedup:** same 50-candidate profiling sample, 736s → 221s (kmer fix alone) →
+77.8s (both fixes) — **9.5x**.
+
+**Resilience added before the overnight run (commit `d4a1a5b`):** `Oracle.score` in
+`Algorithm.py` had no protection against `score_candidate` raising on one bad triplet —
+any exception would have crashed a multi-hour unattended run with no checkpointing. It
+now catches `Exception`, scores that candidate 0.0 (same treatment as `junk_sequence`),
+and records `(triplet, error)` in `oracle.errors` / the output payload's
+`scoring_errors` field, so a run reports exactly what it skipped instead of either
+crashing or silently hiding a failure. Guarded by 2 new `OracleTest` cases.
+
+**Overnight full run, default settings, seed 20260904 (the CLI default), real
+`all_hanta/` data (192-isolate pool):**
+
+| | |
+|---|---|
+| **True wall time** | **5m 15.978s** (`real` from `time`; `output/ga_search_overnight_2026-09-05/run.log`) |
+| Started / finished (UTC) | 2026-09-04T20:10:05Z → 2026-09-04T20:15:21Z |
+| Generations run | **21 of 100** — stopped on plateau (`plateau=20`, no improvement for 20 generations) |
+| Best fitness | 0.4716981132, found immediately at generation 0, never improved (population converged onto it: `distinct_triplets` 150 → 79, `mean` 0.0135 → 0.4497 by generation 20) |
+| Scoring errors | **0** |
+| Output | `output/ga_search_overnight_2026-09-05/seed_20260904.json` |
+
+The previously-quoted "up to 10 hours" was for a full 100-generation run that never
+actually completes in practice — this pool's population plateaus and the search
+self-terminates at generation 21 long before generation 100. **The true, measured,
+apples-to-apples number for what the CLI's default settings actually do, on this
+codebase, today, is ~5 minutes.** A forced 100-generation run (`--plateau 100` or
+higher) would take roughly `100/21 × 5m16s ≈ 25 min` by extrapolation — not measured,
+flagged as an estimate, not a fact, per §8's rule below.
+
+**Not yet interpreted:** whether a single fitness value (0.4717) discovered at
+generation 0 and never displaced by 150 individuals over 21 generations reflects a
+genuinely narrow/well-defined optimum in this search space, or a fitness landscape too
+flat for the GA's mutation/crossover to escape a local plateau, is a separate question
+from the runtime fix this section documents — raise it before treating 0.4717 as *the*
+answer to "what is the most plausible triplet." A high RPI score establishes
+PLAUSIBILITY, not occurrence (the tree detector in gate 4, not the index alone,
+establishes that — see §3), and the top 3 winners above all carry `gate1_pattern`/verdict
+values (`insufficient_comparators`, `undetectable_by_design`) that need reading alongside
+the fitness number, not instead of it.
+
+---
+
 ## 8. Standing rules
 
 - **Never change gate logic, verdicts, or `gate*_` columns.** RPI is a parallel column
