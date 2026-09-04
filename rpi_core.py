@@ -3524,6 +3524,109 @@ class NearestSpeciesByKmerTest(unittest.TestCase):
         self.assertEqual(nearest_species_by_kmer("MMM", [], top_n=3), [])
 
 
+class KmerIdentityAndNearestSpeciesGoldenMasterTest(unittest.TestCase):
+    """Golden-master guard for the runtime fix that replaces `_kmer_identity_to_reference`
+    and `nearest_species_by_kmer`'s per-call `profiles_to_matrix` rebuild (previously ~70%
+    of a GA search's ~10-hour wall time -- see docs/superpowers -- profiled 2026-09-04)
+    with a reference-side matrix cached once per reference_profiles list. Values below were
+    captured against the REAL all_hanta/ reference set with the pre-optimization
+    implementation; any future change to either function must keep reproducing them
+    (assertAlmostEqual, not exact equality, because the optimized path sums floating-point
+    terms in a different order than the old combined-vocabulary matrix did)."""
+
+    @classmethod
+    def setUpClass(cls):
+        reference = load_reference_data(Path("all_hanta"))
+        precomputed = _build_precomputed(reference)
+        cls.profiles = precomputed["protein_profiles"]
+
+    def _sample_proteins(self, segment: str) -> Dict[str, str]:
+        ref = self.profiles[segment]
+        return {
+            "exact_ref_0": ref[0][1],
+            "truncated_ref_5": ref[5][1][: max(10, len(ref[5][1]) // 2)],
+            "synthetic": "MAAAKLVIGVFQWWERTYASDFGHJKLZXCVBNM" * 5,
+            "empty": "",
+            "short_below_k": "MA",
+        }
+
+    def test_kmer_identity_matches_golden_values(self):
+        golden = {
+            "S": {"exact_ref_0": 1.0, "truncated_ref_5": 0.8929415139551677,
+                  "synthetic": 0.06581226581158206, "empty": 0.0, "short_below_k": 0.0},
+            "M": {"exact_ref_0": 1.0, "truncated_ref_5": 0.7231890633212773,
+                  "synthetic": 0.0574278648592208, "empty": 0.0, "short_below_k": 0.0},
+            "L": {"exact_ref_0": 1.0, "truncated_ref_5": 0.7257692844503929,
+                  "synthetic": 0.06306307443715431, "empty": 0.0, "short_below_k": 0.0},
+        }
+        for segment in ("S", "M", "L"):
+            ref = self.profiles[segment]
+            for name, protein in self._sample_proteins(segment).items():
+                with self.subTest(segment=segment, sample=name):
+                    self.assertAlmostEqual(
+                        _kmer_identity_to_reference(protein, ref), golden[segment][name],
+                        places=9)
+
+    def test_nearest_species_by_kmer_matches_golden_values(self):
+        golden = {
+            "S": {
+                "exact_ref_0": [("Orthohantavirus puumalaense", 0.0),
+                                ("unclassified Orthohantavirus", 0.1393878769797966),
+                                ("Orthohantavirus khabarovskense", 0.27215027895607236)],
+                "truncated_ref_5": [("Orthohantavirus puumalaense", 0.10705848604483226),
+                                    ("unclassified Orthohantavirus", 0.14916773362698044),
+                                    ("Orthohantavirus khabarovskense", 0.4602801091226809)],
+                "synthetic": [("Orthohantavirus puumalaense", 0.9341877341884179),
+                              ("unclassified Orthohantavirus", 0.9443250832396195),
+                              ("Orthohantavirus ozarkense", 0.951506818739512)],
+                "empty": [],
+                "short_below_k": [("Orthohantavirus puumalaense", 1.0),
+                                   ("Orthohantavirus tulaense", 1.0),
+                                   ("Orthohantavirus seoulense", 1.0)],
+            },
+            "M": {
+                "exact_ref_0": [("Orthohantavirus puumalaense", 0.0),
+                                ("unclassified Orthohantavirus", 0.37149436917321965),
+                                ("Orthohantavirus tulaense", 0.5755914954993316)],
+                "truncated_ref_5": [("Orthohantavirus puumalaense", 0.2768109366787227),
+                                    ("unclassified Orthohantavirus", 0.4730405706885701),
+                                    ("Orthohantavirus tulaense", 0.6134425944390992)],
+                "synthetic": [("unclassified Orthohantavirus", 0.9425721351407792),
+                              ("Orthohantavirus (genus-level only)", 0.9482601653509553),
+                              ("Orthohantavirus puumalaense", 0.9532526504995772)],
+                "empty": [],
+                "short_below_k": [("Orthohantavirus puumalaense", 1.0),
+                                   ("Orthohantavirus seoulense", 1.0),
+                                   ("Orthohantavirus hantanense", 1.0)],
+            },
+            "L": {
+                "exact_ref_0": [("Orthohantavirus puumalaense", 0.0),
+                                ("Orthohantavirus sagercreekense", 0.6956304234758061),
+                                ("unclassified Orthohantavirus", 0.7035798303846024)],
+                "truncated_ref_5": [("Orthohantavirus puumalaense", 0.2742307155496071),
+                                    ("unclassified Orthohantavirus", 0.797893602001983),
+                                    ("Orthohantavirus khabarovskense", 0.8183378748296947)],
+                "synthetic": [("unclassified Orthohantavirus", 0.9369369255628457),
+                              ("Orthohantavirus tulaense", 0.9689415830670964),
+                              ("Orthohantavirus ozarkense", 0.9690531482859015)],
+                "empty": [],
+                "short_below_k": [("Orthohantavirus puumalaense", 1.0),
+                                   ("Orthohantavirus seoulense", 1.0),
+                                   ("Orthohantavirus hantanense", 1.0)],
+            },
+        }
+        for segment in ("S", "M", "L"):
+            ref = self.profiles[segment]
+            for name, protein in self._sample_proteins(segment).items():
+                with self.subTest(segment=segment, sample=name):
+                    hits = nearest_species_by_kmer(protein, ref, top_n=3)
+                    expected = golden[segment][name]
+                    self.assertEqual(len(hits), len(expected))
+                    for hit, (exp_species, exp_distance) in zip(hits, expected):
+                        self.assertEqual(hit.species, exp_species)
+                        self.assertAlmostEqual(hit.distance, exp_distance, places=9)
+
+
 class Gate1CheckTest(unittest.TestCase):
     def setUp(self):
         self.reference = {
