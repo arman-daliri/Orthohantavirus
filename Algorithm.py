@@ -14,6 +14,7 @@ import argparse
 import json
 import random
 import statistics
+import sys
 import unittest
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
@@ -84,14 +85,27 @@ class Oracle:
         self.candidate_factory = candidate_factory or default_candidate_factory(reference)
         self.cache: Dict[Triplet, float] = {}
         self.rows: Dict[Triplet, Dict[str, Any]] = {}
+        # (triplet, repr(exception)) for every candidate score_candidate raised on. An
+        # unattended multi-hour search must not lose all progress to one bad triplet --
+        # scored as 0.0 (same treatment as junk_sequence) and recorded here so the run
+        # report can say HOW MANY were skipped and why, rather than silently pretending
+        # every candidate scored cleanly.
+        self.errors: List[Tuple[Triplet, str]] = []
 
     def score(self, triplet: Triplet) -> float:
         if triplet in self.cache:
             return self.cache[triplet]
         sources = {"S": self.by_key[triplet[0]], "M": self.by_key[triplet[1]],
                    "L": self.by_key[triplet[2]]}
-        candidate = self.candidate_factory("ga", sources)
-        row = rc.score_candidate(candidate, self.reference, self.precomputed, self.args)
+        try:
+            candidate = self.candidate_factory("ga", sources)
+            row = rc.score_candidate(candidate, self.reference, self.precomputed, self.args)
+        except Exception as exc:  # noqa: BLE001 -- deliberately broad, see errors docstring above
+            self.errors.append((triplet, repr(exc)))
+            value = 0.0
+            self.cache[triplet] = value
+            self.rows[triplet] = {"verdict": "scoring_error", "scoring_error": repr(exc)}
+            return value
         value = 0.0 if row.get("verdict") == "junk_sequence" else float(row.get("rpi_generation") or 0.0)
         self.cache[triplet] = value
         self.rows[triplet] = {k: row.get(k) for k in (
@@ -234,7 +248,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     payload = {"config": vars(args), "calibration_reserved_excluded": len(reserved),
                "pool_size": len(pool), "generations_run": result["generations_run"],
                "stopped_on_plateau": result["stopped_on_plateau"],
-               "log": result["log"], "winners": winners, "confirmation": confirmation}
+               "log": result["log"], "winners": winners, "confirmation": confirmation,
+               "scoring_errors": [{"triplet": list(t), "error": e} for t, e in oracle.errors]}
     out_dir = Path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"seed_{args.seed}.json"
@@ -245,6 +260,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
               f"(plateau stop: {result['stopped_on_plateau']})")
         print(f"best fitness: first {first['best']:.4f} -> final {last['best']:.4f}")
         print(f"winners written: {len(winners)}; confirmation: {confirmation}")
+    if oracle.errors:
+        print(f"scoring errors (scored 0.0, run continued): {len(oracle.errors)}",
+              file=sys.stderr)
     print(f"wrote {out_path}")
     return 0
 
@@ -339,6 +357,27 @@ class OracleTest(unittest.TestCase):
         row = {"verdict": "junk_sequence", "rpi_generation": None}
         with mock.patch.object(rc, "score_candidate", return_value=row):
             self.assertEqual(oracle.score(("a", "b", "c")), 0.0)
+
+    def test_score_candidate_exception_scores_zero_and_is_recorded_not_raised(self):
+        """An unattended multi-hour search must survive one bad triplet -- see errors
+        docstring on Oracle.__init__. This is the behavior that makes that possible."""
+        oracle = self._oracle()
+        with mock.patch.object(rc, "score_candidate", side_effect=ValueError("boom")):
+            value = oracle.score(("a", "b", "c"))
+        self.assertEqual(value, 0.0)
+        self.assertEqual(oracle.cache[("a", "b", "c")], 0.0)
+        self.assertEqual(len(oracle.errors), 1)
+        self.assertEqual(oracle.errors[0][0], ("a", "b", "c"))
+        self.assertIn("boom", oracle.errors[0][1])
+        self.assertEqual(oracle.rows[("a", "b", "c")]["verdict"], "scoring_error")
+
+    def test_score_candidate_exception_is_memoized_like_any_other_score(self):
+        oracle = self._oracle()
+        with mock.patch.object(rc, "score_candidate", side_effect=ValueError("boom")) as spy:
+            oracle.score(("a", "b", "c"))
+            oracle.score(("a", "b", "c"))
+        self.assertEqual(spy.call_count, 1)
+        self.assertEqual(len(oracle.errors), 1)
 
 
 if __name__ == "__main__":
