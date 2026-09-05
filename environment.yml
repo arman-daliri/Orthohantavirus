@@ -8,6 +8,10 @@ dependencies:
   - numpy>=2.4
   - biopython>=1.87
   - dendropy>=5.0
+  # Figure rendering only (docs/superpowers/specs -- the before/after tanglegram
+  # figures over Stage 2's committed trees). Not on the scored RPI path: no RPI
+  # factor, gate, or verdict imports matplotlib.
+  - matplotlib>=3.9
   # THIS FILE DESCRIBES THE LINUX/CONDA MACHINE ONLY. The Windows machine runs on the
   # system interpreter with manually pinned binaries -- see requirements-pip.txt and
   # tools/VERSIONS.txt. EnvironmentReconciliationTest asserts the two do not contradict.

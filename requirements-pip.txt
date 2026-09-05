@@ -21,6 +21,7 @@ numpy==2.5.1          # environment.yml: numpy>=2.4       -- satisfied
 pandas==3.0.5         # environment.yml: pandas>=2.3      -- satisfied
 biopython==1.88       # environment.yml: biopython>=1.87  -- satisfied
 dendropy==5.0.13      # environment.yml: dendropy>=5.0    -- satisfied
+matplotlib==3.11.1    # environment.yml: matplotlib>=3.9  -- satisfied, figures only
 
 # Exact pin required, and it matches environment.yml exactly. RNAcofold's reported free
 # energies are dependent on the ViennaRNA version's energy-parameter set, so an
