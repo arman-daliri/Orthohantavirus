@@ -49,21 +49,19 @@ def isolate_key_of(isolate: Any) -> str:
 
 
 def build_pool(reference: Any, reserved_keys: set) -> List[str]:
-    pool = []
-    for isolate in reference.isolates:
-        if not _field(isolate, "has_complete_triplet", "hascompletetriplet"):
-            continue
-        if _field(isolate, "is_lab_derived", "islabderived"):
-            continue
-        if _field(isolate, "is_vaccine_strain", "isvaccinestrain"):
-            continue
-        key = isolate_key_of(isolate)
-        if key in reserved_keys:
-            continue
-        pool.append(key)
+    """Use the canonical usable_pool from rpi_core rather than a reimplementation.
+
+    usable_pool's docstring explicitly forbids a second implementation: it filters on
+    terminally_complete_isolates (all three segments full-length AND both panhandle tags)
+    to protect panhandle-adjacent computation like M_pack. The old build_pool only
+    checked has_complete_triplet and omitted terminal-completeness, contaminating 51% of
+    what it searched and missing 65% of the real pool.
+    """
+    pool_records = rc.usable_pool(reference, reserved_keys)
+    pool = sorted([isolate_key_of(i) for i in pool_records])
     if not pool:
         raise SystemExit("search pool is empty after filters -- nothing to sample from")
-    return sorted(pool)
+    return pool
 
 
 def default_candidate_factory(reference: Any) -> Callable[[str, Dict[str, Any]], Any]:
@@ -318,19 +316,16 @@ class GaSearchTest(unittest.TestCase):
         winner = tournament(scored, rng, size=2)
         self.assertEqual(winner, ("d", "e", "f"))
 
-    def test_pool_excludes_reserved_lab_and_incomplete(self):
-        from types import SimpleNamespace as NS
-        reference = NS(isolates=[
-            NS(isolate_key="keep1", has_complete_triplet=True, is_lab_derived=False,
-               is_vaccine_strain=False),
-            NS(isolate_key="drop_reserved", has_complete_triplet=True,
-               is_lab_derived=False, is_vaccine_strain=False),
-            NS(isolate_key="drop_lab", has_complete_triplet=True, is_lab_derived=True,
-               is_vaccine_strain=False),
-            NS(isolate_key="drop_incomplete", has_complete_triplet=False,
-               is_lab_derived=False, is_vaccine_strain=False)])
-        pool = build_pool(reference, {"drop_reserved"})
-        self.assertEqual(pool, ["keep1"])
+    def test_pool_matches_usable_pool(self):
+        """build_pool now calls the canonical rc.usable_pool, so test that it produces
+        the same result. This guards against accidental divergence."""
+        from pathlib import Path
+        reference = rc.load_reference_data(Path("all_hanta"))
+        reserved = rc.reserved_calibration_isolate_keys()
+        # Both should produce the same pool
+        alg_pool = set(build_pool(reference, reserved))
+        canonical = set(i.isolate_key for i in rc.usable_pool(reference, reserved))
+        self.assertEqual(alg_pool, canonical)
 
 
 class OracleTest(unittest.TestCase):
