@@ -1065,6 +1065,7 @@ if __name__ == "__main__":
 # automatically if Bio.Phylo/dendropy aren't importable.
 
 import random
+import sys
 import tempfile
 import unittest
 from io import StringIO
@@ -1427,15 +1428,31 @@ with open(f"{prefix}.treefile", "w") as f:
     f.write(cur + ";\\n")
 '''
 
+    @staticmethod
+    def _write_executable_stub(tmp_path: Path, name: str, source: str) -> Path:
+        """Writes `source` as a .py file and returns a directly-executable path to it.
+
+        run_mafft/run_iqtree put this path at argv[0] of a real subprocess, so it must
+        be exec-able on its own -- `chmod +x` on the .py file works on POSIX (via its
+        `#!/usr/bin/env python3` shebang) but is a no-op on Windows, where argv[0] must
+        itself be something the OS loader recognises (a .exe/.bat/.cmd), not an
+        arbitrary file with execute permission bits set. A tiny .cmd wrapper that shells
+        out to `sys.executable` sidesteps that without touching run_mafft/run_iqtree.
+        """
+        script = tmp_path / f"{name}.py"
+        script.write_text(source)
+        if os.name == "nt":
+            wrapper = tmp_path / f"{name}.cmd"
+            wrapper.write_text(f'@"{sys.executable}" "{script}" %*\n')
+            return wrapper
+        script.chmod(0o755)
+        return script
+
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         tmp_path = Path(self.tmpdir.name)
-        self.mafft_bin = tmp_path / "fake_mafft.py"
-        self.iqtree_bin = tmp_path / "fake_iqtree.py"
-        self.mafft_bin.write_text(self._FAKE_MAFFT)
-        self.iqtree_bin.write_text(self._FAKE_IQTREE)
-        self.mafft_bin.chmod(0o755)
-        self.iqtree_bin.chmod(0o755)
+        self.mafft_bin = self._write_executable_stub(tmp_path, "fake_mafft", self._FAKE_MAFFT)
+        self.iqtree_bin = self._write_executable_stub(tmp_path, "fake_iqtree", self._FAKE_IQTREE)
         self.output_dir = tmp_path / "output"
         self.output_dir.mkdir()
 
