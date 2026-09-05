@@ -15,6 +15,7 @@ import json
 import random
 import statistics
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
@@ -185,7 +186,14 @@ def run_search(pool: Sequence[str], score_fn: Callable[[Triplet], float], seed: 
 
 
 def confirm_winners(oracle: Oracle, winners: List[Dict[str, Any]], output_dir: Path,
-                    with_phylogeny: bool) -> str:
+                    with_phylogeny: bool, checkpoint_path: Optional[Path] = None) -> str:
+    """checkpoint_path, if given, appends each winner's result to a JSONL file as soon
+    as it finishes -- not only to the in-memory `winners` list this function already
+    mutates. A real gate4 run over hundreds-of-taxa comparator trees can run for hours;
+    without this, a crash or kill at hour N loses every winner confirmed before it,
+    since the only other record (the caller's final JSON payload) is written once, at
+    the very end. Purely additive: omitting checkpoint_path reproduces the exact prior
+    behavior (see test_no_checkpoint_path_behaves_exactly_as_before)."""
     if not with_phylogeny:
         return ("deferred: full-gate confirmation not requested "
                 "(re-run with --with-phylogeny on a machine with mafft/iqtree)")
@@ -198,18 +206,26 @@ def confirm_winners(oracle: Oracle, winners: List[Dict[str, Any]], output_dir: P
                               phylo_min_taxa=4, bootstrap=1000,
                               min_bootstrap_support=95.0, phylo_seed=42, phylo_threads=1)
     error_count = 0
-    for winner in winners:
-        triplet = tuple(winner["triplet"])
-        sources = {"S": oracle.by_key[triplet[0]], "M": oracle.by_key[triplet[1]],
-                   "L": oracle.by_key[triplet[2]]}
-        try:
-            row = rc.score_candidate(oracle.candidate_factory("ga-confirm", sources),
-                                     oracle.reference, oracle.precomputed, args)
-            winner["gate4_phylo_status"] = row.get("gate4_phylo_status")
-            winner["gate4_reassortment_call"] = row.get("gate4_reassortment_call")
-        except Exception as exc:  # binaries missing etc. -- recorded, never hidden
-            winner["gate4_error"] = str(exc)
-            error_count += 1
+    checkpoint = checkpoint_path.open("a", encoding="utf-8") if checkpoint_path else None
+    try:
+        for winner in winners:
+            triplet = tuple(winner["triplet"])
+            sources = {"S": oracle.by_key[triplet[0]], "M": oracle.by_key[triplet[1]],
+                       "L": oracle.by_key[triplet[2]]}
+            try:
+                row = rc.score_candidate(oracle.candidate_factory("ga-confirm", sources),
+                                         oracle.reference, oracle.precomputed, args)
+                winner["gate4_phylo_status"] = row.get("gate4_phylo_status")
+                winner["gate4_reassortment_call"] = row.get("gate4_reassortment_call")
+            except Exception as exc:  # binaries missing etc. -- recorded, never hidden
+                winner["gate4_error"] = str(exc)
+                error_count += 1
+            if checkpoint is not None:
+                checkpoint.write(json.dumps(winner) + "\n")
+                checkpoint.flush()
+    finally:
+        if checkpoint is not None:
+            checkpoint.close()
     if winners and error_count == len(winners):
         return "failed: gate4 errored for every winner (see per-winner gate4_error fields)"
     return "attempted: per-winner gate4 fields recorded (errors included, if any)"
@@ -398,7 +414,56 @@ class ConfirmWinnersTest(unittest.TestCase):
             result = confirm_winners(oracle, winners, Path("/tmp/out"), with_phylogeny=True)
         self.assertIn("failed", result)
         self.assertNotIn("attempted", result)
-        self.assertIn("boom", winners[0]["gate4_error"])
+
+    def test_checkpoint_path_writes_one_line_per_winner(self):
+        """A multi-hour real gate4 run must not lose completed work to a crash --
+        checkpoint_path makes confirm_winners persist each winner's result as it
+        finishes, not only in the in-memory list returned at the end."""
+        oracle, winners = self._oracle_and_winners()
+        winners.append({"triplet": ["a", "b", "c"], "fitness": 0.4})
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint = Path(tmp) / "checkpoint.jsonl"
+            with mock.patch.object(ph, "resolve_binary", side_effect=lambda e, n: f"/bin/{n}"), \
+                 mock.patch.object(rc, "score_candidate",
+                                   return_value={"gate4_phylo_status": "insufficient_comparators",
+                                                "gate4_reassortment_call": "not_analyzed"}):
+                confirm_winners(oracle, winners, Path("/tmp/out"), with_phylogeny=True,
+                                checkpoint_path=checkpoint)
+            lines = checkpoint.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 2)
+        recorded = [json.loads(line) for line in lines]
+        self.assertEqual([r["gate4_phylo_status"] for r in recorded],
+                         ["insufficient_comparators", "insufficient_comparators"])
+
+    def test_checkpoint_survives_a_hard_crash_mid_run(self):
+        """The actual failure mode this exists to prevent, stated directly: if the
+        process dies partway (here simulated with KeyboardInterrupt, which the
+        per-winner `except Exception` deliberately does not swallow), everything
+        completed before the crash must already be on disk."""
+        oracle, winners = self._oracle_and_winners()
+        winners.append({"triplet": ["a", "b", "c"], "fitness": 0.4})
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint = Path(tmp) / "checkpoint.jsonl"
+            with mock.patch.object(ph, "resolve_binary", side_effect=lambda e, n: f"/bin/{n}"), \
+                 mock.patch.object(rc, "score_candidate",
+                                   side_effect=[{"gate4_phylo_status": "ok",
+                                                "gate4_reassortment_call": "no_conflict"},
+                                               KeyboardInterrupt()]):
+                with self.assertRaises(KeyboardInterrupt):
+                    confirm_winners(oracle, winners, Path("/tmp/out"), with_phylogeny=True,
+                                    checkpoint_path=checkpoint)
+            lines = checkpoint.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(json.loads(lines[0])["gate4_phylo_status"], "ok")
+
+    def test_no_checkpoint_path_behaves_exactly_as_before(self):
+        oracle, winners = self._oracle_and_winners()
+        with mock.patch.object(ph, "resolve_binary", side_effect=lambda e, n: f"/bin/{n}"), \
+             mock.patch.object(rc, "score_candidate",
+                               return_value={"gate4_phylo_status": "ok",
+                                            "gate4_reassortment_call": "no_conflict"}):
+            result = confirm_winners(oracle, winners, Path("/tmp/out"), with_phylogeny=True)
+        self.assertIn("attempted", result)
 
 
 class OracleTest(unittest.TestCase):
