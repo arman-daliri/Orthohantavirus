@@ -31,8 +31,6 @@ python rpi_core.py calibrate             # rebuild data/rpi_calibration.json dir
 python rpi_core.py calibrate --stability # branch the calibration across seeds x windows
 python rpi_core.py validate --json output/validation/validation_report.json
 python rpi_core.py score --reference-input . --candidate id:s.fasta,m.fasta,l.fasta
-python rpi_core.py diagnose-e            # one-off: is the reals~b1 tie E-driven?
-python rpi_core.py diagnose-gate0        # one-off: gate0 junk_sequence false positives
 python -m unittest rpi_core              # full suite, 322 tests
 ```
 

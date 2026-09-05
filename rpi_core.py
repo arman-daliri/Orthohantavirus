@@ -1,17 +1,13 @@
 """rpi_core.py -- consolidated RPI fitness-validation toolchain.
 
-Single real module behind six thin shim files (reassortment_detector.py,
-rpi_calibration.py, rpi_discrimination.py, rpi_discrimination_stats.py,
-validate_reassortment_detector.py, pipeline.py), each re-exporting its own
-original public names from here. Built by mechanical merge (Phase 1 of
-branch 05-module-consolidation) -- see notes_consolidation.md for the exact
-renames and reference-fixups this required, and each shim file for what it
-re-exports.
+Built by mechanical merge (Phase 1 of branch 05-module-consolidation) of six
+former modules (reassortment_detector.py, rpi_calibration.py,
+rpi_discrimination.py, rpi_discrimination_stats.py,
+validate_reassortment_detector.py, pipeline.py) into this single file --
+see notes_consolidation.md for the exact renames and reference-fixups this
+required.
 """
 
-# --- Consolidated imports (deduplicated, order of first appearance across
-# the six source modules: detector, calibration, discrimination_stats,
-# discrimination, validate, pipeline) ---
 import argparse
 import copy
 import csv
@@ -19,35 +15,29 @@ import itertools
 import json
 import math
 import os
+import random
 import re
 import subprocess
 import sys
+import tempfile
+import unittest
+import unittest.mock
+import unittest.mock as mock
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Tuple
+from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Set, Tuple
 import numpy as np
 from Bio.Align import PairwiseAligner, substitution_matrices
 import all_hanta as ah
 import phylogeny as ph
-import random
-import tempfile
-import unittest
-import unittest.mock
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
-from typing import Any, Dict, List, Optional, Sequence, Tuple
-from collections import defaultdict
-from typing import Any, Dict, List, Optional, Tuple
-import unittest.mock as mock
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence
 
 # --- Original per-module docstrings, preserved as named constants so each
 # module's own argparse `description=` text is unchanged (see below) ---
 _DETECTOR_MODULE_DOC = "Reassortment candidate detector: reference data, reference loading, Gates 0-4 and the\nverdict rubric, and the CLI entry point -- all in one module.\n\nScores a brand-new candidate hantavirus genome (S+M+L genomic FASTA) against the\nfive-gate framework in docs/superpowers/specs/2026-08-12-reassortment-detector-design.md.\nImports all_hanta.py's ingest and phylogenetics machinery; makes no changes to it.\n\nThis module was originally split into reassortment_detector.py (CLI),\ndetector_gates.py (gates 0-4 and the verdict rubric), detector_reference.py (reference\ndataset loading), and reassortment_reference_data.py (curated structural/literature\nreference data) per docs/superpowers/specs/2026-08-13-three-stage-pipeline-split-design.md.\nReconsolidated back into this single file per\ndocs/superpowers/notes/2026-08-14-reassortment-detector-reconsolidation.md.\n"
 _CALIBRATION_MODULE_DOC = "WS3.1 -- the pinned ddG calibration panel behind the M_pack rescaling (decision D1).\n\nBuilds a cognate / non-cognate panhandle-duplex panel from real sequences in\n`all_hanta/`, folds every duplex through the ViennaRNA Python bindings (D2b), measures\nthe ddG distribution under the N = 50 nt window (D2), tests it for bimodality, and\nwrites `data/rpi_calibration.json`.\n\nWHY THIS IS A SEPARATE MODULE. `reassortment_detector.py` must read a *pinned artifact*\nrather than recompute tau at scoring time. Recomputing would make every candidate's score\ndepend on whatever cohort happened to be loaded -- the exact cohort-dependence that got\nOption B rejected in D1. Calibration is therefore a distinct, auditable, seeded step whose\noutput is committed to the repo.\n\nTHE CIRCULARITY THIS MODULE EXISTS TO AVOID. tau is derived from the observed ddG span, so\nthe panel's composition directly sets the scale parameter every downstream M_pack depends\non. If the panel overlapped the WS4 validation groups, tau would be tuned on the validation\nset and the WS4 result would be circular. `ws4_reserved_accessions` enforces the\ndisjointness against the WS4 groups that exist today, and `calibrate` records the isolates\nit consumed so the WS4 groups that do not exist yet can exclude them in turn. See\n`reserved_for_calibration` in the artifact.\n\nRun:\n    python rpi_calibration.py                       # writes data/rpi_calibration.json\n    python -m unittest rpi_calibration              # unit tests\n"
-_DISCRIMINATION_MODULE_DOC = 'WS4 Task 13 (D7) -- the four-group RPI discrimination panel.\n\nBuilds four groups of candidates, scores each through `reassortment_detector.score_candidate`,\nand reports the resulting `rpi_generation`/`rpi_retention` distributions so Task 14\'s pass\ncriterion (`reals ~ b1 > b2 > random`) can be evaluated against real numbers, not intuition.\n\nTHE FOUR GROUPS\n----------------\n  (a) RANDOM FAKES -- a full S+M+L triplet assembled from three different isolates whose\n      species AND continents all differ from one another. The weakest possible test:\n      Factor E (ecological_opportunity) alone should already reject these on\n      geography/timing, before M_pack or M_pol ever get a vote. Included as a floor, not\n      a discriminating test -- reported as such, not oversold.\n\n  (b1) WITHIN-SPECIES SHUFFLES -- a full S+M+L triplet assembled from three DIFFERENT\n      isolates of the SAME species. This is RPI\'s plausibility-ceiling control: these\n      genuinely are plausible assemblies (real segments that could have circulated\n      together), and RPI measures plausibility, not occurrence -- scoring HIGH here is\n      the correct, expected answer, not a false positive. Separating these from real\n      reassortants is gate 4\'s job (Task 14), not this index\'s.\n\n  (b2) CROSS-SPECIES SYMPATRIC -- a full S+M+L triplet built across two DIFFERENT species\n      that nonetheless share host order, country, AND overlapping collection years in\n      this dataset. THE REAL TEST of M_pack + M_pol: Factor E cannot reject these on\n      ecological grounds (they really do co-occur), so any separation from group (c)\'s\n      real positives has to come from the molecular factors. Measured (2026-08-29): only\n      6 such (host_order, country, species_A, species_B) tuples exist in the usable pool,\n      all Rodentia hosts in China or South Korea (hantanense / khabarovskense / seoulense\n      / puumalaense) -- true ecological sympatry between different hantavirus species is\n      a narrow, specific configuration, which is exactly what makes it a real test rather\n      than an easy one.\n\n  (c) REAL POSITIVES -- two independently-sourced sets, neither constructed by this\n      module: the 8 `supported_reassortment_candidate` isolates from all_hanta.py\'s own\n      genome-wide phylogenetic surveillance (`output/ortho_reassortment_table.csv`,\n      scored here on their own real, unmodified S/M/L), plus the published inter-species\n      lab crosses already reconstructed in `validate_reassortment_detector.py`\'s\n      `PUBLISHED_CROSSES` (class A only -- class B\'s intra-species crosses are gate1\'s\n      known blind spot, not something RPI\'s E factor can distinguish from group b1\n      either, so they are excluded from "real positives" here to keep the comparison to\n      inter-species events, matching what b2 and random both are).\n\nDISJOINTNESS FROM CALIBRATION (binding constraint, PROJECT-STATE.md section 7b). Every\ngroup builder here excludes the 42 isolates `data/rpi_calibration.json` ->\n`reserved_for_calibration.isolate_keys` reserved for deriving tau. Overlap would let this\npanel\'s b2 result be read as validating a tau that was tuned partly on these same\nisolates -- the exact circularity `rpi_calibration.py`\'s own docstring warns against, in\nthe other direction.\n\nWHAT THIS MODULE DOES NOT DO. It does not compute the Task 14 pass criterion (Mann-Whitney\nU, effect sizes, the reals~b1 equivalence interval) -- that is a separate, smaller function\nover this module\'s OUTPUT, kept separate so the panel construction (subject to real\ndata availability) and the statistical test (subject to methodology) can be reviewed and\nchanged independently. It also does not touch gate 4 (Task 14\'s "detector separation"\nhalf) -- gate4_check needs mafft/iqtree, and their Windows blockers (iqtree3.exe naming,\nMAFFT --version parsing) are still open per PROJECT-STATE.md.\n\nRun:\n    python rpi_discrimination.py                      # builds panel, scores it, prints summary\n    python rpi_discrimination.py --json report.json   # also writes the full scored panel\n    python -m unittest rpi_discrimination              # unit tests\n'
 _VALIDATE_MODULE_DOC = 'Validation harness for reassortment_detector.py.\n\nWHAT THIS ANSWERS\n-----------------\nDoes the detector actually fire on reassortants, and stay quiet on non-reassortants?\n\nThe unit tests in reassortment_detector.py check that each gate computes what it says\nit computes. They do NOT answer the question above, because a detector can be\ninternally consistent and still be blind. This harness scores a panel of candidates\nwhose ground truth is known independently of the detector, and reports a confusion\nmatrix.\n\nTHE PANEL\n---------\nFour classes, each with a DIFFERENT expected outcome. A harness where everything is\nexpected to come back positive proves nothing -- see class C and class E.\n\n  A. PUBLISHED INTER-SPECIES REASSORTANTS. Reconstructed in silico from the real\n     genome sequences of the parental species named in the source paper. Expected:\n     gate1 flags the exchanged segment.\n\n  B. PUBLISHED INTRA-SPECIES REASSORTANTS. Same, but both parents are the same ICTV\n     species. Expected: gate1 CANNOT see these -- see "known blind spot" below. This\n     class exists to measure the blind spot, not to pass.\n\n  C. TRUE NEGATIVES. Real, unmodified isolates: all three segments from one animal.\n     Expected: no discordance. This is the class that can produce false positives, and\n     without it a "100% detection rate" would be meaningless.\n\n  D. SYNTHETIC INTER-SPECIES SWAPS. Constructed cross-species exchanges spanning every\n     segment position (S, M and L donated in turn) and a range of parental distances.\n     Not from any paper -- these exist to measure detection across a wider sweep than\n     the published set covers, and to check the detector names the RIGHT segment.\n\n  E. ADVERSARIAL. Junk, scrambled and truncated input. Expected: rejected at gate0 or\n     otherwise handled, never silently scored as a confident reassortant.\n\nPROVENANCE AND HONESTY\n----------------------\nClass A and B candidates are RECONSTRUCTIONS OF PUBLISHED CONSTELLATIONS, not the\npublished reassortant clones themselves. The papers report which parental strains were\ncrossed and which segment was exchanged; this harness rebuilds that genotype from the\nparental sequences in all_hanta/. Where the paper\'s exact parental strain is present in\nthe dataset it is used and named in the output (`parents_are_exact_published_strains`);\nwhere only the species is available, a representative isolate of that species is used\nand the row says so. No sequence here is invented.\n\nKNOWN BLIND SPOT (measured by class B, not hidden by it)\n--------------------------------------------------------\ngate1 detects reassortment by assigning each segment to its nearest reference SPECIES\nby protein k-mer profile and looking for disagreement. When both parents belong to the\nsame species, all three segments assign to that same species and gate1 reports\n"concordant" -- correctly, on its own terms, and uselessly for that event class.\nIntra-species reassortment is what gate4\'s per-segment phylogenetics exists to catch.\n\nGATE 4 IS NOT EXERCISED HERE\n----------------------------\ngate4 needs mafft and iqtree. Neither is installed in the environment this harness was\nwritten in, and substituting fake binaries would produce trees from random numbers --\nwhich would not validate anything. gate4 is therefore skipped (via a comparator\nthreshold that makes it return "insufficient_comparators" without running), and every\nverdict below is a verdict-with-gate4-withheld. Run with --with-phylogeny once real\nbinaries are on PATH to lift this.\n\nUsage:\n    python validate_reassortment_detector.py\n    python validate_reassortment_detector.py --json validation_report.json\n'
 
 ###############################################################################
@@ -8554,32 +8544,6 @@ def summarise_groups(scored_groups: Dict[str, List[Dict[str, Any]]]) -> Dict[str
     return summary
 
 
-def _discrimination_main(argv: Optional[Sequence[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description=_DISCRIMINATION_MODULE_DOC)
-    parser.add_argument("--reference-input", default=".",
-                        help="Package root containing all_hanta/ncbi_dataset/data")
-    parser.add_argument("--json", help="Write the full scored panel to this path")
-    parser.add_argument("--seed", type=int, default=RPI_DISCRIMINATION_SEED)
-    args = parser.parse_args(argv)
-
-    reference = rd.load_reference_data(Path(args.reference_input) / "all_hanta")
-    precomputed = rd._build_precomputed(reference)
-    panel = build_discrimination_panel(reference, seed=args.seed)
-
-    scored = {name: score_cases(reference, precomputed, cases)
-             for name, cases in panel.items()}
-    summary = summarise_groups(scored)
-
-    print(json.dumps(summary, indent=2, default=str))
-
-    if args.json:
-        payload = {"seed": args.seed, "summary": summary, "groups": scored}
-        Path(args.json).write_text(
-            json.dumps(rd._json_safe(payload), indent=2, default=str, allow_nan=False),
-            encoding="utf-8")
-    return 0
-
-
 # ---------------------------------------------------------------------------
 # Tests
 #
@@ -9561,7 +9525,7 @@ def _validate_main(argv=None) -> int:
 
 
 
-COMMANDS = ("run", "validate", "calibrate", "score", "diagnose-e", "diagnose-gate0")
+COMMANDS = ("run", "validate", "calibrate", "score")
 
 
 class PipelineStageError(RuntimeError):
@@ -9666,132 +9630,6 @@ def _parse_run_args(argv: Sequence[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-E_THRESHOLD = 0.5  # chosen after inspecting the distribution below -- see printed histogram
-
-
-def _diagnose_e_main(argv: Optional[Sequence[str]] = None) -> None:
-    """Standalone diagnostic (WS4 Task 13/14, PROJECT-STATE.md section 7c).
-
-    Loads an already-generated discrimination panel JSON (does NOT regenerate it),
-    stratifies groups.c_real_positive by rpi_e_total, and re-runs
-    stats.compare_groups for reals(E~1) vs b1 only -- to check whether
-    the reals-vs-b1 tie reported by evaluate_pass_criterion is driven by the
-    published inter-species lab crosses (which carry a near-zero Factor E
-    ecological prior) diluting an otherwise-intra-species real-positive panel.
-
-    Pure read-and-recompute: does not modify any scoring logic, only calls
-    the public compare_groups().
-    """
-    argv = list(sys.argv[1:] if argv is None else argv)
-    path = argv[0] if argv else "output/discrimination_scratch/discrimination_panel.json"
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    groups = data["groups"]
-    c_real = groups["c_real_positive"]
-    b1 = groups["b1_within_species_shuffle"]
-
-    scored_real = [row for row in c_real if row.get("rpi_generation") is not None]
-    unscored_real = len(c_real) - len(scored_real)
-
-    e_counts = Counter(row["rpi_e_total"] for row in scored_real)
-    print(f"Loaded: {path}")
-    print(f"c_real_positive: n={len(c_real)}, scored={len(scored_real)}, "
-          f"unscored/junk_sequence={unscored_real}")
-    print()
-    print("rpi_e_total distribution across scored c_real_positive rows:")
-    for value, count in sorted(e_counts.items(), key=lambda kv: kv[0]):
-        print(f"  rpi_e_total = {value!r}: {count} case(s)")
-    print()
-    print(f"Chosen threshold: rpi_e_total >= {E_THRESHOLD} "
-          f"(distribution is bimodal -- 1.0 vs 0.01 -- this threshold falls cleanly "
-          f"in the gap and does not need tuning)")
-    print()
-
-    reals_e1 = [row for row in scored_real if row["rpi_e_total"] >= E_THRESHOLD]
-    reals_e_low = [row for row in scored_real if row["rpi_e_total"] < E_THRESHOLD]
-    print(f"reals(E~1) stratum: n={len(reals_e1)} -- case_ids: "
-          f"{[row['case_id'] for row in reals_e1]}")
-    print(f"reals(E-low) stratum (excluded from this comparison): n={len(reals_e_low)} -- "
-          f"case_ids: {[row['case_id'] for row in reals_e_low]}")
-    print()
-
-    b1_values = [row["rpi_generation"] for row in b1 if row.get("rpi_generation") is not None]
-    reals_e1_values = [row["rpi_generation"] for row in reals_e1]
-
-    result = stats.compare_groups(
-        reals_e1_values, b1_values,
-        "c_real_positive(E>=0.5)", "b1_within_species_shuffle",
-        expect="reals(E~1) ~ b1: same D7 tie-expectation as the unstratified "
-               "reals_vs_b1 comparison, restricted to the intra-species subset of "
-               "reals to check whether Factor E composition (not M_pack/M_pol) drove "
-               "the original result.")
-    result["plausible_tie_not_proven_equivalent"] = (
-        not result["significant_at_alpha_0_05"]
-        or result["cliffs_delta_magnitude"] == "negligible")
-
-    print("compare_groups(reals(E>=0.5), b1) result:")
-    print(json.dumps(result, indent=2))
-
-
-ISOLATE_KEYS = [
-    "t2|Orthohantavirus sinnombreense|202003197",
-    "t2|unclassified Orthohantavirus|msb89863",
-]
-
-
-def _diagnose_gate0_main() -> None:
-    """Read-only diagnostic (roadmap Step 1): why REAL_ORTHO_sinnombreense_005
-    (isolate_key t2|Orthohantavirus sinnombreense|202003197) and
-    REAL_ORTHO_Orthohantavirus_006 (isolate_key t2|unclassified Orthohantavirus|msb89863)
-    hit gate0's junk_sequence verdict in the c_real_positive group.
-
-    Does not modify any scoring logic -- calls the public gate0_check /
-    _build_precomputed / load_reference_data only.
-    """
-    reference = rd.load_reference_data(Path("all_hanta"))
-    precomputed = rd._build_precomputed(reference)
-    by_key = {i.isolate_key: i for i in reference.isolates}
-
-    for key in ISOLATE_KEYS:
-        isolate = by_key.get(key)
-        print("=" * 100)
-        print(f"isolate_key: {key}")
-        if isolate is None:
-            print("  NOT FOUND in reference.isolates")
-            continue
-        print(f"  species_name: {isolate.species_name}")
-        print(f"  s_accession/m/l: {isolate.s_accession} / {isolate.m_accession} / {isolate.l_accession}")
-        print(f"  s/m/l_completeness: {isolate.s_completeness} / {isolate.m_completeness} / {isolate.l_completeness}")
-        print(f"  s/m/l_nt_length: {isolate.s_nt_length} / {isolate.m_nt_length} / {isolate.l_nt_length}")
-        print(f"  triplet_status: {isolate.triplet_status}, has_complete_triplet: {isolate.has_complete_triplet}")
-        print(f"  warnings: {isolate.warnings}")
-
-        genomic = {
-            seg: cal.genomic_sequence(reference, cal.segment_accession(isolate, seg))
-            for seg in ("S", "M", "L")
-        }
-        for seg, seq in genomic.items():
-            print(f"  {seg} genomic length actually loaded: {len(seq) if seq else 'EMPTY/None'}")
-
-        candidate = rd.CandidateInput(
-            candidate_id=key, s_genomic=genomic["S"], m_genomic=genomic["M"], l_genomic=genomic["L"])
-        gate0 = rd.gate0_check(
-            candidate, precomputed["protein_len_ranges"], precomputed["panhandle_consensus"],
-            precomputed["protein_profiles"])
-        print(f"  gate0.passed_structure: {gate0.passed_structure}")
-        print(f"  gate0.passed_identity_floor: {gate0.passed_identity_floor}")
-        print(f"  gate0.best_kmer_identity: {gate0.best_kmer_identity}")
-        print("  gate0.failures:")
-        for f in gate0.failures:
-            print(f"    - {f}")
-        print("  gate0.warnings:")
-        for w in gate0.warnings:
-            print(f"    - {w}")
-        for seg, protein in gate0.orf_proteins.items():
-            print(f"  {seg} longest_orf_protein length: {len(protein)}")
-
-
 def _pipeline_main(argv: Optional[Sequence[str]] = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] in COMMANDS:
@@ -9805,12 +9643,6 @@ def _pipeline_main(argv: Optional[Sequence[str]] = None) -> int:
         return _calibration_main(rest)
     if command == "score":
         return _detector_main(rest)
-    if command == "diagnose-e":
-        _diagnose_e_main(rest)
-        return 0
-    if command == "diagnose-gate0":
-        _diagnose_gate0_main()
-        return 0
     return run(_parse_run_args(rest))
 
 
@@ -9958,18 +9790,6 @@ class MainDispatchTest(unittest.TestCase):
         with mock.patch(__name__ + "._detector_main", return_value=0) as fake_detector:
             exit_code = _pipeline_main(["score", "--reference-input", ".", "--candidate", "x"])
         fake_detector.assert_called_once_with(["--reference-input", ".", "--candidate", "x"])
-        self.assertEqual(exit_code, 0)
-
-    def test_diagnose_e_command_dispatches_with_remaining_args(self):
-        with mock.patch(__name__ + "._diagnose_e_main") as fake_diag:
-            exit_code = _pipeline_main(["diagnose-e", "some/panel.json"])
-        fake_diag.assert_called_once_with(["some/panel.json"])
-        self.assertEqual(exit_code, 0)
-
-    def test_diagnose_gate0_command_dispatches_with_no_args(self):
-        with mock.patch(__name__ + "._diagnose_gate0_main") as fake_diag:
-            exit_code = _pipeline_main(["diagnose-gate0"])
-        fake_diag.assert_called_once_with()
         self.assertEqual(exit_code, 0)
 
 
