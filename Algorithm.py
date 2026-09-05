@@ -231,6 +231,19 @@ def confirm_winners(oracle: Oracle, winners: List[Dict[str, Any]], output_dir: P
     return "attempted: per-winner gate4 fields recorded (errors included, if any)"
 
 
+def _check_no_total_scoring_failure(oracle: "Oracle") -> None:
+    """Raise if every triplet the search actually scored errored -- a systemic failure
+    (bad --reference-input, a factory KeyError on every candidate) must not be reported
+    as a successful run with best fitness 0.0, indistinguishable from a genuine flat
+    landscape. See §7e Finding 10. Never fires on a healthy run, which always has at
+    least one non-errored score."""
+    if oracle.cache and len(oracle.errors) == len(oracle.cache):
+        raise SystemExit(
+            f"GA search aborted: all {len(oracle.cache)} scored triplets errored "
+            "(see oracle.errors) -- refusing to report a flat 0.0 landscape as a "
+            "successful run")
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--reference-input", default="all_hanta")
@@ -257,6 +270,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     result = run_search(pool, oracle.score, args.seed, args.population,
                         args.generations, args.mutation_rate, args.tournament_size,
                         args.elitism, args.plateau, args.diversity)
+    _check_no_total_scoring_failure(oracle)
 
     seen, winners = set(), []
     for triplet, value in result["final_population"]:
@@ -487,6 +501,40 @@ class ConfirmWinnersTest(unittest.TestCase):
             confirm_winners(oracle, winners, Path("/tmp/out"), with_phylogeny=True)
         self.assertEqual(captured_ids, ["ga-confirm-0", "ga-confirm-1", "ga-confirm-2"])
         self.assertEqual(len(set(captured_ids)), len(captured_ids))
+
+
+class TotalScoringFailureGuardTest(unittest.TestCase):
+    """§7e Finding 10: a systemic scoring failure (bad --reference-input, a factory
+    KeyError on every candidate) must abort instead of silently reporting a
+    successful run with best fitness 0.0 -- indistinguishable from a real flat
+    landscape otherwise."""
+
+    def _oracle(self, cache, errors):
+        oracle = Oracle.__new__(Oracle)
+        oracle.cache = cache
+        oracle.errors = errors
+        return oracle
+
+    def test_raises_when_every_scored_triplet_errored(self):
+        oracle = self._oracle(
+            cache={("a", "b", "c"): 0.0, ("d", "e", "f"): 0.0},
+            errors=[(("a", "b", "c"), "KeyError"), (("d", "e", "f"), "KeyError")])
+        with self.assertRaises(SystemExit):
+            _check_no_total_scoring_failure(oracle)
+
+    def test_does_not_raise_with_partial_errors(self):
+        oracle = self._oracle(
+            cache={("a", "b", "c"): 0.5, ("d", "e", "f"): 0.0},
+            errors=[(("d", "e", "f"), "KeyError")])
+        _check_no_total_scoring_failure(oracle)  # must not raise
+
+    def test_does_not_raise_with_no_errors(self):
+        oracle = self._oracle(cache={("a", "b", "c"): 0.5}, errors=[])
+        _check_no_total_scoring_failure(oracle)  # must not raise
+
+    def test_does_not_raise_when_cache_empty(self):
+        oracle = self._oracle(cache={}, errors=[])
+        _check_no_total_scoring_failure(oracle)  # must not raise
 
 
 class OracleTest(unittest.TestCase):
