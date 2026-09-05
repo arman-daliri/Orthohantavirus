@@ -1892,11 +1892,12 @@ def species_consensus_panhandle_window(
     return five if end == "5" else three
 
 
-# (id(reference), species, segment, window) -> consensus window string, plus a
-# ref-pinning dict so a garbage-collected ReferenceData's id can never be reused by an
-# unrelated later one -- see species_consensus_cds_window's docstring.
-_SPECIES_CDS_WINDOW_CACHE: Dict[Tuple[int, str, str, int], str] = {}
-_SPECIES_CDS_WINDOW_CACHE_REFS: Dict[int, "ReferenceData"] = {}
+# (id(reference), species, segment, window) -> (reference, consensus window string).
+# Storing `reference` alongside the result pins a strong reference to it for the life of
+# the cache entry, the same way _REFERENCE_KMER_MATRIX_CACHE pins its list -- so a
+# garbage-collected ReferenceData's id can never be reused by an unrelated later one. See
+# species_consensus_cds_window's docstring.
+_SPECIES_CDS_WINDOW_CACHE: Dict[Tuple[int, str, str, int], Tuple["ReferenceData", str]] = {}
 
 
 def species_consensus_cds_window(
@@ -1931,11 +1932,10 @@ def species_consensus_cds_window(
     key = (id(reference), species, segment, window)
     cached = _SPECIES_CDS_WINDOW_CACHE.get(key)
     if cached is not None:
-        return cached
-    _SPECIES_CDS_WINDOW_CACHE_REFS[id(reference)] = reference
+        return cached[1]
     windows = _wild_species_cds_windows(reference, species, segment, window)
     result = "" if not windows else empirical_panhandle_consensus(windows, n=window)[0]
-    _SPECIES_CDS_WINDOW_CACHE[key] = result
+    _SPECIES_CDS_WINDOW_CACHE[key] = (reference, result)
     return result
 
 

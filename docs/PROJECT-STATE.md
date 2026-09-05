@@ -8,19 +8,36 @@ A fresh session should need this file, `CLAUDE.md`, and the two documents in
 
 ## 1. Where things stand right now
 
+**This table is a point-in-time snapshot (last updated 2026-09-05, branch
+`05-module-consolidation`). If it looks stale against `git log --oneline -20`, trust the
+log — see `docs/CLAUDE.md`'s "RESUME HERE" note.**
+
 | | |
 |---|---|
-| **Branch** | `04-rpi-fitness-validation`, pushed, tracking `origin/` |
-| **HEAD** | WS4 Task 13/14's `reals_vs_b1` gap diagnosed AND the Factor E isolate-level fix landed (2026-08-30) — see the "Factor E isolate-level fix" subsection in section 7 below; `overall_ranking_supported` is now **True**, with a caveat, not an unqualified pass |
-| **`main`** | `e7d9f44`, pushed (was 4 commits behind at session start) |
-| **Test suite** | **237 tests** (`reassortment_detector`) + **39 tests** (`rpi_calibration`) + **18 tests** (`rpi_discrimination`) + **12 tests** (`rpi_discrimination_stats`), all pass |
-| **Validation harness** | **PASS** — sensitivity 19/19, specificity 27/27, blind spot 5/5, adversarial 4/4 (unchanged since Task 12) |
-| **Working tree** | `My Library.csv` restored to `docs/` (2026-09-04, `Mydocs/` cleanup) |
-| **Unpushed** | `3947f1c`..`1e0b9aa` — WS3.1 through WS4 Task 13/14 (in progress), committed locally, **not pushed** |
+| **Branch** | `05-module-consolidation` |
+| **HEAD** | `rpi_core.py` is the single consolidated module (six former files merged, see
+README's "Module layout"); `Algorithm.py`'s GA search over segment-donor triplets is
+implemented and uses the canonical `rc.usable_pool` after the §7e Finding 1 fix
+(commit `105bd5c`); §7d's GA-plateau structural-ceiling finding stands; §7e's remaining
+findings (2–11) are open proposals, not yet fixed |
+| **Test suite** | **328 tests**, `python -m unittest rpi_core` — all pass (measured
+2026-09-05; verify with the same command before trusting this number again, it changes
+every session) |
+| **Validation harness** | **PASS** — sensitivity 19/19, specificity 27/27, blind spot
+5/5, adversarial 4/4 (unchanged since Task 12) |
+| **Working tree** (this session's start) | `rpi_core.py` had an uncommitted
+`_SPECIES_CDS_WINDOW_CACHE` refactor (correctness fix, ref-pinning consolidated into one
+dict); `CLAUDE.md`/`PUBLIC_RELEASE.md` had an uncommitted move to `docs/`; `GA/` (old
+`GA.md` + PDF) had an uncommitted deletion — none of this was this session's work (see
+§7e Findings 6–8); five `output/ga_search_*` run directories from §7d were untracked.
+All of the above committed together as this session's baseline commit, tagged
+`pre-figures-baseline`. |
 
-**Current goal:** make the Reassortment Plausibility Index (RPI) work end-to-end and
-demonstrate it separates real reassortants from shuffled fakes, reproducibly on Windows
-and Linux, then hand a scoring function to a downstream team.
+**Current goal:** fix §7e Finding 2 (`--with-phylogeny` gate4 TypeError reported as
+success), then produce before/after phylogenetic-tree figures and a gate-4 confirmation
+pass over the GA search's winners, from existing committed outputs only — no new scoring,
+no gate logic changes. Full task list: this session's chat request, recorded here for the
+next session.
 
 ---
 
