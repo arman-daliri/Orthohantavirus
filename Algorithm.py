@@ -208,12 +208,12 @@ def confirm_winners(oracle: Oracle, winners: List[Dict[str, Any]], output_dir: P
     error_count = 0
     checkpoint = checkpoint_path.open("a", encoding="utf-8") if checkpoint_path else None
     try:
-        for winner in winners:
+        for idx, winner in enumerate(winners):
             triplet = tuple(winner["triplet"])
             sources = {"S": oracle.by_key[triplet[0]], "M": oracle.by_key[triplet[1]],
                        "L": oracle.by_key[triplet[2]]}
             try:
-                row = rc.score_candidate(oracle.candidate_factory("ga-confirm", sources),
+                row = rc.score_candidate(oracle.candidate_factory(f"ga-confirm-{idx}", sources),
                                          oracle.reference, oracle.precomputed, args)
                 winner["gate4_phylo_status"] = row.get("gate4_phylo_status")
                 winner["gate4_reassortment_call"] = row.get("gate4_reassortment_call")
@@ -464,6 +464,29 @@ class ConfirmWinnersTest(unittest.TestCase):
                                             "gate4_reassortment_call": "no_conflict"}):
             result = confirm_winners(oracle, winners, Path("/tmp/out"), with_phylogeny=True)
         self.assertIn("attempted", result)
+
+    def test_each_winner_gets_a_distinct_candidate_id(self):
+        """Finding 9 (2026-09-05 review): every winner reused candidate_id="ga-confirm",
+        so with --with-phylogeny all winners wrote gate4 artifacts to the same directory
+        -- only the last survived and none could be attributed. Each winner must get its
+        own id so per-winner gate4 trees don't collide."""
+        oracle, winners = self._oracle_and_winners()
+        winners.append({"triplet": ["a", "b", "c"], "fitness": 0.4})
+        winners.append({"triplet": ["a", "b", "c"], "fitness": 0.3})
+        captured_ids = []
+
+        def fake_candidate_factory(cid, sources):
+            captured_ids.append(cid)
+            return {"id": cid, "src": sources}
+
+        oracle.candidate_factory = fake_candidate_factory
+        with mock.patch.object(ph, "resolve_binary", side_effect=lambda e, n: f"/bin/{n}"), \
+             mock.patch.object(rc, "score_candidate",
+                               return_value={"gate4_phylo_status": "ok",
+                                            "gate4_reassortment_call": "no_conflict"}):
+            confirm_winners(oracle, winners, Path("/tmp/out"), with_phylogeny=True)
+        self.assertEqual(captured_ids, ["ga-confirm-0", "ga-confirm-1", "ga-confirm-2"])
+        self.assertEqual(len(set(captured_ids)), len(captured_ids))
 
 
 class OracleTest(unittest.TestCase):
