@@ -800,21 +800,102 @@ part of §7d's 9.5x speedup, so this is a decision, not an obvious win.
   so the reported "best" (taken from the final population) can be worse than the best
   actually scored (still sitting in `oracle.cache`). Track best-ever, or reject `< 1`.
 
-### ⚪ FINDINGS 6–8 — the uncommitted `CLAUDE.md` / `PUBLIC_RELEASE.md` move (NOT this session's work, NOT touched)
+### ⚪ FINDINGS 6–8 — the `CLAUDE.md` / `PUBLIC_RELEASE.md` move — RESOLVED 2026-09-05, committed on explicit instruction
 
-The working tree deletes root `CLAUDE.md` / `PUBLIC_RELEASE.md` and adds copies under
-`docs/`. **Claude Code auto-loads `CLAUDE.md` from the repo root, not from `docs/`** — so
-as committed this would silently stop applying the repo policy it carries (stays private,
-never rewrite history / force-push, the assert-on-shipped-output note) to every future
-session. `docs/PUBLIC_RELEASE.md`'s own COPY list (lines 48, 58) and `docs/PROJECT-STATE.md:4`
-still name both files at the repo root, so a release built by literally copying that list
-would omit them. Separately, `Algorithm.py` appears in **neither** the COPY nor the NEVER
-list, and in no README module map — an unlisted file, which §8's explicit-file-list rule
-says must be resolved rather than guessed.
+Previously: the working tree had this move (root `CLAUDE.md`/`PUBLIC_RELEASE.md` deleted,
+copies added under `docs/`) sitting uncommitted, flagged here as needing an explicit
+decision rather than being committed or reverted autonomously — **Claude Code auto-loads
+`CLAUDE.md` from the repo root, not from `docs/`**, so committing it as-is would silently
+stop applying the repo policy it carries to every future session.
 
-**These changes were already in the working tree at session start and are NOT mine.
-Deliberately left untouched** — reverting or committing someone else's uncommitted work
-unasked is not a call to make autonomously. Needs an explicit decision.
+**Resolution:** the user's session-start instruction for this session's work explicitly
+said "commit everything" as step 1 (baseline, commit `7624ad6`, tag `pre-figures-baseline`)
+— that is the explicit decision this finding was waiting on. Committed as directed.
+
+**Still open, not addressed by that commit:** `docs/PUBLIC_RELEASE.md`'s own COPY list
+(lines 48, 58) and this file's own line 4 still name both files at the repo root, so a
+release built by literally copying that list would omit them — needs a follow-up edit to
+`docs/PUBLIC_RELEASE.md` and this file's header, out of scope for this session's four-step
+plan. `Algorithm.py` and `figures.py` both remain unlisted in the COPY/NEVER lists and in
+no README module map — same open item, now two files instead of one.
+
+## 7f. Post-§7e four-step session, 2026-09-05 (branch `05-module-consolidation`)
+
+Explicit instruction, no input-contract refactor (that stays parked per the decision
+recorded at the top of §7e's introduction — stages remain independent, no stage reads
+another's output file, per the 2026-08-13 three-stage-split spec §4).
+
+**Step 1 — baseline.** Commit `7624ad6`, tag `pre-figures-baseline`. Committed the
+working tree's pre-existing uncommitted state (§7e Findings 6–8's `CLAUDE.md` move, the
+`rpi_core.py` cache-ref-pinning fix, five untracked `output/ga_search_*` directories) and
+refreshed this file's §1. Full suite verified green first: 328 tests
+(`python -m unittest rpi_core`).
+
+**Step 2 — §7e Finding 2 fixed.** Commit `3ab162c`. `confirm_winners` hardcoded
+`mafft_bin=None, iqtree_bin=None`; fixed to resolve real paths via `ph.resolve_binary`
+(same function Stage 2 uses). **This turned out to be load-bearing, not cosmetic:**
+verified directly (see step 4) that `subprocess.run(["mafft", ...])` fails outright on
+Windows (`mafft` is a `.BAT`; Windows will not exec a bare bat name without a resolved
+absolute path or `shell=True`) — so the bare-string form `rc._score_args` uses would
+*also* have failed here had confirm_winners copied it verbatim; resolving through
+`ph.resolve_binary` was necessary, not just cleaner. Test-first, 5 new cases (then 4 more
+in step 4). All other §7e findings (1, 3–11) intentionally untouched.
+
+**Step 3 — before/after figures.** Commit `96b4e82`. `figures.py` (new), reading only
+committed Stage 2 outputs (`output/phylogenetics*/…/tree.treefile`), pruned to a local
+neighborhood (user-confirmed choice — several species trees run 200–250+ taxa) for
+legibility. BEFORE: all 7 unique `supported_reassortment_candidate` isolates, reassortant
+tip highlighted + connected across S/M/L, discordant segment colored/bolded. AFTER: the
+10 winners in `output/ga_search_corrected_pool_long/seed_20260904.json` (the longer of
+the two corrected-pool §7e-Finding-1 runs — both plateau at the identical 0.4717 ceiling
+but land on different tied triplets, confirming §7d's structural-ceiling-flatness finding
+rather than contradicting it), each donor's own tree rendered, colored by slot, captioned
+"in-silico combination... no new sequence is created or synthesized" per instruction.
+Added `matplotlib>=3.9` to `environment.yml`/`requirements-pip.txt` (figures only, not on
+the scored RPI path). 10 new tests in `figures.py`, plus a real-data integration smoke
+test. Output committed under `output/figures/{before,after}/` plus
+`output/figures/after/ga_winners_parents.csv` (candidate → S/M/L parent isolate/species/
+country/host).
+
+**Step 4 — gate4 confirmation of the GA winners — IN PROGRESS, not yet committed.**
+Commit `0294896` added `confirm_winners(..., checkpoint_path=...)` (test-first, 4 cases):
+appends each winner's gate4 result to a JSONL file as it completes, so a crash mid-run
+loses nothing already confirmed. Necessary because this run is genuinely expensive, not
+because it hangs — **verified real**: a bare 3-sequence MAFFT alignment via the resolved
+`tools/mafft-win/mafft.BAT` path completes in ~5s, but 9 of the 10 winners implicate
+`Orthohantavirus hantanense` alone, whose S/L comparator trees run 200–250 taxa, and
+IQ-TREE's ultrafast bootstrap enforces a minimum of 1000 replicates per segment per
+winner — a single real call was still running after 25+ minutes before being killed
+purely to diagnose (confirmed via `Get-CimInstance`/`Get-Process`: real child processes,
+non-trivial but low cumulative CPU, consistent with genuine large-alignment IQ-TREE work
+under Windows Defender's real-time-scan overhead on every spawned subprocess, not a
+deadlock).
+
+Launched detached (`Start-Process`, hidden window, `SetThreadExecutionState` to block
+Windows sleep for the process's lifetime) at 2026-09-05T13:52:39Z:
+- Driver: ad hoc, not committed (one-off orchestration, not product code) — reconstructs
+  `Oracle` exactly as `Algorithm.main()` does, loads the **already-committed**
+  `ga_search_corrected_pool_long/seed_20260904.json` winners (no GA re-search), calls
+  `confirm_winners(..., with_phylogeny=True, checkpoint_path=...)`.
+- Checkpoint: `output/ga_search_corrected_pool_long/gate4_confirmation_checkpoint.jsonl`
+  (one line per winner as it finishes).
+- Final: `output/ga_search_corrected_pool_long/gate4_confirmation.json`, written once at
+  the end (same shape as the checkpoint's lines, plus the summary `confirmation` string).
+- Log: `output/ga_search_corrected_pool_long/gate4_confirmation.log{,.stdout,.stderr}`.
+
+**Binding reporting rule for this run's results (set by the user, applies to whoever
+writes up step 4's outcome next):** gate4 verdicts are reported verbatim per winner,
+`no_conflict` and `insufficient_comparators` included. 9 of 10 winners are
+within-hantanense combinations — **gate4 (the tree-based detector) is exactly the
+instrument that CAN see intra-species reassortment** (unlike RPI's own Gate 1, whose
+blind spot there is structural and separately documented above) — so `no_conflict` on
+those 9 is a real, meaningful result if that is what comes back, not an instrument
+limitation to explain away. No re-running for a "better" result, no softening language.
+
+**Next session action:** check `gate4_confirmation.json` / the checkpoint file for
+completion, review `gate4_confirmation.log`, write up the verdicts into this section
+verbatim per the rule above, and commit `output/ga_search_corrected_pool_long/gate4_*`
+as this session's step 4 commit.
 
 ---
 
