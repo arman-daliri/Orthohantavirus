@@ -31,7 +31,7 @@ python rpi_core.py calibrate             # rebuild data/rpi_calibration.json dir
 python rpi_core.py calibrate --stability # branch the calibration across seeds x windows
 python rpi_core.py validate --json output/validation/validation_report.json
 python rpi_core.py score --reference-input . --candidate id:s.fasta,m.fasta,l.fasta
-python -m unittest rpi_core              # full suite, 322 tests
+python -m unittest rpi_core              # full suite, 326 tests
 ```
 
 `run` reuses the pinned calibration artifact (`data/rpi_calibration.json`) unless it is
