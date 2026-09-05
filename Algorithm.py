@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 from unittest import mock
 
+import phylogeny as ph
 import rpi_core as rc
 
 Triplet = Tuple[str, str, str]
@@ -188,9 +189,15 @@ def confirm_winners(oracle: Oracle, winners: List[Dict[str, Any]], output_dir: P
     if not with_phylogeny:
         return ("deferred: full-gate confirmation not requested "
                 "(re-run with --with-phylogeny on a machine with mafft/iqtree)")
-    args = argparse.Namespace(output=str(output_dir), mafft_bin=None, iqtree_bin=None,
+    try:
+        mafft_bin = ph.resolve_binary(None, "mafft")
+        iqtree_bin = ph.resolve_binary(None, "iqtree3")
+    except SystemExit as exc:
+        return f"failed: could not resolve mafft/iqtree3 -- {exc}"
+    args = argparse.Namespace(output=str(output_dir), mafft_bin=mafft_bin, iqtree_bin=iqtree_bin,
                               phylo_min_taxa=4, bootstrap=1000,
                               min_bootstrap_support=95.0, phylo_seed=42, phylo_threads=1)
+    error_count = 0
     for winner in winners:
         triplet = tuple(winner["triplet"])
         sources = {"S": oracle.by_key[triplet[0]], "M": oracle.by_key[triplet[1]],
@@ -202,6 +209,9 @@ def confirm_winners(oracle: Oracle, winners: List[Dict[str, Any]], output_dir: P
             winner["gate4_reassortment_call"] = row.get("gate4_reassortment_call")
         except Exception as exc:  # binaries missing etc. -- recorded, never hidden
             winner["gate4_error"] = str(exc)
+            error_count += 1
+    if winners and error_count == len(winners):
+        return "failed: gate4 errored for every winner (see per-winner gate4_error fields)"
     return "attempted: per-winner gate4 fields recorded (errors included, if any)"
 
 
@@ -326,6 +336,69 @@ class GaSearchTest(unittest.TestCase):
         alg_pool = set(build_pool(reference, reserved))
         canonical = set(i.isolate_key for i in rc.usable_pool(reference, reserved))
         self.assertEqual(alg_pool, canonical)
+
+
+class ConfirmWinnersTest(unittest.TestCase):
+    """§7e Finding 2: confirm_winners used to hardcode mafft_bin=None, iqtree_bin=None,
+    so gate4_check -> run_mafft -> subprocess.run([None, ...]) raised TypeError for every
+    winner, while the function still returned the same "attempted" string it returns on
+    a real, working run -- a success message over a value that failed (the §8 defect
+    shape). These tests pin the real behavior: binaries are actually resolved, and total
+    failure to resolve or score is reported as failure, not as "attempted"."""
+
+    def _oracle_and_winners(self):
+        from types import SimpleNamespace as NS
+        reference = NS(isolates=[NS(isolate_key=k, has_complete_triplet=True,
+                                    is_lab_derived=False, is_vaccine_strain=False)
+                                 for k in ("a", "b", "c")])
+        oracle = Oracle(reference, precomputed={}, args=object(),
+                        candidate_factory=lambda cid, sources: {"id": cid, "src": sources})
+        winners = [{"triplet": ["a", "b", "c"], "fitness": 0.5}]
+        return oracle, winners
+
+    def test_not_requested_defers_without_touching_binaries(self):
+        oracle, winners = self._oracle_and_winners()
+        with mock.patch.object(ph, "resolve_binary") as spy:
+            result = confirm_winners(oracle, winners, Path("/tmp/out"), with_phylogeny=False)
+        spy.assert_not_called()
+        self.assertIn("deferred", result)
+
+    def test_missing_binaries_reports_failure_not_attempted(self):
+        oracle, winners = self._oracle_and_winners()
+        with mock.patch.object(ph, "resolve_binary", side_effect=SystemExit("no mafft")):
+            result = confirm_winners(oracle, winners, Path("/tmp/out"), with_phylogeny=True)
+        self.assertIn("failed", result)
+        self.assertNotIn("attempted", result)
+
+    def test_resolved_binaries_are_threaded_into_score_candidate_args(self):
+        oracle, winners = self._oracle_and_winners()
+        captured = {}
+
+        def fake_resolve(explicit, name):
+            return f"/resolved/{name}"
+
+        def fake_score_candidate(candidate, reference, precomputed, args):
+            captured["mafft_bin"] = args.mafft_bin
+            captured["iqtree_bin"] = args.iqtree_bin
+            return {"gate4_phylo_status": "ok", "gate4_reassortment_call": "no_conflict"}
+
+        with mock.patch.object(ph, "resolve_binary", side_effect=fake_resolve), \
+             mock.patch.object(rc, "score_candidate", side_effect=fake_score_candidate):
+            result = confirm_winners(oracle, winners, Path("/tmp/out"), with_phylogeny=True)
+
+        self.assertEqual(captured["mafft_bin"], "/resolved/mafft")
+        self.assertEqual(captured["iqtree_bin"], "/resolved/iqtree3")
+        self.assertIn("attempted", result)
+        self.assertEqual(winners[0]["gate4_phylo_status"], "ok")
+
+    def test_every_winner_erroring_reports_failure_not_attempted(self):
+        oracle, winners = self._oracle_and_winners()
+        with mock.patch.object(ph, "resolve_binary", side_effect=lambda e, n: f"/bin/{n}"), \
+             mock.patch.object(rc, "score_candidate", side_effect=RuntimeError("boom")):
+            result = confirm_winners(oracle, winners, Path("/tmp/out"), with_phylogeny=True)
+        self.assertIn("failed", result)
+        self.assertNotIn("attempted", result)
+        self.assertIn("boom", winners[0]["gate4_error"])
 
 
 class OracleTest(unittest.TestCase):
