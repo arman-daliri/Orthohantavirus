@@ -11,6 +11,7 @@ material. rpi_core is treated as a frozen library: imported, never modified.
 """
 
 import argparse
+import csv
 import json
 import random
 import statistics
@@ -244,6 +245,46 @@ def _check_no_total_scoring_failure(oracle: "Oracle") -> None:
             "successful run")
 
 
+def dump_scored_table(oracle: "Oracle", output_dir: Path, seed: int) -> Tuple[Path, Path, int]:
+    """Write every unique triplet the search actually scored (not just the top --top
+    winners) to all_scored_seed_<seed>.jsonl and .csv -- the full RPI row (E, M_pack,
+    M_pol, K, rpi_generation, status flags) oracle.score() already computed and cached,
+    for candidates that never made the final population. Row order follows
+    oracle.cache's insertion order (first-scored first), which is deterministic given a
+    fixed seed since the search itself is (see GaSearchTest.test_same_seed_produces_
+    identical_run). Does not read or write anything scoring/selection depends on --
+    purely an additional view onto oracle.cache/oracle.rows after the search is done."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    records: List[Dict[str, Any]] = []
+    for triplet, fitness in oracle.cache.items():
+        row: Dict[str, Any] = {"triplet_s": triplet[0], "triplet_m": triplet[1],
+                               "triplet_l": triplet[2], "fitness": fitness}
+        row.update(oracle.rows.get(triplet, {}))
+        records.append(row)
+
+    jsonl_path = output_dir / f"all_scored_seed_{seed}.jsonl"
+    with jsonl_path.open("w", encoding="utf-8") as f:
+        for row in records:
+            f.write(json.dumps(row, default=str) + "\n")
+
+    fieldnames: List[str] = []
+    seen_fields = set()
+    for row in records:
+        for key in row:
+            if key not in seen_fields:
+                seen_fields.add(key)
+                fieldnames.append(key)
+    csv_path = output_dir / f"all_scored_seed_{seed}.csv"
+    with csv_path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, restval="")
+        writer.writeheader()
+        for row in records:
+            writer.writerow(row)
+
+    return jsonl_path, csv_path, len(records)
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--reference-input", default="all_hanta")
@@ -258,6 +299,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--top", type=int, default=10)
     parser.add_argument("--diversity", action="store_true")
     parser.add_argument("--with-phylogeny", action="store_true")
+    parser.add_argument("--dump-scored", action="store_true",
+                        help="write every unique triplet the search scored (not just "
+                             "the top --top winners) to "
+                             "all_scored_seed_<seed>.{jsonl,csv} in --output")
     args = parser.parse_args(argv)
 
     reference = rc.load_reference_data(Path(args.reference_input))
@@ -271,6 +316,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         args.generations, args.mutation_rate, args.tournament_size,
                         args.elitism, args.plateau, args.diversity)
     _check_no_total_scoring_failure(oracle)
+
+    if args.dump_scored:
+        jsonl_path, csv_path, n_scored = dump_scored_table(oracle, args.output, args.seed)
+        print(f"wrote {n_scored} scored triplet(s) to {jsonl_path} and {csv_path}")
 
     seen, winners = set(), []
     for triplet, value in result["final_population"]:
@@ -501,6 +550,48 @@ class ConfirmWinnersTest(unittest.TestCase):
             confirm_winners(oracle, winners, Path("/tmp/out"), with_phylogeny=True)
         self.assertEqual(captured_ids, ["ga-confirm-0", "ga-confirm-1", "ga-confirm-2"])
         self.assertEqual(len(set(captured_ids)), len(captured_ids))
+
+
+class DumpScoredTableTest(unittest.TestCase):
+    """--dump-scored writes every unique scored triplet (not just winners) alongside
+    the existing seed_<N>.json output. Scoring, selection, and existing outputs must
+    stay unchanged -- this only adds a read of oracle.cache/oracle.rows after the
+    search is done."""
+
+    def test_dump_file_exists_parses_and_row_count_matches_unique_triplets_scored(self):
+        oracle = Oracle.__new__(Oracle)
+        oracle.cache = {
+            ("a", "b", "c"): 0.5,
+            ("d", "e", "f"): 0.0,
+            ("g", "h", "i"): 0.2,
+        }
+        oracle.rows = {
+            ("a", "b", "c"): {"verdict": "scored", "rpi_generation": 0.5},
+            ("d", "e", "f"): {"verdict": "scoring_error", "scoring_error": "boom"},
+            # ("g", "h", "i") deliberately has no rows entry -- must not crash.
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp)
+            jsonl_path, csv_path, n = dump_scored_table(oracle, out_dir, seed=99)
+
+            self.assertEqual(n, 3)
+            self.assertTrue(jsonl_path.exists())
+            self.assertTrue(csv_path.exists())
+
+            lines = jsonl_path.read_text(encoding="utf-8").splitlines()
+            self.assertEqual(len(lines), 3)
+            parsed = [json.loads(line) for line in lines]
+            self.assertEqual(
+                [(r["triplet_s"], r["triplet_m"], r["triplet_l"]) for r in parsed],
+                [("a", "b", "c"), ("d", "e", "f"), ("g", "h", "i")])
+            self.assertEqual(parsed[0]["verdict"], "scored")
+            self.assertEqual(parsed[1]["scoring_error"], "boom")
+            self.assertEqual(parsed[2]["fitness"], 0.2)
+
+            with csv_path.open(encoding="utf-8", newline="") as f:
+                csv_rows = list(csv.DictReader(f))
+            self.assertEqual(len(csv_rows), 3)
+            self.assertEqual(csv_rows[0]["fitness"], "0.5")
 
 
 class TotalScoringFailureGuardTest(unittest.TestCase):

@@ -94,6 +94,36 @@ Session work-logs (`notes_*.md`, `suggesting.md`, the consolidation generator sc
 
 ---
 
+## Combinatorial search (`Algorithm.py`)
+
+**Purpose.** A population-based genetic-algorithm search over segment-donor triplets:
+an individual is three *existing* reference isolates assigned to the S, M and L slots,
+scored by `rpi_core.py`'s already-validated RPI scorer (treated as a frozen library,
+never modified). No sequence is created, edited, or synthesized anywhere in this
+module — the search only recombines accessioned reference material, retrospectively,
+over public NCBI data.
+
+**How to run:**
+
+```bash
+python Algorithm.py --reference-input . --output output/ga_search
+python Algorithm.py --generations 300 --plateau 10000 --output output/ga_search_long
+python Algorithm.py --with-phylogeny --output output/ga_search   # gate4-confirm the winners too (needs mafft/iqtree)
+python Algorithm.py --dump-scored --output output/ga_search      # also dump every scored triplet, not just the winners
+python -m unittest Algorithm                                     # full suite
+```
+
+**Output.** `seed_<N>.json` holds the run config, the fitness log, and the top `--top`
+winners (default 10) with their full RPI row and gate4 confirmation status if
+`--with-phylogeny` was passed. `--dump-scored` additionally writes
+`all_scored_seed_<N>.jsonl` and `.csv` — every unique triplet the search actually
+scored (not just the winners), one row per triplet, with the same RPI fields
+(`rpi_generation`, `rpi_m_pack`, `rpi_m_pol`, `rpi_e_total`, `rpi_k_stratum`, `verdict`,
+Gate 1 fields) plus `fitness` and the `S`/`M`/`L` donor isolate keys. Purely additive:
+scoring, selection, and every existing output are unchanged by `--dump-scored`.
+
+---
+
 ## Step 0 — Download the data
 
 ```bash
@@ -594,6 +624,8 @@ alignment-free proxy — they are not PED values, and `ortho_summary.json` resta
 | `ortho_reassortment_table.csv` *(Stage 2, `phylogeny.py`)* | one row per candidate isolate | Real per-segment tree diagnostics, RF distances, bootstrap-gated `reassortment_call` — join on `isolate_key` with `ortho_risk_table.csv`, which is always phylo-blind |
 | `phylogenetics/<species>/<segment>/` *(Stage 2, `phylogeny.py`)* | — | MAFFT alignment + IQ-TREE outputs per species/segment, for inspection or reuse (`--phylo-scope=species`) |
 | `phylogenetics_phylogroup/<phylogroup>/<segment>/` *(Stage 2, `phylogeny.py`)* | — | Same, grouped by reservoir-host phylogroup instead of species, spanning every species that shares one (`--phylo-scope=phylogroup`) |
+| `ga_search*/seed_<N>.json` *(`Algorithm.py`)* | top 10 winners | Combinatorial-search run config, fitness log, and the top segment-donor triplets found, with gate4 confirmation status if `--with-phylogeny` was passed |
+| `ga_search*/all_scored_seed_<N>.{jsonl,csv}` *(`Algorithm.py --dump-scored`)* | one row per unique triplet scored | Every triplet the search evaluated, not just the winners — full RPI row (`rpi_generation`, `rpi_m_pack`, `rpi_m_pol`, `rpi_e_total`, `rpi_k_stratum`, `verdict`, Gate 1 fields) plus `fitness` and the S/M/L donor isolate keys |
 
 All tables are plain CSV (UTF-8, LF line endings). The columns `species_taxid`, `observed_taxid`,
 `host_taxid`, and `year` are all-digit strings by design — they are identifiers, not quantities,
