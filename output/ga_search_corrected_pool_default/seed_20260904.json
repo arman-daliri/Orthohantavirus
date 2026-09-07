@@ -1,7 +1,7 @@
 {
   "config": {
-    "reference_input": "all_hanta",
-    "output": "output/ga_search_corrected_pool_default",
+    "reference_input": ".",
+    "output": "C:\\git-projects\\Orthohantavirus\\output_rerun_20260906\\ga_search_corrected_pool_default",
     "seed": 20260904,
     "population": 150,
     "generations": 100,

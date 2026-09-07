@@ -897,6 +897,247 @@ completion, review `gate4_confirmation.log`, write up the verdicts into this sec
 verbatim per the rule above, and commit `output/ga_search_corrected_pool_long/gate4_*`
 as this session's step 4 commit.
 
+## 7g. Overnight full-pipeline rerun and reconciliation, 2026-09-06/07 (branch `05-module-consolidation`)
+
+User request: rerun the full pipeline (`all_hanta.py` → `phylogeny.py` →
+`rpi_core.py`/`Algorithm.py`) from scratch into an isolated folder, reconcile against
+committed `output/`, promote, illustrate the phylogeny trees, survey redundant
+artifacts (no deletion), and report. Design:
+`docs/superpowers/specs/2026-09-06-overnight-full-pipeline-rerun-design.md`. Plan:
+`docs/superpowers/plans/2026-09-06-overnight-full-pipeline-rerun.md`.
+
+### §7f's stalled gate4 run actually finished on its own
+
+The process from §7f step 4 was never killed — it kept running detached across the
+session boundary and completed independently around **2026-09-06 10:12** (checkpoint
+grew from 4 to 10 lines; `output/ga_search_corrected_pool_long/gate4_confirmation.json`
+now exists, untracked). Its content is **byte-identical** to this session's
+independently-launched confirmation run (verified via diff). Two fully independent
+multi-hour gate4 runs converging on identical output is real evidence that gate4
+confirmation (single-threaded IQ-TREE, `-T 1`) is deterministic — unlike the
+multi-threaded tree-building elsewhere (see below). It used the pre-Finding-9-fix
+shared `candidate_phylogenetics/ga-confirm/` directory (all 10 winners' trees
+overwriting each other in one directory) and is superseded by this session's correctly
+per-winner-named run; it goes on the redundancy list (§ below), not deleted.
+
+### Pre-run review fixes (score-neutral, applied before the rerun)
+
+- **§7e Finding 9** (`Algorithm.py`): `confirm_winners` hardcoded
+  `candidate_id="ga-confirm"` for every winner, colliding all ten winners' gate4
+  artifact directories under `--with-phylogeny`. Fixed to `f"ga-confirm-{idx}"`.
+  Guard-tested. Commit `49a4efe`.
+- **§7e Finding 10** (`Algorithm.py`): a systemic scoring failure (bad
+  `--reference-input`, a factory `KeyError` on every candidate) was indistinguishable
+  from a genuine flat 0.0 fitness landscape — the run "succeeded" with exit 0 and one
+  easy-to-miss stderr line. Added `_check_no_total_scoring_failure`, which aborts only
+  when 100% of scored triplets errored; never fires on a healthy run. Guard-tested.
+  Commit `88908c6`.
+- Findings 3, 4, 11 reviewed and left as open proposals — none triggered by tonight's
+  run configuration (repo-root cwd with calibration present, no `--diversity`, default
+  elitism).
+
+### New feature: `Algorithm.py --dump-scored` (user request mid-session)
+
+Writes every unique triplet the GA search actually scored (not just the top 10
+winners) to `all_scored_seed_<N>.jsonl`/`.csv`, from `oracle.cache`/`oracle.rows`.
+Purely additive — verified by re-running both GA configs (default, and long-pool with
+`--plateau 10000`) with the new flag: winners, `generations_run`, fitness log, and
+`scoring_errors` are **bit-identical** to the committed
+`output/ga_search_corrected_pool_{default,long}/seed_20260904.json` in every field.
+Documented in the README (previously an open gap per §7e Findings 6–8's note that
+`Algorithm.py` was in no module map). Commit `fa7609f`.
+
+### The rerun itself
+
+Driven by an ad hoc script (not committed, matching §7f step 4's precedent) into
+`output_rerun_20260906/`. Two driver bugs found and fixed mid-run (both before any
+data was lost):
+
+1. `Algorithm.py`'s long-pool config needs `--plateau 10000` (read back from the
+   committed run's own `"config"` field in `seed_20260904.json`) to avoid an early
+   plateau stop at generation 21 — the driver omitted it, producing the *wrong*
+   winners on the first attempt. Caught before gate4 confirmation wasted hours on
+   them; corrected and re-run. Verified bit-identical to golden afterward (see below).
+2. `rpi_core.py validate`'s `--output` defaults to the relative path
+   `"output/validation"`, which resolves against the driver's cwd (the repo root), not
+   the isolated rerun folder — omitting an explicit `--output` the first time wrote
+   gate4's tree artifacts (80 files) into the **live, committed** `output/validation/`
+   instead. Caught via `git status` showing new untracked files there; the 80 files
+   were moved into `output_rerun_20260906/validation/candidate_phylogenetics/` (their
+   correct home) before anything was committed. `output/` was never actually modified
+   in git terms (files were untracked, never staged).
+
+Full stage timeline: all_hanta ingest (~18s) → phylogeny, both scopes (~9h21m, zero
+errors) → `rpi_core run` (~53s, reused pinned calibration) → `rpi_core validate
+--with-phylogeny` (two real bugs found here, see below; final timing TBD) → GA search
+default (~6.5 min) → GA search long-pool, corrected (~21.5 min) → gate4 confirmation
+of the 10 long-pool winners (~2h50m, all succeeded, see verdicts below).
+
+### Two real bugs found in `rpi_core.py validate --with-phylogeny`'s gate4 path
+
+Neither is a §7e finding — both are new, in a code path (`score_case`, used only by
+`_validate_main`) that had **zero tests** before tonight.
+
+1. **`score_case` discarded every gate4 field.** `score_candidate` computes
+   `gate4_phylo_status`/`gate4_reassortment_call`/`gate4_discordant_segment`/
+   `gate4_bootstrap_support` when `--with-phylogeny` is passed, but `score_case`'s
+   return dict never copied them — every `--with-phylogeny validate` run shipped
+   result rows with zero trace gate4 ever ran, while the top-level `gate4_exercised`
+   flag (`args.with_phylogeny`, i.e. "was the flag passed", not "did gate4 run")
+   claimed otherwise. Exactly the "asserted on an intermediate value, not the row that
+   ships" defect class `docs/CLAUDE.md` names as recurring in this codebase. Confirmed
+   on the committed baseline too: `output/validation/validation_report.json` has
+   `gate4_exercised: false` (that report predates `--with-phylogeny` ever being used)
+   — so this was latent, never previously exercised in anger.
+   **Fix:** copy the four gate4 fields into `score_case`'s return dict; replace
+   `gate4_exercised` with `gate4_requested` (what was asked) plus
+   `gate4_analyzed_count`/`gate4_call_counts` (what actually shipped, computed from
+   `results`). No existing test or code depended on the old field's semantics
+   (single usage in the whole codebase, grep-verified). 2 guard tests.
+2. **`score_case` passed bare `"mafft"`/`"iqtree"` strings, never resolved.** The
+   same defect shape as §7e Finding 2 (fixed once for `Algorithm.py`'s
+   `confirm_winners`), left unfixed in this sibling path: Windows' `subprocess.run`
+   cannot exec a bare name (`mafft` is a `.BAT`) without `shell=True` or an already-
+   resolved absolute path. Every validation-panel candidate that had enough real
+   comparators to reach an actual alignment attempt (most short-circuit to
+   `insufficient_comparators` first, comparator-count-limited, unrelated to this bug)
+   crashed with `FileNotFoundError` instead of running gate4 — 3 of 55 candidates hit
+   this in the first (broken) rerun attempt. **Fix:** resolve via
+   `ph.resolve_binary(None, "mafft"/"iqtree")` when `with_phylogeny=True`, matching
+   `confirm_winners`'s pattern; `None` when not requested (never touches binary
+   resolution). 2 guard tests. Both fixes, one commit: `6310018`.
+
+Both bugs are unrelated to the `--reference-input`/`--output` driver mistakes above —
+these are real product-code defects that would reproduce for any user running
+`rpi_core.py validate --with-phylogeny` on any platform, on any machine, regardless of
+this session's rerun.
+
+### Non-determinism found and documented (NOT fixed — no bug, see reasoning)
+
+1. **K-mer clustering (`all_hanta.py`), `Orthohantavirus puumalaense` only.** 1305
+   rows across `ortho_isolate_table.csv`/`ortho_ml_feature_matrix.csv` differ in
+   `kmer_cluster_id`/`sl_rank_separation`/`m_rank_offset` between the Linux-generated
+   committed baseline and this Windows rerun. Root cause: `cosine_distance_matrix`'s
+   `unit @ unit.T` matrix multiply is not bit-reproducible across BLAS
+   backends/platforms; `single_linkage_clusters`' union-find is otherwise fully
+   deterministic (sorted vocabulary, no hash-order dependency) but is *maximally
+   sensitive* to a single threshold-boundary (0.02) flip — one differing merge
+   decision early on relabels every downstream cluster ID for that species, which is
+   why the diff looks large despite the root cause being ULP-level. Confirmed
+   diagnostic-only: grepped `rpi_core.py`/`phylogeny.py`/`Algorithm.py`, these three
+   k-mer-derived columns feed no scoring or verdict logic (the tree-based
+   `tree_*_rank_*` columns in `phylogeny.py` are the ones that matter, and are
+   unaffected — this is exactly the k-mer-vs-tree distinction the ingest log's own
+   warning describes: "Reassortment is NOT called by this pipeline" via the k-mer
+   signal). Reproduced identically across two separate runs on this same machine, so
+   it is platform-dependent, not flaky.
+2. **IQ-TREE/MAFFT tree-derived numeric diagnostics, both scopes.** Nearly every
+   `tree_*_distance`/`species_rf_*`/`tree_*_rank_*`/`*_nearest_isolate` value in
+   `ortho_reassortment_table.csv` differs from the committed baseline (1453/1470
+   species-scope rows, 1522/1525 phylogroup-scope rows) — alignment/tree paths too,
+   since MAFFT/IQ-TREE were run with `--phylo-threads` at its default
+   (`cpu_count - 1`), which differs between the original Linux machine and this
+   Windows one. This is IQ-TREE/MAFFT's well-documented multi-threaded floating-point
+   non-associativity (parallel likelihood-calculation reduction order is not
+   reproducible across thread counts, even with a fixed `--seed`) — not a pipeline
+   bug, and not fixable without forcing single-threaded alignment/tree-building
+   pipeline-wide (a much larger, slower change than this session's scope). **The
+   categorical verdict that actually matters, `reassortment_call`, is stable for
+   2994/2995 rows.** The one exception —
+   `t2|unclassified Orthohantavirus|3877` (phylogroup scope): `weak_signal_low_
+   bootstrap_support` (88.0% support) → `no_conflict` — is exactly the kind of flip
+   this same non-determinism would produce: a borderline sub-threshold bootstrap
+   value (88 < the 95 gate) shifting across a run-to-run branch-length recalculation.
+   Not investigated further per the binding rule already recorded in §7f: verdicts
+   are reported verbatim, no re-running for a "better" result. **Ruled out:** an
+   earlier hypothesis that phylogroup-scope grouping had structurally changed
+   (species-set keys vs. the committed baseline's broad phylogroup names) — a
+   phylogroup-only retry of `phylogeny.py` reproduced the exact same broad group
+   names (`arvicolinae_borne`, `murinae_borne`, `sigmodontinae_borne`,
+   `soricomorpha_borne`) as the baseline. The species-pair-style group names seen in
+   the driver log (e.g. "Orthohantavirus dobravaense+Orthohantavirus hantanense")
+   were misattributed at first glance; they came from `validate`'s own gate4 path
+   (bug 2 above), not from `phylogeny.py`'s stage, which ran clean for its full ~9h21m.
+
+### Gate4 verdicts, GA long-pool winners (all 10, verbatim, per the binding rule)
+
+| # | triplet (S\|M\|L, abbreviated) | gate4_phylo_status | gate4_reassortment_call |
+|---|---|---|---|
+| 0 | hantanense\|seoulense\|seoulense | analyzed | **supported_reassortment_candidate** |
+| 1 | hantanense\|hantanense\|hantanense | analyzed | no_conflict |
+| 2 | hantanense\|hantanense\|hantanense | analyzed | no_conflict |
+| 3 | hantanense\|hantanense\|hantanense | analyzed | no_conflict |
+| 4 | hantanense\|hantanense\|hantanense | analyzed | no_conflict |
+| 5 | hantanense\|hantanense\|hantanense | analyzed | weak_signal_low_bootstrap_support |
+| 6 | hantanense\|hantanense\|hantanense | analyzed | weak_signal_low_bootstrap_support |
+| 7 | hantanense\|hantanense\|hantanense | analyzed | no_conflict |
+| 8 | hantanense\|hantanense\|hantanense | analyzed | no_conflict |
+| 9 | hantanense\|hantanense\|hantanense | analyzed | weak_signal_low_bootstrap_support |
+
+0 errors, 0 `insufficient_comparators`. 9/10 winners are within-hantanense
+combinations — per §7f's binding note, `no_conflict` on those is gate4 (the
+tree-based detector) doing exactly the job it exists for, not a limitation. See
+`output/ga_search_corrected_pool_long/gate4_confirmation.json` and the per-triplet
+detail in `seed_20260904.json` for full rows (backbone/donor identities, RPI factors).
+
+### Redundancy survey (candidates only — no deletion performed)
+
+- `output/ga_search_corrected_pool_long/gate4_confirmation.{json,log,log.stdout,
+  log.stderr}`, `gate4_confirmation_checkpoint.jsonl`, and
+  `candidate_phylogenetics/ga-confirm/` (66 files) — the §7f stalled run that
+  actually finished on its own (see above). Fully superseded by this session's
+  correctly-organized `ga-confirm-0`..`ga-confirm-9` output. Complete and
+  byte-identical to the new run, not broken — redundant, not junk.
+- Stray `__pycache__/` directories (standard, regenerable).
+
+**Explicitly NOT redundant — preserve as-is, outside tonight's pipeline scope:**
+`output/consolidation_baseline/` (9 files, module-consolidation era evidence),
+`output/pipeline_acceptance/raw_scored_groups.json` and `run_confirm_20260830.{json,
+log}` (Task 12 era evidence). Neither is touched by `all_hanta.py`/`phylogeny.py`/
+`rpi_core.py`/`Algorithm.py`; promotion must not delete them.
+
+### Phylogeny tree illustrations
+
+`output/figures/{before,after}/` regenerated from the promoted, corrected output
+(the prior `output/figures/` was deliberately retired in commit `9cdd768` because it
+was tied to the since-superseded contaminated-pool GA run — not a decision against
+having figures at all). `before/`: 7 PNGs, one per real
+`supported_reassortment_candidate` isolate, S/M/L trees pruned to a local
+neighborhood, discordant segment highlighted. `after/`: 10 PNGs, one per corrected
+long-pool GA winner, plus `ga_winners_parents.csv` (donor/backbone isolate, species,
+country, host per winner).
+
+### Promotion
+
+`output_rerun_20260906/` merged into `output/` (overwrite-and-add, per the redundancy
+survey above — `consolidation_baseline/` and the Task-12 `pipeline_acceptance/` files
+are untouched because tonight's pipeline never produces them, not because promotion
+skipped them). `output/ortho_output_checksums.txt` self-verified against the promoted
+files (sha256, all match) after promotion. `output/validation/` promoted separately,
+once below.
+
+### Validate `--with-phylogeny`'s full 55-candidate gate4 pass — status at write time
+
+Most candidates (35/55 observed) resolve to `insufficient_comparators` in seconds
+(comparator-count-limited, not the bug above) or complete quickly. A handful of
+candidates whose backbone species has enough real reference isolates for a
+meaningful comparator tree (`RIZVANOV2004_SNVsl_x_ANDVm`, andesense+sinnombreense;
+`HANDKE2010_PUUVsl_x_PHVm`, prospectense+puumalaense; `NEG_SYS_HeJia`, an
+"unclassified Orthohantavirus" backbone) trigger a real MAFFT+IQ-TREE run per
+segment — comparably expensive to the GA-winner confirmations above (198+ taxa,
+`-m MFP` testing up to 968 models, 1000 ultrafast bootstrap replicates,
+single-threaded). This is genuinely slow, not hung (confirmed via live process
+inspection: steady CPU accumulation, no stall) — it was still running as this report
+was written and continues in the background under an active session monitor. The fix
+itself (both bugs above) is already verified correct by direct observation: real,
+correctly-resolved-path MAFFT/IQ-TREE subprocesses spawned successfully and wrote
+into the correct `output_rerun_20260906/validation/candidate_phylogenetics/` location
+this time, unlike the first (broken) attempt.
+
+**Next action:** once complete, move/merge `output_rerun_20260906/validation/` into
+`output/validation/` (same overwrite-and-add promotion as above) and commit
+separately. Nothing else in this session's work depends on that completion.
+
 ---
 
 ## 8. Standing rules

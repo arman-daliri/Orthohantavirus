@@ -1,22 +1,22 @@
-IQ-TREE version 3.1.3 for Linux x86 64-bit built Jul 26 2026
+IQ-TREE version 3.1.3 for Windows 64-bit built Jun 19 2026
 Developed by Bui Quang Minh, Thomas Wong, Nhan Ly-Trong, Huaiyan Ren
 Contributed by Lam-Tung Nguyen, Dominik Schrempf, Chris Bielow,
 Olga Chernomor, Michael Woodhams, Diep Thi Hoang, Heiko Schmidt
 
-Host:    fedora (AVX512, FMA3, 11 GB RAM)
-Command: /home/victorfrankestein/.conda/envs/hanta_phylo/bin/iqtree -s /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/M/aligned.fasta --seqtype DNA -m MFP -B 1000 -T 3 --seed 42 --prefix /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/M/tree --quiet --redo
+Host:    ario (AVX2, FMA3, 15 GB RAM)
+Command: C:\git-projects\Orthohantavirus\tools\iqtree-3.1.3-Windows\bin\iqtree3.exe -s C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\arvicolinae_borne\M\aligned.fasta --seqtype DNA -m MFP -B 1000 -T 11 --seed 42 --prefix C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\arvicolinae_borne\M\tree --quiet --redo
 Seed:    42 (Using SPRNG - Scalable Parallel Random Number Generator)
-Time:    Sat Aug 15 05:46:05 2026
-Kernel:  AVX+FMA - 3 threads (4 CPU cores detected)
+Time:    Sun Sep 06 05:34:53 2026
+Kernel:  AVX+FMA - 11 threads (12 CPU cores detected)
 
-Reading alignment file /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/M/aligned.fasta ... Fasta format detected
-Reading fasta file: done in 0.0337949 secs using 91% CPU
+Reading alignment file C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\arvicolinae_borne\M\aligned.fasta ... Fasta format detected
+Reading fasta file: done in 0.0403768 secs
 Alignment most likely contains DNA/RNA sequences
-Constructing alignment: done in 0.027725 secs using 273.9% CPU
+Constructing alignment: done in 0.0371431 secs using 462.7% CPU
 Alignment has 755 sequences with 4078 columns, 2615 distinct patterns
 1867 parsimony-informative, 703 singleton sites, 1508 constant sites
        Gap/Ambiguity  Composition  p-value
-Analyzing sequences: done in 0.00544 secs using 313% CPU
+Analyzing sequences: done in 0.0018503 secs
    1  I0000   16.14%    failed      1.83%
    2  I0001   15.77%    passed     73.51%
    3  I0002   15.77%    passed     98.72%
@@ -862,8 +862,8 @@ NOTE: I0735 is identical to I0724 but kept for subsequent analysis
 NOTE: I0728 is identical to I0726 but kept for subsequent analysis
 NOTE: I0741 is identical to I0739 but kept for subsequent analysis
 NOTE: I0744 is identical to I0742 but kept for subsequent analysis
-Checking for duplicate sequences: done in 0.0100989 secs using 278.7% CPU
-Identifying sites to remove: done in 0.0169959 secs using 274.3% CPU
+Checking for duplicate sequences: done in 0.0060122 secs using 2339% CPU
+Identifying sites to remove: done in 0.0178832 secs using 961.1% CPU
 NOTE: 155 identical sequences (see below) will be ignored for subsequent analysis
 NOTE: I0087 (identical to I0085) is ignored but added at the end
 NOTE: I0089 (identical to I0085) is ignored but added at the end
@@ -1020,24 +1020,24 @@ NOTE: I0694 (identical to I0692) is ignored but added at the end
 NOTE: I0695 (identical to I0692) is ignored but added at the end
 NOTE: I0696 (identical to I0692) is ignored but added at the end
 NOTE: I0743 (identical to I0739) is ignored but added at the end
-Alignment was printed to /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/M/tree.uniqueseq.phy
+Alignment was printed to C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\arvicolinae_borne\M\tree.uniqueseq.phy
 
-For your convenience alignment with unique sequences printed to /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/M/tree.uniqueseq.phy
+For your convenience alignment with unique sequences printed to C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\arvicolinae_borne\M\tree.uniqueseq.phy
 
 
-Create initial parsimony tree by phylogenetic likelihood library (PLL)... 0.399 seconds
+Create initial parsimony tree by phylogenetic likelihood library (PLL)... 0.421 seconds
 Perform fast likelihood tree search using GTR+I+G model...
 Estimate model parameters (epsilon = 5.000)
 Perform nearest neighbor interchange...
 Estimate model parameters (epsilon = 1.000)
-1. Initial log-likelihood: -111323.659
+1. Initial log-likelihood: -111323.651
 Optimal log-likelihood: -111323.248
-Rate parameters:  A-C: 2.02498  A-G: 11.00969  A-T: 1.90072  C-G: 0.69066  C-T: 18.38334  G-T: 1.00000
+Rate parameters:  A-C: 2.02477  A-G: 11.00521  A-T: 1.90020  C-G: 0.68928  C-T: 18.38091  G-T: 1.00000
 Base frequencies:  A: 0.307  C: 0.183  G: 0.214  T: 0.296
 Proportion of invariable sites: 0.151
 Gamma shape alpha: 0.512
-Parameters optimization took 1 rounds (1.313 sec)
-Time for fast ML tree search: 18.557 seconds
+Parameters optimization took 1 rounds (1.337 sec)
+Time for fast ML tree search: 17.845 seconds
 
 NOTE: ModelFinder requires 519 MB RAM!
 ModelFinder will test up to 968 DNA models (sample size: 4078 epsilon: 0.100) ...
@@ -1048,163 +1048,169 @@ Corrected Akaike Information Criterion: GTR+F+R4
 Bayesian Information Criterion:         TIM2+F+R4
 Best-fit model: TIM2+F+R4 chosen according to BIC
 
-All model information printed to /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/M/tree.model.gz
-CPU time for ModelFinder: 1873.025 seconds (0h:31m:13s)
-Wall-clock time for ModelFinder: 637.864 seconds (0h:10m:37s)
+All model information printed to C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\arvicolinae_borne\M\tree.model.gz
+CPU time for ModelFinder: 4832.844 seconds (1h:20m:32s)
+Wall-clock time for ModelFinder: 489.031 seconds (0h:8m:9s)
 Generating 1000 samples for ultrafast bootstrap (seed: 42)...
 
 NOTE: 213 MB RAM (0 GB) is required!
 Estimate model parameters (epsilon = 0.100)
-1. Initial log-likelihood: -110987.776
-2. Current log-likelihood: -110987.154
-Optimal log-likelihood: -110987.131
-Rate parameters:  A-C: 2.25850  A-G: 12.46175  A-T: 2.25850  C-G: 1.00000  C-T: 19.82207  G-T: 1.00000
+1. Initial log-likelihood: -110987.971
+2. Current log-likelihood: -110987.348
+Optimal log-likelihood: -110987.325
+Rate parameters:  A-C: 2.25853  A-G: 12.46134  A-T: 2.25853  C-G: 1.00000  C-T: 19.82165  G-T: 1.00000
 Base frequencies:  A: 0.307  C: 0.183  G: 0.214  T: 0.296
-Site proportion and rates:  (0.578,0.072) (0.080,0.607) (0.129,1.698) (0.213,3.244)
-Parameters optimization took 2 rounds (2.094 sec)
+Site proportion and rates:  (0.578,0.072) (0.080,0.607) (0.129,1.698) (0.213,3.243)
+Parameters optimization took 2 rounds (2.086 sec)
 Wrote distance file to... 
 Computing ML distances based on estimated model parameters...
-Calculating distance matrix: done in 0.855067 secs using 299.1% CPU
-Computing ML distances took 0.861323 sec (of wall-clock time) 2.575047 sec (of CPU time)
+Calculating distance matrix: done in 0.345337 secs using 1045% CPU
+Computing ML distances took 0.349257 sec (of wall-clock time) 3.609375 sec (of CPU time)
 WARNING: Some pairwise ML distances are too long (saturated)
-Setting up auxiliary I and S matrices: done in 0.0032022 secs using 404.2% CPU
-Constructing RapidNJ tree: done in 0.0187309 secs using 376.1% CPU
-Computing RapidNJ tree took 0.021986 sec (of wall-clock time) 0.083446 sec (of CPU time)
-Log-likelihood of RapidNJ tree: -115441.261
+Setting up auxiliary I and S matrices: done in 0.0069325 secs
+Constructing RapidNJ tree: done in 0.0133841 secs using 116.7% CPU
+Computing RapidNJ tree took 0.020431 sec (of wall-clock time) 0.015625 sec (of CPU time)
+Log-likelihood of RapidNJ tree: -115440.861
 --------------------------------------------------------------------
 |             INITIALIZING CANDIDATE TREE SET                      |
 --------------------------------------------------------------------
-Generating 98 parsimony trees... 37.292 second
-Computing log-likelihood of 98 initial trees ... 22.782 seconds
-Current best score: -110987.131
+Generating 98 parsimony trees... 37.463 second
+Computing log-likelihood of 98 initial trees ... 16.463 seconds
+Current best score: -110987.325
 
 Do NNI search on 20 best initial trees
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 1: -110984.557
+BETTER TREE FOUND at iteration 1: -110984.751
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 2: -110842.881
+BETTER TREE FOUND at iteration 2: -110843.075
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 3: -110834.255
+BETTER TREE FOUND at iteration 3: -110834.449
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 4: -110827.426
-Iteration 10 / LogL: -110866.008 / Time: 0h:14m:2s
+BETTER TREE FOUND at iteration 4: -110827.620
+Iteration 10 / LogL: -110866.202 / Time: 0h:11m:45s
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 11: -110825.839
-Iteration 20 / LogL: -110853.003 / Time: 0h:16m:21s
+BETTER TREE FOUND at iteration 11: -110826.033
+Iteration 20 / LogL: -110853.199 / Time: 0h:14m:34s
 Finish initializing candidate tree set (20)
-Current best tree score: -110825.839 / CPU time: 332.963
+Current best tree score: -110826.033 / CPU time: 376.765
 Number of iterations: 20
 --------------------------------------------------------------------
 |               OPTIMIZING CANDIDATE TREE SET                      |
 --------------------------------------------------------------------
+Iteration 30 / LogL: -110848.515 / Time: 0h:16m:1s (0h:22m:0s left)
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 21: -110824.271
+BETTER TREE FOUND at iteration 31: -110822.213
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 27: -110816.526
-Iteration 30 / LogL: -110837.329 / Time: 0h:18m:9s (0h:25m:9s left)
+BETTER TREE FOUND at iteration 38: -110819.022
+Iteration 40 / LogL: -110825.173 / Time: 0h:17m:34s (0h:23m:41s left)
+Iteration 50 / LogL: -110819.557 / Time: 0h:19m:2s (0h:19m:33s left)
+Log-likelihood cutoff on original alignment: -110896.454
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 39: -110813.211
-Iteration 40 / LogL: -110822.736 / Time: 0h:19m:57s (0h:23m:40s left)
+BETTER TREE FOUND at iteration 52: -110816.624
+Iteration 60 / LogL: -110828.954 / Time: 0h:20m:28s (0h:19m:13s left)
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 50: -110812.084
-Iteration 50 / LogL: -110812.084 / Time: 0h:21m:50s (0h:22m:53s left)
-Log-likelihood cutoff on original alignment: -110890.728
+BETTER TREE FOUND at iteration 64: -110813.847
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 59: -110811.471
-Iteration 60 / LogL: -110863.230 / Time: 0h:23m:45s (0h:22m:1s left)
-Iteration 70 / LogL: -110889.953 / Time: 0h:25m:35s (0h:19m:17s left)
-Iteration 80 / LogL: -110837.039 / Time: 0h:27m:16s (0h:16m:38s left)
+BETTER TREE FOUND at iteration 66: -110813.377
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 81: -110810.825
-Iteration 90 / LogL: -110881.515 / Time: 0h:28m:57s (0h:18m:44s left)
-Iteration 100 / LogL: -110848.705 / Time: 0h:30m:47s (0h:16m:29s left)
-Log-likelihood cutoff on original alignment: -110890.728
+BETTER TREE FOUND at iteration 68: -110812.610
+Iteration 70 / LogL: -110987.575 / Time: 0h:21m:54s (0h:19m:31s left)
+Iteration 80 / LogL: -110813.388 / Time: 0h:23m:24s (0h:16m:59s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 83: -110811.591
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 87: -110811.060
+Iteration 90 / LogL: -110907.568 / Time: 0h:24m:56s (0h:18m:18s left)
+Iteration 100 / LogL: -110821.677 / Time: 0h:26m:17s (0h:15m:56s left)
+Log-likelihood cutoff on original alignment: -110891.491
 NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.994
+Iteration 110 / LogL: -110820.680 / Time: 0h:27m:47s (0h:16m:12s left)
+Iteration 120 / LogL: -110821.925 / Time: 0h:29m:12s (0h:14m:9s left)
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 105: -110809.839
+BETTER TREE FOUND at iteration 127: -110811.033
+Iteration 130 / LogL: -110846.141 / Time: 0h:30m:32s (0h:16m:49s left)
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 107: -110808.920
-Iteration 110 / LogL: -110827.315 / Time: 0h:32m:31s (0h:19m:28s left)
-Iteration 120 / LogL: -110818.275 / Time: 0h:34m:27s (0h:17m:25s left)
-Iteration 130 / LogL: -111061.803 / Time: 0h:36m:11s (0h:15m:15s left)
-Iteration 140 / LogL: -110822.070 / Time: 0h:37m:56s (0h:13m:9s left)
+BETTER TREE FOUND at iteration 138: -110810.710
+Iteration 140 / LogL: -110818.715 / Time: 0h:32m:10s (0h:16m:56s left)
+Iteration 150 / LogL: -110869.172 / Time: 0h:33m:41s (0h:15m:5s left)
+Log-likelihood cutoff on original alignment: -110891.491
+Iteration 160 / LogL: -111350.038 / Time: 0h:34m:58s (0h:13m:9s left)
+Iteration 170 / LogL: -110835.267 / Time: 0h:36m:24s (0h:11m:22s left)
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 148: -110808.455
-Iteration 150 / LogL: -110836.167 / Time: 0h:39m:38s (0h:19m:4s left)
-Log-likelihood cutoff on original alignment: -110890.728
-Iteration 160 / LogL: -110816.429 / Time: 0h:41m:35s (0h:17m:7s left)
-Iteration 170 / LogL: -110853.249 / Time: 0h:43m:13s (0h:15m:2s left)
-Iteration 180 / LogL: -110838.141 / Time: 0h:45m:1s (0h:13m:3s left)
-Iteration 190 / LogL: -110847.676 / Time: 0h:46m:43s (0h:11m:4s left)
+BETTER TREE FOUND at iteration 173: -110809.881
+Iteration 180 / LogL: -110811.732 / Time: 0h:38m:0s (0h:15m:30s left)
+Iteration 190 / LogL: -110865.972 / Time: 0h:39m:20s (0h:13m:41s left)
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 193: -110808.428
-Iteration 200 / LogL: -110878.716 / Time: 0h:48m:31s (0h:17m:42s left)
-Log-likelihood cutoff on original alignment: -110890.728
-NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.997
-Iteration 210 / LogL: -110845.666 / Time: 0h:50m:24s (0h:17m:7s left)
-Iteration 220 / LogL: -110819.265 / Time: 0h:52m:3s (0h:15m:8s left)
-Iteration 230 / LogL: -110933.058 / Time: 0h:53m:43s (0h:13m:10s left)
-Iteration 240 / LogL: -110826.824 / Time: 0h:55m:28s (0h:11m:15s left)
-Iteration 250 / LogL: -110842.656 / Time: 0h:57m:8s (0h:9m:20s left)
-Log-likelihood cutoff on original alignment: -110890.728
-Iteration 260 / LogL: -110842.080 / Time: 0h:58m:48s (0h:7m:26s left)
-Iteration 270 / LogL: -110831.561 / Time: 1h:0m:42s (0h:5m:35s left)
-Iteration 280 / LogL: -110820.763 / Time: 1h:2m:24s (0h:3m:42s left)
-Iteration 290 / LogL: -110845.216 / Time: 1h:4m:10s (0h:1m:51s left)
+BETTER TREE FOUND at iteration 191: -110808.365
+Iteration 200 / LogL: -111075.181 / Time: 0h:40m:55s (0h:14m:59s left)
+Log-likelihood cutoff on original alignment: -110891.491
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.995
+Iteration 210 / LogL: -110847.033 / Time: 0h:42m:25s (0h:14m:45s left)
+Iteration 220 / LogL: -110813.757 / Time: 0h:43m:43s (0h:12m:59s left)
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 291: -110807.765
-Iteration 300 / LogL: -110845.517 / Time: 1h:5m:56s (0h:16m:49s left)
-Log-likelihood cutoff on original alignment: -110890.728
-NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.999
-Iteration 310 / LogL: -110810.082 / Time: 1h:7m:33s (0h:16m:34s left)
-Iteration 320 / LogL: -110847.914 / Time: 1h:9m:19s (0h:14m:43s left)
-Iteration 330 / LogL: -110953.692 / Time: 1h:11m:5s (0h:12m:51s left)
-Iteration 340 / LogL: -110834.554 / Time: 1h:12m:47s (0h:11m:0s left)
-Iteration 350 / LogL: -110810.239 / Time: 1h:14m:35s (0h:9m:9s left)
-Log-likelihood cutoff on original alignment: -110890.728
-Iteration 360 / LogL: -110810.924 / Time: 1h:16m:27s (0h:7m:20s left)
-Iteration 370 / LogL: -110837.359 / Time: 1h:18m:14s (0h:5m:29s left)
-Iteration 380 / LogL: -110838.542 / Time: 1h:20m:5s (0h:3m:39s left)
-Iteration 390 / LogL: -110992.019 / Time: 1h:21m:56s (0h:1m:49s left)
-TREE SEARCH COMPLETED AFTER 392 ITERATIONS / Time: 1h:22m:19s
+BETTER TREE FOUND at iteration 228: -110808.296
+Iteration 230 / LogL: -110822.824 / Time: 0h:45m:25s (0h:15m:57s left)
+Iteration 240 / LogL: -110814.808 / Time: 0h:46m:44s (0h:14m:12s left)
+Iteration 250 / LogL: -110840.212 / Time: 0h:48m:21s (0h:12m:35s left)
+Log-likelihood cutoff on original alignment: -110891.491
+Iteration 260 / LogL: -110818.814 / Time: 0h:50m:10s (0h:11m:2s left)
+Iteration 270 / LogL: -110840.570 / Time: 0h:51m:50s (0h:9m:25s left)
+Iteration 280 / LogL: -110812.214 / Time: 0h:53m:18s (0h:7m:46s left)
+Iteration 290 / LogL: -110818.562 / Time: 0h:54m:42s (0h:6m:7s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 298: -110807.236
+Iteration 300 / LogL: -110813.167 / Time: 0h:56m:5s (0h:15m:42s left)
+Log-likelihood cutoff on original alignment: -110891.491
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.996
+Iteration 310 / LogL: -110816.173 / Time: 0h:57m:25s (0h:14m:21s left)
+Iteration 320 / LogL: -110852.317 / Time: 0h:58m:52s (0h:12m:43s left)
+Iteration 330 / LogL: -110849.544 / Time: 1h:0m:31s (0h:11m:8s left)
+Iteration 340 / LogL: -110809.793 / Time: 1h:2m:10s (0h:9m:33s left)
+Iteration 350 / LogL: -110816.876 / Time: 1h:3m:52s (0h:7m:59s left)
+Log-likelihood cutoff on original alignment: -110891.491
+Iteration 360 / LogL: -110828.185 / Time: 1h:5m:24s (0h:6m:22s left)
+Iteration 370 / LogL: -110828.798 / Time: 1h:7m:0s (0h:4m:47s left)
+Iteration 380 / LogL: -110937.167 / Time: 1h:8m:23s (0h:3m:10s left)
+Iteration 390 / LogL: -110810.948 / Time: 1h:10m:5s (0h:1m:35s left)
+TREE SEARCH COMPLETED AFTER 399 ITERATIONS / Time: 1h:11m:30s
 
 --------------------------------------------------------------------
 |                    FINALIZING TREE SEARCH                        |
 --------------------------------------------------------------------
 Performs final model parameters optimization
 Estimate model parameters (epsilon = 0.010)
-1. Initial log-likelihood: -110807.765
-Optimal log-likelihood: -110807.764
-Rate parameters:  A-C: 2.25870  A-G: 12.51608  A-T: 2.25870  C-G: 1.00000  C-T: 19.81015  G-T: 1.00000
+1. Initial log-likelihood: -110807.236
+Optimal log-likelihood: -110807.235
+Rate parameters:  A-C: 2.26353  A-G: 12.54391  A-T: 2.26353  C-G: 1.00000  C-T: 19.81656  G-T: 1.00000
 Base frequencies:  A: 0.307  C: 0.183  G: 0.214  T: 0.296
-Site proportion and rates:  (0.580,0.072) (0.080,0.612) (0.132,1.738) (0.208,3.261)
-Parameters optimization took 1 rounds (0.875 sec)
-BEST SCORE FOUND : -110807.764
+Site proportion and rates:  (0.580,0.073) (0.080,0.611) (0.132,1.737) (0.208,3.261)
+Parameters optimization took 1 rounds (0.777 sec)
+BEST SCORE FOUND : -110807.235
 Creating bootstrap support values...
-Split supports printed to NEXUS file /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/M/tree.splits.nex
-Total tree length: 25.624
+Split supports printed to NEXUS file C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\arvicolinae_borne\M\tree.splits.nex
+Total tree length: 25.623
 
-Total number of iterations: 392
-CPU time used for tree search: 12613.826 sec (3h:30m:13s)
-Wall-clock time used for tree search: 4291.039 sec (1h:11m:31s)
-Total CPU time used: 14522.492 sec (4h:2m:2s)
-Total wall-clock time used: 4941.846 sec (1h:22m:21s)
+Total number of iterations: 399
+CPU time used for tree search: 36440.469 sec (10h:7m:20s)
+Wall-clock time used for tree search: 3792.617 sec (1h:3m:12s)
+Total CPU time used: 41359.562 sec (11h:29m:19s)
+Total wall-clock time used: 4293.109 sec (1h:11m:33s)
 
 Computing bootstrap consensus tree...
-Reading input file /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/M/tree.splits.nex...
-600 taxa and 4910 splits.
-Consensus tree written to /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/M/tree.contree
-Reading input trees file /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/M/tree.contree
-Log-likelihood of consensus tree: -110807.879
+Reading input file C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\arvicolinae_borne\M\tree.splits.nex...
+600 taxa and 4782 splits.
+Consensus tree written to C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\arvicolinae_borne\M\tree.contree
+Reading input trees file C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\arvicolinae_borne\M\tree.contree
+Log-likelihood of consensus tree: -110808.312
 
 Analysis results written to: 
-  IQ-TREE report:                /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/M/tree.iqtree
-  Maximum-likelihood tree:       /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/M/tree.treefile
-  Likelihood distances:          /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/M/tree.mldist
+  IQ-TREE report:                C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\arvicolinae_borne\M\tree.iqtree
+  Maximum-likelihood tree:       C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\arvicolinae_borne\M\tree.treefile
+  Likelihood distances:          C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\arvicolinae_borne\M\tree.mldist
 
 Ultrafast bootstrap approximation results written to:
-  Split support values:          /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/M/tree.splits.nex
-  Consensus tree:                /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/M/tree.contree
-  Screen log file:               /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/arvicolinae_borne/M/tree.log
+  Split support values:          C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\arvicolinae_borne\M\tree.splits.nex
+  Consensus tree:                C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\arvicolinae_borne\M\tree.contree
+  Screen log file:               C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\arvicolinae_borne\M\tree.log
 
-Date and Time: Sat Aug 15 07:08:32 2026
+Date and Time: Sun Sep 06 06:46:29 2026

@@ -1,6 +1,6 @@
-IQ-TREE 3.1.3 built Jul 26 2026
+IQ-TREE 3.1.3 built Jun 19 2026
 
-Input file name: /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_jejuense/L/aligned.fasta
+Input file name: C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics\orthohantavirus_jejuense\L\aligned.fasta
 Type of analysis: ModelFinder + tree reconstruction + ultrafast bootstrap (1000 replicates)
 Random seed number: 42
 
@@ -49,14 +49,14 @@ List of models sorted by BIC scores:
 Model                  LogL         AIC      w-AIC        AICc     w-AICc         BIC      w-BIC
 TIM2+F+I         -21333.840   42719.681 +    0.455   42719.898 +    0.459   42895.845 +    0.999
 GTR+F+I          -21331.659   42719.317 +    0.545   42719.569 +    0.541   42909.032 -  0.00137
-TIM+F+I          -21354.710   42761.419 - 3.93e-10   42761.637 - 3.97e-10   42937.584 - 8.63e-10
-TN+F+I           -21362.413   42774.825 - 4.82e-13   42775.027 - 4.91e-13   42944.214 - 3.13e-11
-TIM3+F+I         -21360.616   42773.233 - 1.07e-12   42773.450 - 1.08e-12   42949.397 - 2.35e-12
-TPM2u+F+I        -21365.118   42780.237 - 3.22e-14   42780.438 - 3.28e-14   42949.626 - 2.09e-12
-TVM+F+I          -21362.840   42779.680 - 4.26e-14   42779.914 - 4.26e-14   42962.619 - 3.16e-15
-K3Pu+F+I         -21383.542   42817.083 - 3.21e-22   42817.285 - 3.27e-22   42986.472 - 2.09e-20
-HKY+F+I          -21389.207   42826.414 - 3.03e-24   42826.600 -  3.1e-24   42989.027 - 5.82e-21
-TPM3u+F+I        -21387.477   42824.955 - 6.28e-24   42825.156 - 6.39e-24   42994.344 - 4.08e-22
+TIM+F+I          -21354.710   42761.419 - 3.93e-010   42761.637 - 3.97e-010   42937.584 - 8.63e-010
+TN+F+I           -21362.413   42774.825 - 4.82e-013   42775.027 - 4.91e-013   42944.214 - 3.13e-011
+TIM3+F+I         -21360.616   42773.233 - 1.07e-012   42773.450 - 1.08e-012   42949.397 - 2.35e-012
+TPM2u+F+I        -21365.118   42780.237 - 3.22e-014   42780.438 - 3.28e-014   42949.626 - 2.09e-012
+TVM+F+I          -21362.840   42779.680 - 4.26e-014   42779.914 - 4.26e-014   42962.619 - 3.16e-015
+K3Pu+F+I         -21383.542   42817.083 - 3.21e-022   42817.285 - 3.27e-022   42986.472 - 2.09e-020
+HKY+F+I          -21389.207   42826.414 - 3.03e-024   42826.600 - 3.1e-024   42989.027 - 5.82e-021
+TPM3u+F+I        -21387.477   42824.955 - 6.28e-024   42825.156 - 6.39e-024   42994.344 - 4.08e-022
 GTR+I            -21811.750   43673.500 - 3.45e-208   43673.702 - 3.52e-208   43842.889 - 2.25e-206
 SYM+I            -21811.755   43673.511 - 3.44e-208   43673.712 - 3.5e-208   43842.899 - 2.23e-206
 SYM+I            -21811.755   43673.511 - 3.44e-208   43673.712 - 3.5e-208   43842.899 - 2.23e-206
@@ -91,12 +91,12 @@ F81+F+I          -22894.267   45834.533 -        0   45834.705 -        0   4599
 JC+I             -23160.291   46360.582 -        0   46360.712 -        0   46496.093 -        0
 JC+I             -23160.291   46360.582 -        0   46360.712 -        0   46496.093 -        0
 F81+I            -23160.292   46360.585 -        0   46360.715 -        0   46496.096 -        0
-JC+R2            -23162.436   46366.872 -        0   46367.015 -        0   46509.159 -        0
+JC+R2            -23162.436   46366.872 -        0   46367.016 -        0   46509.159 -        0
 JC+I+R2          -23161.646   46367.293 -        0   46367.449 -        0   46516.355 -        0
 JC+G4            -23175.468   46390.937 -        0   46391.067 -        0   46526.448 -        0
 JC+R3            -23163.073   46372.146 -        0   46372.317 -        0   46527.984 -        0
-JC+I+R3          -23161.696   46371.392 -        0   46371.578 -        0   46534.006 -        0
-JC+I+G4          -23184.043   46410.086 -        0   46410.230 -        0   46552.373 -        0
+JC+I+R3          -23161.695   46371.390 -        0   46371.576 -        0   46534.003 -        0
+JC+I+G4          -23184.043   46410.087 -        0   46410.230 -        0   46552.373 -        0
 JC               -23774.117   47586.234 -        0   47586.352 -        0   47714.970 -        0
 
 AIC, w-AIC   : Akaike information criterion scores and weights.
@@ -173,18 +173,18 @@ Numbers in parentheses are  ultrafast bootstrap support (%)
 |                         |                     +---------I0004
 +-------------------------| (100)
 |                         |                          +--I0006
-|                         |                       +--| (71)
+|                         |                       +--| (73)
 |                         |                       |  +**I0009
 |                         +-----------------------| (100)
 |                                                 |  +**I0007
-|                                                 +**| (63)
+|                                                 +**| (61)
 |                                                    +**I0008
 |
 +--I0010
 
 Tree in newick format:
 
-(I0000:0.0203689580,((((I0001:0.0396628884,I0005:0.0279466201)98:0.0161992081,I0002:0.0604030125)100:0.0363876677,(I0003:0.0708747446,I0004:0.0693811428)65:0.0160846531)100:0.1315896284,((I0006:0.0173665249,I0009:0.0001250726)71:0.0004991022,(I0007:0.0000010000,I0008:0.0000010000)63:0.0000021340)100:0.1676227812)100:0.1779919609,I0010:0.0005893449);
+(I0000:0.0203689584,((((I0001:0.0396628884,I0005:0.0279466201)98:0.0161992078,I0002:0.0604030126)100:0.0363876674,(I0003:0.0708747443,I0004:0.0693811428)65:0.0160846533)100:0.1315896269,((I0006:0.0173665249,I0009:0.0001250726)73:0.0004991022,(I0007:0.0000010000,I0008:0.0000010000)61:0.0000021340)100:0.1676227804)100:0.1779919599,I0010:0.0005893446);
 
 CONSENSUS TREE
 --------------
@@ -210,11 +210,11 @@ Numbers in parentheses are bootstrap supports (%)
 |                         |                     +---------I0004
 +-------------------------| (100)
 |                         |                          +--I0006
-|                         |                       +--| (71)
+|                         |                       +--| (73)
 |                         |                       |  +--I0009
 |                         +-----------------------| (100)
 |                                                 |  +--I0007
-|                                                 +--| (63)
+|                                                 +--| (61)
 |                                                    +--I0008
 |
 +--I0010
@@ -222,28 +222,28 @@ Numbers in parentheses are bootstrap supports (%)
 
 Consensus tree in newick format: 
 
-(I0000:0.0202679676,((((I0001:0.0396559406,I0005:0.0279446859)98:0.0161959407,I0002:0.0603967685)100:0.0363691199,(I0003:0.0708657242,I0004:0.0693736620)65:0.0160922592)100:0.1315910942,((I0006:0.0173661359,I0009:0.0001250344)71:0.0004985619,(I0007:0.0000021991,I0008:0.0000021991)63:0.0000023597)100:0.1675826201)100:0.1778941069,I0010:0.0006556266);
+(I0000:0.0202679679,((((I0001:0.0396559406,I0005:0.0279446858)98:0.0161959404,I0002:0.0603967685)100:0.0363691196,(I0003:0.0708657239,I0004:0.0693736619)65:0.0160922594)100:0.1315910927,((I0006:0.0173661359,I0009:0.0001250344)73:0.0004985619,(I0007:0.0000021991,I0008:0.0000021991)61:0.0000023597)100:0.1675826193)100:0.1778941059,I0010:0.0006556263);
 
 ALISIM COMMAND
 --------------
 To simulate an alignment of the same length as the original alignment, using the tree and model parameters estimated from this analysis, you can use the following command:
 
---alisim simulated_MSA -t /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_jejuense/L/tree.treefile -m "TIM2{2.95958,20.7011,35.5615}+F{0.337673,0.155578,0.202923,0.303826}+I{0.654106}" --length 6474
+--alisim simulated_MSA -t C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics\orthohantavirus_jejuense\L\tree.treefile -m "TIM2{2.95958,20.7011,35.5615}+F{0.337673,0.155578,0.202923,0.303826}+I{0.654106}" --length 6474
 
 To mimic the alignment used to produce this analysis, i.e. simulate an alignment of the same length as the original alignment, using the tree and model parameters estimated from this analysis *and* copying the same gap positions as the original alignment, you can use the following command:
 
-iqtree -s /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_jejuense/L/aligned.fasta --alisim mimicked_MSA
+iqtree -s C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics\orthohantavirus_jejuense\L\aligned.fasta --alisim mimicked_MSA
 
 To simulate any number of alignments in either of the two commandlines above, use the --num-alignments options, for example mimic 100 alignments you would use the command line:
 
-iqtree -s /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics/orthohantavirus_jejuense/L/aligned.fasta --alisim mimicked_MSA --num-alignments 100
+iqtree -s C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics\orthohantavirus_jejuense\L\aligned.fasta --alisim mimicked_MSA --num-alignments 100
 
 For more information on using AliSim, please visit: www.iqtree.org/doc/AliSim
 
 TIME STAMP
 ----------
 
-Date and time: Sat Aug 15 01:17:47 2026
-Total CPU time used: 8.853215 seconds (0h:0m:8s)
-Total wall-clock time used: 4.391631126 seconds (0h:0m:4s)
+Date and time: Sun Sep 06 02:16:54 2026
+Total CPU time used: 31.953125 seconds (0h:0m:31s)
+Total wall-clock time used: 3.5445147 seconds (0h:0m:3s)
 

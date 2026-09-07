@@ -1,23 +1,23 @@
-IQ-TREE version 3.1.3 for Linux x86 64-bit built Jul 26 2026
+IQ-TREE version 3.1.3 for Windows 64-bit built Jun 19 2026
 Developed by Bui Quang Minh, Thomas Wong, Nhan Ly-Trong, Huaiyan Ren
 Contributed by Lam-Tung Nguyen, Dominik Schrempf, Chris Bielow,
 Olga Chernomor, Michael Woodhams, Diep Thi Hoang, Heiko Schmidt
 
-Host:    fedora (AVX512, FMA3, 11 GB RAM)
-Command: /home/victorfrankestein/.conda/envs/hanta_phylo/bin/iqtree -s /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/sigmodontinae_borne/S/aligned.fasta --seqtype DNA -m MFP -B 1000 -T 3 --seed 42 --prefix /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/sigmodontinae_borne/S/tree --quiet --redo
+Host:    ario (AVX2, FMA3, 15 GB RAM)
+Command: C:\git-projects\Orthohantavirus\tools\iqtree-3.1.3-Windows\bin\iqtree3.exe -s C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\sigmodontinae_borne\S\aligned.fasta --seqtype DNA -m MFP -B 1000 -T 11 --seed 42 --prefix C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\sigmodontinae_borne\S\tree --quiet --redo
 Seed:    42 (Using SPRNG - Scalable Parallel Random Number Generator)
-Time:    Sat Aug 15 12:37:30 2026
-Kernel:  AVX+FMA - 3 threads (4 CPU cores detected)
+Time:    Sun Sep 06 10:24:54 2026
+Kernel:  AVX+FMA - 11 threads (12 CPU cores detected)
 
-Reading alignment file /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/sigmodontinae_borne/S/aligned.fasta ... Fasta format detected
-Reading fasta file: done in 0.00250101 secs using 95.48% CPU
+Reading alignment file C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\sigmodontinae_borne\S\aligned.fasta ... Fasta format detected
+Reading fasta file: done in 0.0031128 secs
 Alignment most likely contains DNA/RNA sequences
-Constructing alignment: done in 0.0029161 secs using 319.2% CPU
+Constructing alignment: done in 0.0045833 secs
 WARNING: 118 sites contain only gaps or ambiguous characters.
 Alignment has 137 sequences with 1626 columns, 896 distinct patterns
 570 parsimony-informative, 317 singleton sites, 739 constant sites
        Gap/Ambiguity  Composition  p-value
-Analyzing sequences: done in 0.000131845 secs using 314.8% CPU
+Analyzing sequences: done in 7.52e-005 secs
    1  I0000   20.85%    passed     94.74%
    2  I0001   20.85%    passed     96.94%
    3  I0002   20.85%    passed     97.03%
@@ -167,8 +167,8 @@ NOTE: I0080 is identical to I0079 but kept for subsequent analysis
 NOTE: I0110 is identical to I0108 but kept for subsequent analysis
 NOTE: I0116 is identical to I0109 but kept for subsequent analysis
 NOTE: I0118 is identical to I0112 but kept for subsequent analysis
-Checking for duplicate sequences: done in 0.000580072 secs using 297.7% CPU
-Identifying sites to remove: done in 0.00156403 secs using 298.1% CPU
+Checking for duplicate sequences: done in 0.0003866 secs
+Identifying sites to remove: done in 0.0022918 secs
 NOTE: 27 identical sequences (see below) will be ignored for subsequent analysis
 NOTE: I0016 (identical to I0014) is ignored but added at the end
 NOTE: I0038 (identical to I0036) is ignored but added at the end
@@ -197,12 +197,13 @@ NOTE: I0061 (identical to I0036) is ignored but added at the end
 NOTE: I0062 (identical to I0036) is ignored but added at the end
 NOTE: I0114 (identical to I0108) is ignored but added at the end
 NOTE: I0115 (identical to I0108) is ignored but added at the end
-Alignment was printed to /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/sigmodontinae_borne/S/tree.uniqueseq.phy
+Alignment was printed to C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\sigmodontinae_borne\S\tree.uniqueseq.phy
 
-For your convenience alignment with unique sequences printed to /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/sigmodontinae_borne/S/tree.uniqueseq.phy
+For your convenience alignment with unique sequences printed to C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\sigmodontinae_borne\S\tree.uniqueseq.phy
 
 
-Create initial parsimony tree by phylogenetic likelihood library (PLL)... 0.014 seconds
+Create initial parsimony tree by phylogenetic likelihood library (PLL)... 0.015 seconds
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
 Perform fast likelihood tree search using GTR+I+G model...
 Estimate model parameters (epsilon = 5.000)
 Perform nearest neighbor interchange...
@@ -218,121 +219,186 @@ Estimate model parameters (epsilon = 1.000)
 9. Current log-likelihood: -18947.340
 10. Current log-likelihood: -18946.251
 Optimal log-likelihood: -18945.322
-Rate parameters:  A-C: 2.31521  A-G: 8.71770  A-T: 2.04442  C-G: 0.53405  C-T: 13.73060  G-T: 1.00000
+Rate parameters:  A-C: 2.31507  A-G: 8.71729  A-T: 2.04429  C-G: 0.53402  C-T: 13.72970  G-T: 1.00000
 Base frequencies:  A: 0.308  C: 0.209  G: 0.232  T: 0.251
 Proportion of invariable sites: 0.058
 Gamma shape alpha: 0.317
-Parameters optimization took 10 rounds (0.632 sec)
-Time for fast ML tree search: 1.263 seconds
+Parameters optimization took 10 rounds (0.716 sec)
+Time for fast ML tree search: 1.384 seconds
 
 NOTE: ModelFinder requires 35 MB RAM!
 ModelFinder will test up to 968 DNA models (sample size: 1626 epsilon: 0.100) ...
  No. Model         -LnL         df  AIC          AICc         BIC
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
 Akaike Information Criterion:           GTR+F+R3
 Corrected Akaike Information Criterion: GTR+F+R3
 Bayesian Information Criterion:         TIM2+F+R3
 Best-fit model: TIM2+F+R3 chosen according to BIC
 
-All model information printed to /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/sigmodontinae_borne/S/tree.model.gz
-CPU time for ModelFinder: 31.773 seconds (0h:0m:31s)
-Wall-clock time for ModelFinder: 10.763 seconds (0h:0m:10s)
+All model information printed to C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\sigmodontinae_borne\S\tree.model.gz
+CPU time for ModelFinder: 91.094 seconds (0h:1m:31s)
+Wall-clock time for ModelFinder: 9.125 seconds (0h:0m:9s)
 Generating 1000 samples for ultrafast bootstrap (seed: 42)...
 
 NOTE: 13 MB RAM (0 GB) is required!
+WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
 Estimate model parameters (epsilon = 0.100)
-1. Initial log-likelihood: -18901.896
+1. Initial log-likelihood: -18901.895
 Optimal log-likelihood: -18901.866
-Rate parameters:  A-C: 2.84255  A-G: 11.14936  A-T: 2.84255  C-G: 1.00000  C-T: 16.22310  G-T: 1.00000
+Rate parameters:  A-C: 2.84254  A-G: 11.14935  A-T: 2.84254  C-G: 1.00000  C-T: 16.22309  G-T: 1.00000
 Base frequencies:  A: 0.308  C: 0.209  G: 0.232  T: 0.251
 Site proportion and rates:  (0.623,0.088) (0.153,1.098) (0.224,3.472)
-Parameters optimization took 1 rounds (0.063 sec)
+Parameters optimization took 1 rounds (0.055 sec)
 Wrote distance file to... 
 Computing ML distances based on estimated model parameters...
-Calculating distance matrix: done in 0.0203688 secs using 296% CPU
-Computing ML distances took 0.020629 sec (of wall-clock time) 0.060881 sec (of CPU time)
+Calculating distance matrix: done in 0.0073211 secs using 1921% CPU
+Computing ML distances took 0.007616 sec (of wall-clock time) 0.140625 sec (of CPU time)
 WARNING: Some pairwise ML distances are too long (saturated)
-Setting up auxiliary I and S matrices: done in 0.000170231 secs using 352.5% CPU
-Constructing RapidNJ tree: done in 0.00127006 secs using 423.8% CPU
-Computing RapidNJ tree took 0.001476 sec (of wall-clock time) 0.006020 sec (of CPU time)
-Log-likelihood of RapidNJ tree: -19129.476
+Setting up auxiliary I and S matrices: done in 0.0002972 secs
+Constructing RapidNJ tree: done in 0.0006945 secs
+Computing RapidNJ tree took 0.001091 sec (of wall-clock time) 0.000000 sec (of CPU time)
+Log-likelihood of RapidNJ tree: -19129.475
 --------------------------------------------------------------------
 |             INITIALIZING CANDIDATE TREE SET                      |
 --------------------------------------------------------------------
-Generating 98 parsimony trees... 1.423 second
-Computing log-likelihood of 98 initial trees ... 1.068 seconds
+Generating 98 parsimony trees... 1.539 second
+Computing log-likelihood of 98 initial trees ... 0.995 seconds
 Current best score: -18901.866
 
 Do NNI search on 20 best initial trees
 Estimate model parameters (epsilon = 0.100)
 BETTER TREE FOUND at iteration 1: -18896.454
-Iteration 10 / LogL: -18896.535 / Time: 0h:0m:16s
-Iteration 20 / LogL: -18896.716 / Time: 0h:0m:18s
-Finish initializing candidate tree set (15)
-Current best tree score: -18896.454 / CPU time: 7.688
+Iteration 10 / LogL: -18896.535 / Time: 0h:0m:14s
+Iteration 20 / LogL: -18896.716 / Time: 0h:0m:16s
+Finish initializing candidate tree set (14)
+Current best tree score: -18896.454 / CPU time: 7.313
 Number of iterations: 20
 --------------------------------------------------------------------
 |               OPTIMIZING CANDIDATE TREE SET                      |
 --------------------------------------------------------------------
+Iteration 30 / LogL: -18897.378 / Time: 0h:0m:19s (0h:0m:24s left)
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 23: -18896.201
-Iteration 30 / LogL: -18901.760 / Time: 0h:0m:21s (0h:0m:33s left)
+BETTER TREE FOUND at iteration 37: -18896.392
+Iteration 40 / LogL: -18898.039 / Time: 0h:0m:21s (0h:0m:31s left)
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 35: -18896.103
-Iteration 40 / LogL: -18897.168 / Time: 0h:0m:23s (0h:0m:32s left)
-Iteration 50 / LogL: -18896.587 / Time: 0h:0m:26s (0h:0m:27s left)
-Log-likelihood cutoff on original alignment: -18942.934
-Iteration 60 / LogL: -18920.297 / Time: 0h:0m:29s (0h:0m:23s left)
-Iteration 70 / LogL: -18905.072 / Time: 0h:0m:32s (0h:0m:20s left)
-UPDATE BEST LOG-LIKELIHOOD: -18896.099
-Iteration 80 / LogL: -18900.001 / Time: 0h:0m:35s (0h:0m:17s left)
-Iteration 90 / LogL: -18896.592 / Time: 0h:0m:38s (0h:0m:13s left)
-Iteration 100 / LogL: -18908.466 / Time: 0h:0m:41s (0h:0m:10s left)
-Log-likelihood cutoff on original alignment: -18942.934
-NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.999
-Iteration 110 / LogL: -18896.346 / Time: 0h:0m:44s (0h:0m:27s left)
-UPDATE BEST LOG-LIKELIHOOD: -18896.092
-UPDATE BEST LOG-LIKELIHOOD: -18896.085
-Iteration 120 / LogL: -18902.961 / Time: 0h:0m:46s (0h:0m:24s left)
-Iteration 130 / LogL: -18900.779 / Time: 0h:0m:49s (0h:0m:21s left)
-TREE SEARCH COMPLETED AFTER 136 ITERATIONS / Time: 0h:0m:51s
+BETTER TREE FOUND at iteration 47: -18896.359
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 49: -18896.202
+Iteration 50 / LogL: -18896.245 / Time: 0h:0m:24s (0h:0m:30s left)
+Log-likelihood cutoff on original alignment: -18942.963
+Iteration 60 / LogL: -18937.991 / Time: 0h:0m:26s (0h:0m:26s left)
+Iteration 70 / LogL: -18899.588 / Time: 0h:0m:29s (0h:0m:22s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 75: -18896.098
+Iteration 80 / LogL: -18898.294 / Time: 0h:0m:31s (0h:0m:26s left)
+Iteration 90 / LogL: -18896.237 / Time: 0h:0m:34s (0h:0m:23s left)
+Iteration 100 / LogL: -18896.550 / Time: 0h:0m:36s (0h:0m:20s left)
+Log-likelihood cutoff on original alignment: -18942.963
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.996
+Iteration 110 / LogL: -18897.263 / Time: 0h:0m:38s (0h:0m:24s left)
+Iteration 120 / LogL: -18987.022 / Time: 0h:0m:41s (0h:0m:21s left)
+Iteration 130 / LogL: -18896.235 / Time: 0h:0m:43s (0h:0m:18s left)
+UPDATE BEST LOG-LIKELIHOOD: -18896.093
+Iteration 140 / LogL: -18912.316 / Time: 0h:0m:46s (0h:0m:16s left)
+Iteration 150 / LogL: -18924.091 / Time: 0h:0m:48s (0h:0m:13s left)
+Log-likelihood cutoff on original alignment: -18942.963
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 156: -18896.076
+Iteration 160 / LogL: -18896.742 / Time: 0h:0m:51s (0h:0m:25s left)
+Iteration 170 / LogL: -18908.544 / Time: 0h:0m:53s (0h:0m:22s left)
+Iteration 180 / LogL: -18896.098 / Time: 0h:0m:56s (0h:0m:20s left)
+Iteration 190 / LogL: -18901.753 / Time: 0h:0m:58s (0h:0m:17s left)
+Iteration 200 / LogL: -18896.249 / Time: 0h:1m:1s (0h:0m:14s left)
+Log-likelihood cutoff on original alignment: -18942.963
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.998
+Iteration 210 / LogL: -18901.249 / Time: 0h:1m:3s (0h:0m:23s left)
+Iteration 220 / LogL: -18924.344 / Time: 0h:1m:6s (0h:0m:20s left)
+Iteration 230 / LogL: -18908.236 / Time: 0h:1m:8s (0h:0m:18s left)
+Estimate model parameters (epsilon = 0.100)
+UPDATE BEST LOG-LIKELIHOOD: -18896.029
+Iteration 240 / LogL: -18959.591 / Time: 0h:1m:11s (0h:0m:15s left)
+Iteration 250 / LogL: -18985.985 / Time: 0h:1m:13s (0h:0m:12s left)
+Log-likelihood cutoff on original alignment: -18939.619
+TREE SEARCH COMPLETED AFTER 257 ITERATIONS / Time: 0h:1m:15s
 
 --------------------------------------------------------------------
 |                    FINALIZING TREE SEARCH                        |
 --------------------------------------------------------------------
 Performs final model parameters optimization
 Estimate model parameters (epsilon = 0.010)
-1. Initial log-likelihood: -18896.085
-Optimal log-likelihood: -18896.073
-Rate parameters:  A-C: 2.83581  A-G: 11.02848  A-T: 2.83581  C-G: 1.00000  C-T: 16.27493  G-T: 1.00000
+1. Initial log-likelihood: -18896.029
+Optimal log-likelihood: -18896.029
+Rate parameters:  A-C: 2.83526  A-G: 11.01074  A-T: 2.83526  C-G: 1.00000  C-T: 16.26933  G-T: 1.00000
 Base frequencies:  A: 0.308  C: 0.209  G: 0.232  T: 0.251
-Site proportion and rates:  (0.623,0.087) (0.153,1.117) (0.224,3.463)
-Parameters optimization took 1 rounds (0.039 sec)
-BEST SCORE FOUND : -18896.073
+Site proportion and rates:  (0.623,0.087) (0.153,1.118) (0.223,3.465)
+Parameters optimization took 1 rounds (0.030 sec)
+BEST SCORE FOUND : -18896.029
 Creating bootstrap support values...
-Split supports printed to NEXUS file /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/sigmodontinae_borne/S/tree.splits.nex
-Total tree length: 14.806
+Split supports printed to NEXUS file C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\sigmodontinae_borne\S\tree.splits.nex
+Total tree length: 14.882
 
-Total number of iterations: 136
-CPU time used for tree search: 117.633 sec (0h:1m:57s)
-Wall-clock time used for tree search: 40.423 sec (0h:0m:40s)
-Total CPU time used: 150.794 sec (0h:2m:30s)
-Total wall-clock time used: 51.635 sec (0h:0m:51s)
+Total number of iterations: 257
+CPU time used for tree search: 670.797 sec (0h:11m:10s)
+Wall-clock time used for tree search: 66.524 sec (0h:1m:6s)
+Total CPU time used: 767.328 sec (0h:12m:47s)
+Total wall-clock time used: 76.225 sec (0h:1m:16s)
 
 Computing bootstrap consensus tree...
-Reading input file /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/sigmodontinae_borne/S/tree.splits.nex...
-110 taxa and 514 splits.
-Consensus tree written to /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/sigmodontinae_borne/S/tree.contree
-Reading input trees file /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/sigmodontinae_borne/S/tree.contree
-Log-likelihood of consensus tree: -18896.504
+Reading input file C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\sigmodontinae_borne\S\tree.splits.nex...
+110 taxa and 546 splits.
+Consensus tree written to C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\sigmodontinae_borne\S\tree.contree
+Reading input trees file C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\sigmodontinae_borne\S\tree.contree
+Log-likelihood of consensus tree: -18896.493
 
 Analysis results written to: 
-  IQ-TREE report:                /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/sigmodontinae_borne/S/tree.iqtree
-  Maximum-likelihood tree:       /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/sigmodontinae_borne/S/tree.treefile
-  Likelihood distances:          /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/sigmodontinae_borne/S/tree.mldist
+  IQ-TREE report:                C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\sigmodontinae_borne\S\tree.iqtree
+  Maximum-likelihood tree:       C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\sigmodontinae_borne\S\tree.treefile
+  Likelihood distances:          C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\sigmodontinae_borne\S\tree.mldist
 
 Ultrafast bootstrap approximation results written to:
-  Split support values:          /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/sigmodontinae_borne/S/tree.splits.nex
-  Consensus tree:                /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/sigmodontinae_borne/S/tree.contree
-  Screen log file:               /home/victorfrankestein/Documents/Orthohantavirus/output/phylogenetics_phylogroup/sigmodontinae_borne/S/tree.log
+  Split support values:          C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\sigmodontinae_borne\S\tree.splits.nex
+  Consensus tree:                C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\sigmodontinae_borne\S\tree.contree
+  Screen log file:               C:\git-projects\Orthohantavirus\output_rerun_20260906\phylogenetics_phylogroup\sigmodontinae_borne\S\tree.log
 
-Date and Time: Sat Aug 15 12:38:22 2026
+Date and Time: Sun Sep 06 10:26:10 2026

@@ -1,7 +1,7 @@
 {
   "config": {
-    "reference_input": "all_hanta",
-    "output": "output/ga_search_corrected_pool_long",
+    "reference_input": ".",
+    "output": "C:\\git-projects\\Orthohantavirus\\output_rerun_20260906\\ga_search_corrected_pool_long",
     "seed": 20260904,
     "population": 150,
     "generations": 300,
@@ -2137,7 +2137,9 @@
       "rpi_k_stratum": "close",
       "gate1_pattern": "s_or_l_involving",
       "gate1_discordant_segment": "S",
-      "gate1_implicated_species": "Orthohantavirus hantanense;Orthohantavirus seoulense"
+      "gate1_implicated_species": "Orthohantavirus hantanense;Orthohantavirus seoulense",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "supported_reassortment_candidate"
     },
     {
       "triplet": [
@@ -2156,7 +2158,9 @@
       "rpi_k_stratum": "close",
       "gate1_pattern": "concordant",
       "gate1_discordant_segment": "",
-      "gate1_implicated_species": "Orthohantavirus hantanense"
+      "gate1_implicated_species": "Orthohantavirus hantanense",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "no_conflict"
     },
     {
       "triplet": [
@@ -2175,7 +2179,9 @@
       "rpi_k_stratum": "close",
       "gate1_pattern": "concordant",
       "gate1_discordant_segment": "",
-      "gate1_implicated_species": "Orthohantavirus hantanense"
+      "gate1_implicated_species": "Orthohantavirus hantanense",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "no_conflict"
     },
     {
       "triplet": [
@@ -2194,7 +2200,9 @@
       "rpi_k_stratum": "close",
       "gate1_pattern": "concordant",
       "gate1_discordant_segment": "",
-      "gate1_implicated_species": "Orthohantavirus hantanense"
+      "gate1_implicated_species": "Orthohantavirus hantanense",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "no_conflict"
     },
     {
       "triplet": [
@@ -2213,7 +2221,9 @@
       "rpi_k_stratum": "close",
       "gate1_pattern": "concordant",
       "gate1_discordant_segment": "",
-      "gate1_implicated_species": "Orthohantavirus hantanense"
+      "gate1_implicated_species": "Orthohantavirus hantanense",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "no_conflict"
     },
     {
       "triplet": [
@@ -2232,7 +2242,9 @@
       "rpi_k_stratum": "close",
       "gate1_pattern": "concordant",
       "gate1_discordant_segment": "",
-      "gate1_implicated_species": "Orthohantavirus hantanense"
+      "gate1_implicated_species": "Orthohantavirus hantanense",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support"
     },
     {
       "triplet": [
@@ -2251,7 +2263,9 @@
       "rpi_k_stratum": "close",
       "gate1_pattern": "concordant",
       "gate1_discordant_segment": "",
-      "gate1_implicated_species": "Orthohantavirus hantanense"
+      "gate1_implicated_species": "Orthohantavirus hantanense",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support"
     },
     {
       "triplet": [
@@ -2270,7 +2284,9 @@
       "rpi_k_stratum": "close",
       "gate1_pattern": "concordant",
       "gate1_discordant_segment": "",
-      "gate1_implicated_species": "Orthohantavirus hantanense"
+      "gate1_implicated_species": "Orthohantavirus hantanense",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "no_conflict"
     },
     {
       "triplet": [
@@ -2289,7 +2305,9 @@
       "rpi_k_stratum": "close",
       "gate1_pattern": "concordant",
       "gate1_discordant_segment": "",
-      "gate1_implicated_species": "Orthohantavirus hantanense"
+      "gate1_implicated_species": "Orthohantavirus hantanense",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "no_conflict"
     },
     {
       "triplet": [
@@ -2308,9 +2326,11 @@
       "rpi_k_stratum": "close",
       "gate1_pattern": "concordant",
       "gate1_discordant_segment": "",
-      "gate1_implicated_species": "Orthohantavirus hantanense"
+      "gate1_implicated_species": "Orthohantavirus hantanense",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support"
     }
   ],
-  "confirmation": "deferred: full-gate confirmation not requested (re-run with --with-phylogeny on a machine with mafft/iqtree)",
+  "confirmation": "attempted: per-winner gate4 fields recorded (errors included, if any)",
   "scoring_errors": []
 }
