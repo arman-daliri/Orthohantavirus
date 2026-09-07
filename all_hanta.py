@@ -887,9 +887,16 @@ def _atomic_write_bytes(path: Path, data: bytes) -> None:
 
 
 def safe_write_csv(path: Path, rows: Sequence[Dict[str, Any]]) -> str:
-    """Write a CSV table atomically; returns its sha256 for the output checksum manifest."""
+    """Write a CSV table atomically; returns its sha256 for the output checksum manifest.
+
+    lineterminator="\\n" is pinned explicitly: pandas' to_csv() otherwise defaults to
+    os.linesep, so the exact same rows produce LF line endings on Linux and CRLF on
+    Windows -- identical content, different bytes, different sha256. That silently
+    broke the whole point of ortho_output_checksums.txt (verifying output integrity
+    across machines) and made a plain content-identical rerun look like a diff.
+    """
     frame = pd.DataFrame(list(rows)) if rows else pd.DataFrame()
-    data = frame.to_csv(index=False).encode("utf-8")
+    data = frame.to_csv(index=False, lineterminator="\n").encode("utf-8")
     _atomic_write_bytes(path, data)
     logging.info("Wrote %s rows x %s cols to %s", len(frame), len(frame.columns), path.name)
     return hashlib.sha256(data).hexdigest()
@@ -3337,5 +3344,29 @@ class SurveillancePriorityReassortmentTermTest(unittest.TestCase):
         with_support = surveillance_priority(self.isolate, self.risk, None, "supported_reassortment_candidate")
         delta = with_support["surveillance_priority_score"] - without["surveillance_priority_score"]
         self.assertAlmostEqual(delta, SURVEILLANCE_WEIGHTS["supported_reassortment"], places=6)
+
+
+class SafeWriteCsvLineEndingTest(unittest.TestCase):
+    """pandas' to_csv() defaults its line terminator to os.linesep -- LF on Linux, CRLF
+    on Windows -- for content-identical rows. That silently broke the whole point of
+    ortho_output_checksums.txt (verifying output integrity across machines): a rerun on
+    a different OS with byte-for-byte identical data produced a different sha256, which
+    read as a data conflict when it was really just an unpinned line terminator.
+    safe_write_csv must always emit LF, regardless of the platform it runs on.
+    """
+
+    def test_output_never_contains_crlf(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "out.csv"
+            safe_write_csv(path, [{"a": "1", "b": "2"}, {"a": "3", "b": "4"}])
+            data = path.read_bytes()
+        self.assertNotIn(b"\r\n", data)
+
+    def test_output_uses_lf_between_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "out.csv"
+            safe_write_csv(path, [{"a": "1"}, {"a": "2"}])
+            data = path.read_bytes()
+        self.assertEqual(data, b"a\n1\n2\n")
 
 
