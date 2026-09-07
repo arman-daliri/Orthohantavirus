@@ -9260,8 +9260,21 @@ def _validate_build_panel(builder: PanelBuilder,
 
 def score_case(case: Dict[str, Any], reference, precomputed, with_phylogeny: bool,
                output_dir: Path) -> Dict[str, Any]:
+    # mafft_bin/iqtree_bin must be resolved to absolute paths via ph.resolve_binary, not
+    # passed as bare names -- Windows' subprocess.run cannot exec a bare "mafft"/"iqtree"
+    # (mafft is a .BAT; CreateProcess will not resolve PATH+PATHEXT for a list-form argv
+    # without shell=True). This is the same defect already fixed once for
+    # Algorithm.py's confirm_winners (§7e Finding 2); it was never applied here, so
+    # every --with-phylogeny validate run that reached an actual alignment attempt
+    # (most candidates short-circuit to insufficient_comparators first) crashed with
+    # FileNotFoundError instead of running gate4.
+    if with_phylogeny:
+        mafft_bin = ph.resolve_binary(None, "mafft")
+        iqtree_bin = ph.resolve_binary(None, "iqtree")
+    else:
+        mafft_bin = iqtree_bin = None
     args = argparse.Namespace(
-        output=str(output_dir), mafft_bin="mafft", iqtree_bin="iqtree",
+        output=str(output_dir), mafft_bin=mafft_bin, iqtree_bin=iqtree_bin,
         bootstrap=1000, min_bootstrap_support=95.0,
         phylo_min_taxa=4 if with_phylogeny else _PHYLO_DISABLED_MIN_TAXA,
         phylo_seed=42, phylo_threads=1,
@@ -9342,7 +9355,87 @@ def score_case(case: Dict[str, Any], reference, precomputed, with_phylogeny: boo
         "localized_correct_segment": bool(localized),
         "exact_pattern_match": bool(exact),
         "is_known_blind_spot": bool(case.get("blind_spot")),
+        # score_candidate always computes these when with_phylogeny is set; they were
+        # being silently dropped here, so every --with-phylogeny validate run shipped
+        # rows with no trace gate4 ever ran on them at all, while the top-level
+        # gate4_exercised flag (see _validate_main) claimed otherwise -- the exact
+        # "asserted on an intermediate value, not the row that ships" defect class
+        # documented in docs/CLAUDE.md.
+        "gate4_phylo_status": row.get("gate4_phylo_status"),
+        "gate4_reassortment_call": row.get("gate4_reassortment_call"),
+        "gate4_discordant_segment": row.get("gate4_discordant_segment"),
+        "gate4_bootstrap_support": row.get("gate4_bootstrap_support"),
     }
+
+
+class ScoreCaseGate4FieldsTest(unittest.TestCase):
+    """score_case previously discarded every gate4 field score_candidate computed, so
+    a --with-phylogeny validate run shipped result rows with zero trace gate4 ever ran
+    -- while _validate_main's payload separately (and wrongly) reported gate4 as having
+    been exercised just because the flag was passed. Found during the 2026-09-06
+    overnight full-pipeline rerun: gate4_exercised was True in the shipped JSON with
+    55/55 results carrying no gate4 field at all."""
+
+    def _case(self, **overrides):
+        case = {"case_id": "X1", "klass": "A_published_inter_species", "paper": "p",
+                "reported": "r", "expect_pattern": "m_only", "expect_discordant": "M",
+                "candidate": object()}
+        case.update(overrides)
+        return case
+
+    def test_gate4_fields_are_copied_from_score_candidate_row(self):
+        fake_row = {
+            "verdict": "no_ecological_route", "gate1_pattern": "m_only",
+            "gate1_discordant_segment": "M",
+            "gate4_phylo_status": "analyzed",
+            "gate4_reassortment_call": "no_conflict",
+            "gate4_discordant_segment": "M",
+            "gate4_bootstrap_support": 97.5,
+        }
+        with mock.patch.object(ph, "resolve_binary", side_effect=lambda e, n: f"/bin/{n}"), \
+             mock.patch.object(rd, "score_candidate", return_value=fake_row):
+            result = score_case(self._case(), reference=object(), precomputed={},
+                                with_phylogeny=True, output_dir=Path("/tmp/out"))
+        self.assertEqual(result["gate4_phylo_status"], "analyzed")
+        self.assertEqual(result["gate4_reassortment_call"], "no_conflict")
+        self.assertEqual(result["gate4_discordant_segment"], "M")
+        self.assertEqual(result["gate4_bootstrap_support"], 97.5)
+
+    def test_gate4_fields_are_none_when_score_candidate_omits_them(self):
+        fake_row = {"verdict": "junk_sequence", "gate1_pattern": "", "gate1_discordant_segment": ""}
+        with mock.patch.object(rd, "score_candidate", return_value=fake_row):
+            result = score_case(self._case(), reference=object(), precomputed={},
+                                with_phylogeny=False, output_dir=Path("/tmp/out"))
+        self.assertIsNone(result["gate4_phylo_status"])
+        self.assertIsNone(result["gate4_reassortment_call"])
+
+    def test_with_phylogeny_resolves_binaries_to_absolute_paths(self):
+        """The actual defect: mafft_bin/iqtree_bin were bare "mafft"/"iqtree" strings,
+        which Windows subprocess.run cannot exec without shell=True. score_candidate
+        must receive resolved absolute paths instead."""
+        captured = {}
+
+        def fake_score_candidate(candidate, reference, precomputed, args):
+            captured["mafft_bin"] = args.mafft_bin
+            captured["iqtree_bin"] = args.iqtree_bin
+            return {"verdict": "no_ecological_route"}
+
+        with mock.patch.object(ph, "resolve_binary",
+                               side_effect=lambda explicit, name: f"/resolved/{name}") as spy, \
+             mock.patch.object(rd, "score_candidate", side_effect=fake_score_candidate):
+            score_case(self._case(), reference=object(), precomputed={},
+                      with_phylogeny=True, output_dir=Path("/tmp/out"))
+        spy.assert_any_call(None, "mafft")
+        spy.assert_any_call(None, "iqtree")
+        self.assertEqual(captured["mafft_bin"], "/resolved/mafft")
+        self.assertEqual(captured["iqtree_bin"], "/resolved/iqtree")
+
+    def test_without_phylogeny_never_touches_binary_resolution(self):
+        with mock.patch.object(ph, "resolve_binary") as spy, \
+             mock.patch.object(rd, "score_candidate", return_value={"verdict": "no_ecological_route"}):
+            score_case(self._case(), reference=object(), precomputed={},
+                      with_phylogeny=False, output_dir=Path("/tmp/out"))
+        spy.assert_not_called()
 
 
 def summarise(results: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -9455,7 +9548,15 @@ def _validate_main(argv=None) -> int:
 
     if args.json:
         payload = {
-            "gate4_exercised": args.with_phylogeny,
+            # Was --with-phylogeny requested at all -- NOT whether gate4 actually
+            # analyzed any candidate. That is gate4_analyzed_count/gate4_call_counts
+            # below, computed from the results that actually shipped, per the same
+            # rule as everywhere else in this codebase: assert on the row that ships.
+            "gate4_requested": args.with_phylogeny,
+            "gate4_analyzed_count": sum(
+                1 for r in results if r.get("gate4_phylo_status") == "analyzed"),
+            "gate4_call_counts": dict(Counter(
+                r.get("gate4_phylo_status") for r in results if args.with_phylogeny)),
             "rpi_weights_version": rd.RPI_WEIGHTS_VERSION,
             "summary": summary,
             "results": results,
