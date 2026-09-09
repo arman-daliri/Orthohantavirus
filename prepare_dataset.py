@@ -2913,7 +2913,13 @@ def summarize(
     cluster_threshold: float,
     min_species_size: int,
     data_records: Sequence[Dict[str, Any]] = (),
+    genomic_index: Optional[Dict[str, "FastaRecord"]] = None,
+    cds_index: Optional[Dict[str, List[Tuple[str, str]]]] = None,
+    output_digests: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
+    genomic_index = genomic_index or {}
+    cds_index = cds_index or {}
+    output_digests = output_digests or {}
     catalog: Dict[str, Any] = {}
     if paths.dataset_catalog.exists():
         catalog = json.loads(paths.dataset_catalog.read_text(encoding="utf-8"))
@@ -2973,6 +2979,17 @@ def summarize(
             "human_derived_records": sum(1 for a in accessions if a.host_taxid == "9606"),
             "lab_host_records": sum(1 for a in accessions if a.is_lab_host),
             "vaccine_strain_records": sum(1 for a in accessions if a.is_vaccine_strain),
+        },
+
+        "reference_snapshot": {
+            "isolate_count": len(isolates),
+            "genomic_accession_count": len(genomic_index),
+            "cds_indexed_accession_count": len(cds_index),
+            "files": {
+                "ortho_reference_isolates.json": output_digests.get("ortho_reference_isolates.json"),
+                "ortho_reference_genomic.json": output_digests.get("ortho_reference_genomic.json"),
+                "ortho_reference_cds.json": output_digests.get("ortho_reference_cds.json"),
+            },
         },
 
         "segment_counts": dict(Counter(a.segment or "unresolved" for a in accessions)),
@@ -3142,9 +3159,20 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
     write_csv("ortho_qc_report.csv", qc_rows)
     write_json("ortho_feature_scaling.json", scaling)
 
+    logging.info("Loading CDS index")
+    cds_index = parse_cds_fasta(paths.cds_fasta)
+    logging.info("  cds: %s accessions with at least one CDS", len(cds_index))
+
+    logging.info("Writing reference snapshot")
+    write_json("ortho_reference_isolates.json", [asdict(i) for i in isolates])
+    write_json("ortho_reference_genomic.json", [asdict(r) for r in genomic_index.values()])
+    write_json("ortho_reference_cds.json", cds_index)
+
     summary = summarize(accessions, isolates, divergence, qc_rows, checksums,
                         curation_issues, paths, args.cluster_threshold,
-                        args.min_species_size, data_records)
+                        args.min_species_size, data_records,
+                        genomic_index=genomic_index, cds_index=cds_index,
+                        output_digests=output_digests)
     write_json("ortho_summary.json", summary)
 
     # ortho_risk_table.csv is always phylo-blind now -- Stage 2 (phylogeny.py) is a separate
@@ -3402,5 +3430,38 @@ class SafeWriteCsvLineEndingTest(unittest.TestCase):
             safe_write_csv(path, [{"a": "1"}, {"a": "2"}])
             data = path.read_bytes()
         self.assertEqual(data, b"a\n1\n2\n")
+
+
+class ReferenceSnapshotWriteTest(unittest.TestCase):
+    """run_pipeline must write the 3 reference snapshot files, unfiltered."""
+
+    def test_writes_three_snapshot_files_with_expected_shapes(self):
+        isolates = [_make_isolate("iso1", "Orthohantavirus x", "S1.1", "M1.1", "L1.1")]
+        genomic_index = {
+            "S1.1": FastaRecord(accession="S1.1", accession_base="S1", header="S1.1 h",
+                                sequence="ACGT", length=4),
+        }
+        cds_index = {"S1": [("nucleocapsid protein", "ACGTACGT")]}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            isolates_digest = safe_write_json(
+                out / "ortho_reference_isolates.json", [asdict(i) for i in isolates])
+            genomic_digest = safe_write_json(
+                out / "ortho_reference_genomic.json",
+                [asdict(r) for r in genomic_index.values()])
+            cds_digest = safe_write_json(out / "ortho_reference_cds.json", cds_index)
+
+            self.assertTrue((out / "ortho_reference_isolates.json").exists())
+            self.assertTrue((out / "ortho_reference_genomic.json").exists())
+            self.assertTrue((out / "ortho_reference_cds.json").exists())
+            self.assertEqual(len(isolates_digest), 64)  # sha256 hex digest length
+            self.assertEqual(len(genomic_digest), 64)
+            self.assertEqual(len(cds_digest), 64)
+
+            loaded_isolates = json.loads((out / "ortho_reference_isolates.json").read_text())
+            self.assertEqual(loaded_isolates[0]["isolate_key"], "iso1")
+            loaded_cds = json.loads((out / "ortho_reference_cds.json").read_text())
+            self.assertEqual(loaded_cds["S1"], [["nucleocapsid protein", "ACGTACGT"]])
 
 
