@@ -3178,7 +3178,7 @@ if __name__ == "__main__":
 # Tests
 # ============================================================================
 #
-# Merged from test_all_hanta.py. Run with: python3 -m unittest all_hanta -v
+# Merged from test_all_hanta.py. Run with: python3 -m unittest prepare_dataset -v
 #
 # Three test classes, all fake-free (no faked Bio.Phylo/mafft/iqtree -- that lives in
 # phylogeny.py's own tests now):
