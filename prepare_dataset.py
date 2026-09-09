@@ -1014,6 +1014,18 @@ def load_reference_data(output_dir: Path) -> ReferenceData:
                 f"Reference snapshot file missing: {path}. Run prepare_dataset.py "
                 f"(Stage 1) against this output directory first.")
 
+    manifest_path = output_dir / "ortho_reference_snapshot_manifest.json"
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        snapshot_version = manifest.get("pipeline_version")
+        if snapshot_version and snapshot_version != VERSION:
+            logging.warning(
+                "Reference snapshot at %s was written by prepare_dataset.py %s; this "
+                "checkout is %s. If the snapshot's schema or semantics changed between "
+                "versions, re-run Stage 1 (prepare_dataset.py) against this output "
+                "directory before trusting downstream results.",
+                output_dir, snapshot_version, VERSION)
+
     isolates = [IsolateRecord(**row) for row in json.loads(isolates_path.read_text(encoding="utf-8"))]
     genomic_index: Dict[str, FastaRecord] = {}
     for row in json.loads(genomic_path.read_text(encoding="utf-8")):
@@ -3022,7 +3034,7 @@ def summarize(
 
         "reference_snapshot": {
             "isolate_count": len(isolates),
-            "genomic_accession_count": len(genomic_index),
+            "genomic_accession_count": indexed_record_count(genomic_index),
             "cds_indexed_accession_count": len(cds_index),
             "files": {
                 "ortho_reference_isolates.json": output_digests.get("ortho_reference_isolates.json"),
@@ -3204,8 +3216,25 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
 
     logging.info("Writing reference snapshot")
     write_json("ortho_reference_isolates.json", [asdict(i) for i in isolates])
-    write_json("ortho_reference_genomic.json", [asdict(r) for r in genomic_index.values()])
+    # genomic_index dual-keys each record under its versioned accession and its base
+    # accession (see parse_fasta); dedupe by identity so the snapshot holds one row per
+    # record, not two. load_reference_data reconstructs the dual keying from this flat
+    # list on read.
+    unique_genomic_records = {id(r): r for r in genomic_index.values()}.values()
+    write_json("ortho_reference_genomic.json", [asdict(r) for r in unique_genomic_records])
     write_json("ortho_reference_cds.json", cds_index)
+    # Stamp the snapshot with the pipeline version that wrote it, so a snapshot left over
+    # from a code version whose schema/semantics have since changed is detectable rather
+    # than silently readable -- see load_reference_data's staleness check.
+    write_json("ortho_reference_snapshot_manifest.json", {
+        "pipeline_version": VERSION,
+        "generated_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "files": {
+            "ortho_reference_isolates.json": output_digests.get("ortho_reference_isolates.json"),
+            "ortho_reference_genomic.json": output_digests.get("ortho_reference_genomic.json"),
+            "ortho_reference_cds.json": output_digests.get("ortho_reference_cds.json"),
+        },
+    })
 
     summary = summarize(accessions, isolates, divergence, qc_rows, checksums,
                         curation_issues, paths, args.cluster_threshold,
@@ -3503,6 +3532,91 @@ class ReferenceSnapshotWriteTest(unittest.TestCase):
             loaded_cds = json.loads((out / "ortho_reference_cds.json").read_text())
             self.assertEqual(loaded_cds["S1"], [["nucleocapsid protein", "ACGTACGT"]])
 
+    def test_dual_keyed_genomic_index_writes_one_row_per_record(self):
+        """Regression for I1/I2: genomic_index dual-keys each record under its versioned
+        accession and its base accession (parse_fasta's own behavior). The count in
+        summarize()'s reference_snapshot block, and the JSON file itself, must both
+        reflect the number of distinct records, not the number of dict keys."""
+        record = FastaRecord(accession="S1.1", accession_base="S1", header="S1.1 h",
+                              sequence="ACGT", length=4)
+        genomic_index = {"S1.1": record, "S1": record}  # same object, two keys
+        self.assertEqual(indexed_record_count(genomic_index), 1)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            unique_records = {id(r): r for r in genomic_index.values()}.values()
+            safe_write_json(out / "ortho_reference_genomic.json",
+                            [asdict(r) for r in unique_records])
+            loaded = json.loads((out / "ortho_reference_genomic.json").read_text())
+            self.assertEqual(len(loaded), 1)
+
+
+class RunPipelineSnapshotUnfilteredTest(unittest.TestCase):
+    """Regression for I5: asserts the Stage-1-stays-filter-free invariant against
+    run_pipeline's ACTUAL WRITTEN FILE, not a re-typed intermediate value. Mocks only
+    the raw-ingestion boundary (transform_one_record, plus the file-reading calls that
+    feed it) so this doesn't need a full synthetic NCBI dataset directory -- but
+    build_isolate_records and run_pipeline's own write_json calls run for real, which is
+    exactly the code path where an accidental completeness filter could leak in before
+    the snapshot hits disk.
+    """
+
+    def test_incomplete_isolate_survives_to_the_written_snapshot(self):
+        from unittest import mock
+
+        complete_accs = []
+        for seg, acc in (("S", "S1"), ("M", "M1"), ("L", "L1")):
+            record = _make_accession(acc, "Orthohantavirus x", "Testland", "2020")
+            record.segment = seg
+            record.group_key = "iso-complete"
+            complete_accs.append(record)
+
+        incomplete_acc = _make_accession("S2", "Orthohantavirus x", "Testland", "2020")
+        incomplete_acc.segment = "S"
+        incomplete_acc.group_key = "iso-incomplete"
+
+        all_accs = complete_accs + [incomplete_acc]
+        dummy_data_records = [{} for _ in all_accs]
+        qc_row = {"transform_ok": True}
+        transformed = [(acc, dict(qc_row)) for acc in all_accs]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output_dir = root / "output"
+            output_dir.mkdir()
+            dummy = root / "dummy.jsonl"
+            paths = InputPaths(
+                root=root, package_dir=root, data_dir=root,
+                data_report=dummy, annotation_report=dummy, biosample_report=dummy,
+                dataset_catalog=dummy, md5sum_file=None,
+                genomic_fasta=None, protein_fasta=None, cds_fasta=None,
+                output_dir=output_dir, log_file=output_dir / "ortho_pipeline.log")
+            args = parse_args(["--input", str(root)])
+
+            def fake_iter_jsonl(path):
+                return iter(dummy_data_records) if path == paths.data_report else iter([])
+
+            with mock.patch("prepare_dataset.verify_inputs", return_value=[]), \
+                 mock.patch("prepare_dataset.iter_jsonl", side_effect=fake_iter_jsonl), \
+                 mock.patch("prepare_dataset.parse_fasta", return_value={}), \
+                 mock.patch("prepare_dataset.parse_cds_fasta", return_value={}), \
+                 mock.patch("prepare_dataset.transform_one_record", side_effect=transformed):
+                run_pipeline(paths, args)
+
+            written = json.loads((output_dir / "ortho_reference_isolates.json").read_text())
+            manifest = json.loads(
+                (output_dir / "ortho_reference_snapshot_manifest.json").read_text())
+
+        by_key = {row["isolate_key"]: row for row in written}
+        self.assertIn("iso-complete", by_key)
+        self.assertIn("iso-incomplete", by_key)
+        self.assertTrue(by_key["iso-complete"]["has_complete_triplet"])
+        self.assertFalse(by_key["iso-incomplete"]["has_complete_triplet"])
+
+        # I6: the snapshot must be stamped with the pipeline version that wrote it.
+        self.assertEqual(manifest["pipeline_version"], VERSION)
+        self.assertIn("ortho_reference_isolates.json", manifest["files"])
+
 
 class ReferenceDataRoundTripTest(unittest.TestCase):
     """load_reference_data must reconstruct exactly what run_pipeline wrote --
@@ -3558,5 +3672,33 @@ class ReferenceDataRoundTripTest(unittest.TestCase):
             self.assertEqual(len(reference.isolates), 1)
             self.assertIsInstance(reference.isolates[0], IsolateRecord)
             self.assertEqual(reference.isolates[0].isolate_key, "iso1")
+
+    def test_warns_on_stale_snapshot_manifest_version(self):
+        """Regression for I6: a snapshot written by a different pipeline_version must be
+        detectable, not silently readable as if it matched the running code."""
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            safe_write_json(out / "ortho_reference_isolates.json", [])
+            safe_write_json(out / "ortho_reference_genomic.json", [])
+            safe_write_json(out / "ortho_reference_cds.json", {})
+            safe_write_json(out / "ortho_reference_snapshot_manifest.json",
+                            {"pipeline_version": "0.0.1-stale", "generated_at_utc": "x",
+                             "files": {}})
+
+            with self.assertLogs(level="WARNING") as captured:
+                load_reference_data(out)
+            self.assertTrue(any("0.0.1-stale" in msg for msg in captured.output))
+
+    def test_no_warning_when_manifest_absent(self):
+        """A snapshot written before this fix (no manifest file) must still load without
+        a spurious staleness warning -- there is nothing to compare against."""
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            safe_write_json(out / "ortho_reference_isolates.json", [])
+            safe_write_json(out / "ortho_reference_genomic.json", [])
+            safe_write_json(out / "ortho_reference_cds.json", {})
+
+            with self.assertNoLogs(level="WARNING"):
+                load_reference_data(out)
 
 
