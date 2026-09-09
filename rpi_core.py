@@ -31,12 +31,12 @@ from pathlib import Path
 from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Set, Tuple
 import numpy as np
 from Bio.Align import PairwiseAligner, substitution_matrices
-import all_hanta as ah
+import prepare_dataset as prep
 import phylogeny as ph
 
 # --- Original per-module docstrings, preserved as named constants so each
 # module's own argparse `description=` text is unchanged (see below) ---
-_DETECTOR_MODULE_DOC = "Reassortment candidate detector: reference data, reference loading, Gates 0-4 and the\nverdict rubric, and the CLI entry point -- all in one module.\n\nScores a brand-new candidate hantavirus genome (S+M+L genomic FASTA) against the\nfive-gate framework in docs/superpowers/specs/2026-08-12-reassortment-detector-design.md.\nImports all_hanta.py's ingest and phylogenetics machinery; makes no changes to it.\n\nThis module was originally split into reassortment_detector.py (CLI),\ndetector_gates.py (gates 0-4 and the verdict rubric), detector_reference.py (reference\ndataset loading), and reassortment_reference_data.py (curated structural/literature\nreference data) per docs/superpowers/specs/2026-08-13-three-stage-pipeline-split-design.md.\nReconsolidated back into this single file per\ndocs/superpowers/notes/2026-08-14-reassortment-detector-reconsolidation.md.\n"
+_DETECTOR_MODULE_DOC = "Reassortment candidate detector: reference data, reference loading, Gates 0-4 and the\nverdict rubric, and the CLI entry point -- all in one module.\n\nScores a brand-new candidate hantavirus genome (S+M+L genomic FASTA) against the\nfive-gate framework in docs/superpowers/specs/2026-08-12-reassortment-detector-design.md.\nImports prepare_dataset.py's ingest and phylogenetics machinery; makes no changes to it.\n\nThis module was originally split into reassortment_detector.py (CLI),\ndetector_gates.py (gates 0-4 and the verdict rubric), detector_reference.py (reference\ndataset loading), and reassortment_reference_data.py (curated structural/literature\nreference data) per docs/superpowers/specs/2026-08-13-three-stage-pipeline-split-design.md.\nReconsolidated back into this single file per\ndocs/superpowers/notes/2026-08-14-reassortment-detector-reconsolidation.md.\n"
 _CALIBRATION_MODULE_DOC = "WS3.1 -- the pinned ddG calibration panel behind the M_pack rescaling (decision D1).\n\nBuilds a cognate / non-cognate panhandle-duplex panel from real sequences in\n`all_hanta/`, folds every duplex through the ViennaRNA Python bindings (D2b), measures\nthe ddG distribution under the N = 50 nt window (D2), tests it for bimodality, and\nwrites `data/rpi_calibration.json`.\n\nWHY THIS IS A SEPARATE MODULE. `reassortment_detector.py` must read a *pinned artifact*\nrather than recompute tau at scoring time. Recomputing would make every candidate's score\ndepend on whatever cohort happened to be loaded -- the exact cohort-dependence that got\nOption B rejected in D1. Calibration is therefore a distinct, auditable, seeded step whose\noutput is committed to the repo.\n\nTHE CIRCULARITY THIS MODULE EXISTS TO AVOID. tau is derived from the observed ddG span, so\nthe panel's composition directly sets the scale parameter every downstream M_pack depends\non. If the panel overlapped the WS4 validation groups, tau would be tuned on the validation\nset and the WS4 result would be circular. `ws4_reserved_accessions` enforces the\ndisjointness against the WS4 groups that exist today, and `calibrate` records the isolates\nit consumed so the WS4 groups that do not exist yet can exclude them in turn. See\n`reserved_for_calibration` in the artifact.\n\nRun:\n    python rpi_calibration.py                       # writes data/rpi_calibration.json\n    python -m unittest rpi_calibration              # unit tests\n"
 _VALIDATE_MODULE_DOC = 'Validation harness for reassortment_detector.py.\n\nWHAT THIS ANSWERS\n-----------------\nDoes the detector actually fire on reassortants, and stay quiet on non-reassortants?\n\nThe unit tests in reassortment_detector.py check that each gate computes what it says\nit computes. They do NOT answer the question above, because a detector can be\ninternally consistent and still be blind. This harness scores a panel of candidates\nwhose ground truth is known independently of the detector, and reports a confusion\nmatrix.\n\nTHE PANEL\n---------\nFour classes, each with a DIFFERENT expected outcome. A harness where everything is\nexpected to come back positive proves nothing -- see class C and class E.\n\n  A. PUBLISHED INTER-SPECIES REASSORTANTS. Reconstructed in silico from the real\n     genome sequences of the parental species named in the source paper. Expected:\n     gate1 flags the exchanged segment.\n\n  B. PUBLISHED INTRA-SPECIES REASSORTANTS. Same, but both parents are the same ICTV\n     species. Expected: gate1 CANNOT see these -- see "known blind spot" below. This\n     class exists to measure the blind spot, not to pass.\n\n  C. TRUE NEGATIVES. Real, unmodified isolates: all three segments from one animal.\n     Expected: no discordance. This is the class that can produce false positives, and\n     without it a "100% detection rate" would be meaningless.\n\n  D. SYNTHETIC INTER-SPECIES SWAPS. Constructed cross-species exchanges spanning every\n     segment position (S, M and L donated in turn) and a range of parental distances.\n     Not from any paper -- these exist to measure detection across a wider sweep than\n     the published set covers, and to check the detector names the RIGHT segment.\n\n  E. ADVERSARIAL. Junk, scrambled and truncated input. Expected: rejected at gate0 or\n     otherwise handled, never silently scored as a confident reassortant.\n\nPROVENANCE AND HONESTY\n----------------------\nClass A and B candidates are RECONSTRUCTIONS OF PUBLISHED CONSTELLATIONS, not the\npublished reassortant clones themselves. The papers report which parental strains were\ncrossed and which segment was exchanged; this harness rebuilds that genotype from the\nparental sequences in all_hanta/. Where the paper\'s exact parental strain is present in\nthe dataset it is used and named in the output (`parents_are_exact_published_strains`);\nwhere only the species is available, a representative isolate of that species is used\nand the row says so. No sequence here is invented.\n\nKNOWN BLIND SPOT (measured by class B, not hidden by it)\n--------------------------------------------------------\ngate1 detects reassortment by assigning each segment to its nearest reference SPECIES\nby protein k-mer profile and looking for disagreement. When both parents belong to the\nsame species, all three segments assign to that same species and gate1 reports\n"concordant" -- correctly, on its own terms, and uselessly for that event class.\nIntra-species reassortment is what gate4\'s per-segment phylogenetics exists to catch.\n\nGATE 4 IS NOT EXERCISED HERE\n----------------------------\ngate4 needs mafft and iqtree. Neither is installed in the environment this harness was\nwritten in, and substituting fake binaries would produce trees from random numbers --\nwhich would not validate anything. gate4 is therefore skipped (via a comparator\nthreshold that makes it return "insufficient_comparators" without running), and every\nverdict below is a verdict-with-gate4-withheld. Run with --with-phylogeny once real\nbinaries are on PATH to lift this.\n\nUsage:\n    python validate_reassortment_detector.py\n    python validate_reassortment_detector.py --json validation_report.json\n'
 
@@ -380,41 +380,41 @@ def constellation_prior(stratum: str, alpha: Optional[float] = None,
 # ---------------------------------------------------------------------------
 # Reference dataset loading.
 #
-# load_reference_data replicates the ingest portion of all_hanta.py's run_pipeline (see
+# load_reference_data replicates the ingest portion of prepare_dataset.py's run_pipeline (see
 # that function, lines ~3960-4001) without any of the table-building, ML-matrix, or
 # output-writing steps this detector doesn't need.
 # ---------------------------------------------------------------------------
 
 @dataclass
 class ReferenceData:
-    isolates: List["ah.IsolateRecord"]
+    isolates: List["prep.IsolateRecord"]
     cds_index: Dict[str, List[Tuple[str, str]]]
-    genomic_index: Dict[str, "ah.FastaRecord"]
+    genomic_index: Dict[str, "prep.FastaRecord"]
 
 
 def load_reference_data(root: Path) -> ReferenceData:
-    paths = ah.resolve_inputs(root)
+    paths = prep.resolve_inputs(root)
 
-    data_records = list(ah.iter_jsonl(paths.data_report))
-    annotation_index = ah.build_annotation_index(ah.iter_jsonl(paths.annotation_report))
-    biosample_index = ah.build_biosample_index(ah.iter_jsonl(paths.biosample_report))
-    genomic_index = ah.parse_fasta(paths.genomic_fasta)
-    protein_index = ah.parse_fasta(paths.protein_fasta)
+    data_records = list(prep.iter_jsonl(paths.data_report))
+    annotation_index = prep.build_annotation_index(prep.iter_jsonl(paths.annotation_report))
+    biosample_index = prep.build_biosample_index(prep.iter_jsonl(paths.biosample_report))
+    genomic_index = prep.parse_fasta(paths.genomic_fasta)
+    protein_index = prep.parse_fasta(paths.protein_fasta)
 
     accessions = []
     for record in data_records:
-        transformed, _qc_row = ah.transform_one_record(
+        transformed, _qc_row = prep.transform_one_record(
             record, annotation_index, biosample_index, genomic_index, protein_index)
         if transformed is not None:
             accessions.append(transformed)
 
-    isolates = ah.build_isolate_records(accessions)
+    isolates = prep.build_isolate_records(accessions)
     cds_index = ph.parse_cds_fasta(paths.cds_fasta)
 
     return ReferenceData(isolates=isolates, cds_index=cds_index, genomic_index=genomic_index)
 
 
-def protein_lengths_by_segment(isolates: List["ah.IsolateRecord"]) -> Dict[str, List[int]]:
+def protein_lengths_by_segment(isolates: List["prep.IsolateRecord"]) -> Dict[str, List[int]]:
     lengths: Dict[str, List[int]] = {"S": [], "M": [], "L": []}
     for isolate in isolates:
         for segment, attribute in (("S", "s_protein_aa"), ("M", "m_protein_aa"), ("L", "l_protein_aa")):
@@ -425,7 +425,7 @@ def protein_lengths_by_segment(isolates: List["ah.IsolateRecord"]) -> Dict[str, 
 
 
 def genomic_sequences_by_segment(
-    isolates: List["ah.IsolateRecord"], genomic_index: Dict[str, "ah.FastaRecord"],
+    isolates: List["prep.IsolateRecord"], genomic_index: Dict[str, "prep.FastaRecord"],
 ) -> Dict[str, List[str]]:
     sequences: Dict[str, List[str]] = {"S": [], "M": [], "L": []}
     for isolate in isolates:
@@ -433,14 +433,14 @@ def genomic_sequences_by_segment(
                                     ("L", isolate.l_accession)):
             if not accession:
                 continue
-            record = genomic_index.get(accession) or genomic_index.get(ah.accession_base(accession))
+            record = genomic_index.get(accession) or genomic_index.get(prep.accession_base(accession))
             if record is not None and record.sequence:
                 sequences[segment].append(record.sequence)
     return sequences
 
 
 def protein_profiles_by_segment(
-    isolates: List["ah.IsolateRecord"],
+    isolates: List["prep.IsolateRecord"],
 ) -> Dict[str, List[Tuple[str, str]]]:
     profiles: Dict[str, List[Tuple[str, str]]] = {"S": [], "M": [], "L": []}
     for isolate in isolates:
@@ -483,7 +483,7 @@ class CandidateInput:
     # isolates on purpose). None (the default) for ordinary production candidates, whose
     # true parent isolate is exactly what reassortment detection exists to resolve.
     # Consumed only by resolve_e_parent_isolates -- see rpi_e_isolate_basis.
-    known_segment_isolates: Optional[Dict[str, "ah.IsolateRecord"]] = None
+    known_segment_isolates: Optional[Dict[str, "prep.IsolateRecord"]] = None
 
 
 def _reverse_complement(seq: str) -> str:
@@ -613,12 +613,12 @@ class Gate0Result:
 
 @lru_cache(maxsize=None)
 def _cached_reference_kmer_profile(protein: str) -> Dict[str, int]:
-    """Memoized ah.kmer_profile for REFERENCE proteins only -- the reference set is
+    """Memoized prep.kmer_profile for REFERENCE proteins only -- the reference set is
     identical across every candidate scored in one run (unlike the candidate's own
     protein, which changes every call and gains nothing from caching). Safe to cache a
     shared dict here: profiles_to_matrix only reads its inputs, never mutates them.
     """
-    return ah.kmer_profile(protein)
+    return prep.kmer_profile(protein)
 
 
 # id(reference_profiles) -> (the list itself, unit-normalized reference matrix,
@@ -655,7 +655,7 @@ def _cached_reference_kmer_matrix(
     if cached is not None:
         return cached[1], cached[2]
     profiles = [_cached_reference_kmer_profile(protein) for _species, protein in reference_profiles]
-    matrix, vocabulary = ah.profiles_to_matrix(profiles)
+    matrix, vocabulary = prep.profiles_to_matrix(profiles)
     position = {kmer: i for i, kmer in enumerate(vocabulary)}
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     norms[norms == 0] = 1.0
@@ -676,7 +676,7 @@ def _candidate_similarity_to_reference(
     matrix computed.
     """
     unit, position = _cached_reference_kmer_matrix(reference_profiles)
-    candidate_profile = ah.kmer_profile(candidate_protein)
+    candidate_profile = prep.kmer_profile(candidate_protein)
     candidate_norm = math.sqrt(sum(count * count for count in candidate_profile.values()))
     if candidate_norm == 0:
         return np.zeros(unit.shape[0], dtype=np.float64)
@@ -694,7 +694,7 @@ def _kmer_identity_to_reference(protein: str, reference_profiles: List[Tuple[str
     """
     if not protein or not reference_profiles:
         return 0.0
-    candidate_profile = ah.kmer_profile(protein)
+    candidate_profile = prep.kmer_profile(protein)
     if not candidate_profile:
         return 0.0
     similarity = _candidate_similarity_to_reference(protein, reference_profiles)
@@ -717,10 +717,10 @@ def gate0_check(
     genomic_by_segment = {"S": candidate.s_genomic, "M": candidate.m_genomic, "L": candidate.l_genomic}
 
     for segment, genomic in genomic_by_segment.items():
-        low, high = ah.SEGMENT_LENGTH_RANGE[segment]
+        low, high = prep.SEGMENT_LENGTH_RANGE[segment]
         # Same tolerance principle as the protein-length check below, for the same
         # reason, and it was missing here: SEGMENT_LENGTH_RANGE is ICTV's band for
-        # DECIDING WHICH SEGMENT a record is (all_hanta.py:86), not a validity
+        # DECIDING WHICH SEGMENT a record is (prepare_dataset.py:86), not a validity
         # criterion, so enforcing it exactly turned "unusual length" into "junk".
         #
         # Measured against this project's own reference set, that rejected real NCBI
@@ -733,11 +733,11 @@ def gate0_check(
         #
         # The band is still enforced, just with room at the edges. Genuinely truncated
         # records are unaffected: a 1014 nt M is 70% below the band and fails either
-        # way. all_hanta.py's own SEGMENT_LENGTH_ABSURD_MAX stays a hard ceiling --
+        # way. prepare_dataset.py's own SEGMENT_LENGTH_ABSURD_MAX stays a hard ceiling --
         # beyond it a record "is almost certainly a multi-segment concatenation or a
-        # mis-label" (all_hanta.py:90), which is junk in the sense this gate means.
+        # mis-label" (prepare_dataset.py:90), which is junk in the sense this gate means.
         tolerance = max(1, int(0.15 * (high - low + 1)))
-        absurd_max = ah.SEGMENT_LENGTH_ABSURD_MAX.get(segment, high + tolerance)
+        absurd_max = prep.SEGMENT_LENGTH_ABSURD_MAX.get(segment, high + tolerance)
         if len(genomic) > absurd_max:
             failures.append(
                 f"{segment}: genomic length {len(genomic)} exceeds the plausible maximum "
@@ -835,10 +835,10 @@ def nearest_species_by_kmer(
     """Top-n distinct species by minimum per-isolate cosine distance to
     candidate_protein. Deliberately per-isolate (not pre-aggregated per species) so a
     single close outlier isolate is still found, matching how compute_segment_divergence
-    already works in all_hanta.py.
+    already works in prepare_dataset.py.
 
     Computes only the candidate-vs-all row of distances directly (O(N) dot products),
-    not the full NxN pairwise matrix ah.cosine_distance_matrix builds -- that function
+    not the full NxN pairwise matrix prep.cosine_distance_matrix builds -- that function
     always computes unit @ unit.T internally regardless of which rows the caller
     actually reads afterward, so calling it here and slicing row 0 would still pay the
     full O(N^2) cost up front. Confirmed by direct measurement against the real
@@ -1047,11 +1047,11 @@ class Gate3Result:
     detail: str = ""
 
 
-def gate3_check(implicated_species: List[str], isolates: List["ah.IsolateRecord"]) -> Gate3Result:
+def gate3_check(implicated_species: List[str], isolates: List["prep.IsolateRecord"]) -> Gate3Result:
     if len(implicated_species) < 2:
         return Gate3Result(status="ecology_unknown", detail="single implicated species, no overlap to test")
 
-    by_species: Dict[str, List["ah.IsolateRecord"]] = defaultdict(list)
+    by_species: Dict[str, List["prep.IsolateRecord"]] = defaultdict(list)
     for isolate in isolates:
         if isolate.is_lab_derived or isolate.is_vaccine_strain:
             continue
@@ -1107,15 +1107,15 @@ def candidate_cds_from_orf(genomic_seq: str) -> str:
     return _longest_orf_span(genomic_seq)
 
 
-def build_candidate_isolate_record(candidate_id: str, species_label: str) -> "ah.IsolateRecord":
+def build_candidate_isolate_record(candidate_id: str, species_label: str) -> "prep.IsolateRecord":
     """Minimal synthetic IsolateRecord for Gate 4's PhyloCandidate -- only the fields
     _analyze_group, group_candidates and _phylo_row actually read are given meaningful
-    values (confirmed by reading all_hanta.py directly during design: isolate_key,
+    values (confirmed by reading prepare_dataset.py directly during design: isolate_key,
     species_name, host_order, is_lab_derived, is_vaccine_strain, species_status,
     has_complete_triplet). Everything else is a valid placeholder of the right type,
     following the same pattern test_all_hanta.py's _make_isolate already uses.
     """
-    return ah.IsolateRecord(
+    return prep.IsolateRecord(
         isolate_key=f"CANDIDATE:{candidate_id}", species_name=species_label, species_taxid="",
         species_status="classified", biosample="", isolate=candidate_id, strain="",
         host_name="", host_taxid="", host_order="", host_family="", host_role="",
@@ -1150,7 +1150,7 @@ def build_comparator_members(
         sequences: Dict[str, str] = {}
         for segment, accession in (("S", isolate.s_accession), ("M", isolate.m_accession),
                                    ("L", isolate.l_accession)):
-            records = reference.cds_index.get(ah.accession_base(accession)) if accession else None
+            records = reference.cds_index.get(prep.accession_base(accession)) if accession else None
             seq = ph.select_primary_cds(records, segment)
             if len(seq) >= ph.MIN_CDS_LENGTH:
                 sequences[segment] = seq
@@ -1241,7 +1241,7 @@ def combine_verdict(
     docs/superpowers/specs/2026-08-12-reassortment-detector-design.md section 10.
 
     No min_bootstrap_support parameter here: gate4.reassortment_call already reflects
-    the threshold (all_hanta.py's classify_reassortment_call applies it when gate4_check
+    the threshold (prepare_dataset.py's classify_reassortment_call applies it when gate4_check
     calls _analyze_group), so re-checking it here would be a second, redundant copy of
     the same decision rather than an independent gate.
     """
@@ -1294,7 +1294,7 @@ def divergence_stratum(identity: float, boundary: Optional[float] = None,
     return "close" if identity >= boundary else "distant"
 
 
-def host_genus_of(isolate: "ah.IsolateRecord") -> str:
+def host_genus_of(isolate: "prep.IsolateRecord") -> str:
     """Genus from the host binomial. IsolateRecord carries no host_genus field; host_name
     is a binomial in the curated data ('Myodes glareolus'), so the first token is the
     genus. Returns '' when host_name is absent, which callers treat as unknown rather
@@ -1303,13 +1303,13 @@ def host_genus_of(isolate: "ah.IsolateRecord") -> str:
     return isolate.host_name.split()[0] if isolate.host_name else ""
 
 
-def host_rank_proximity(a: "ah.IsolateRecord", b: "ah.IsolateRecord") -> str:
+def host_rank_proximity(a: "prep.IsolateRecord", b: "prep.IsolateRecord") -> str:
     """Finest shared host taxonomic rank between two isolates' reservoirs.
 
     Missing metadata never yields 'different_order' by default: an empty field means
     unknown, and unknown must not masquerade as ecological separation.
     """
-    def has_any_host_field(isolate: "ah.IsolateRecord") -> bool:
+    def has_any_host_field(isolate: "prep.IsolateRecord") -> bool:
         return bool(isolate.host_name or isolate.host_family or isolate.host_order)
 
     if not has_any_host_field(a) or not has_any_host_field(b):
@@ -1330,14 +1330,14 @@ def host_rank_proximity(a: "ah.IsolateRecord", b: "ah.IsolateRecord") -> str:
     return "different_order"
 
 
-def _year_span(isolates: Sequence["ah.IsolateRecord"]) -> Optional[Tuple[int, int]]:
+def _year_span(isolates: Sequence["prep.IsolateRecord"]) -> Optional[Tuple[int, int]]:
     years = [int(i.year) for i in isolates if str(i.year).isdigit()]
     return (min(years), max(years)) if years else None
 
 
 def ecological_opportunity(
-    implicated_species: List[str], isolates: List["ah.IsolateRecord"],
-    parent_isolates: Dict[str, "ah.IsolateRecord"], isolate_basis: str,
+    implicated_species: List[str], isolates: List["prep.IsolateRecord"],
+    parent_isolates: Dict[str, "prep.IsolateRecord"], isolate_basis: str,
     weights: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Factor E: relative opportunity for the implicated lineages to co-infect one cell.
@@ -1440,8 +1440,8 @@ def ecological_opportunity(
 
 
 def _isolates_with_usable_protein(
-    candidate_protein: str, segment: str, isolates: List["ah.IsolateRecord"],
-) -> List[Tuple["ah.IsolateRecord", str]]:
+    candidate_protein: str, segment: str, isolates: List["prep.IsolateRecord"],
+) -> List[Tuple["prep.IsolateRecord", str]]:
     """The cheap part of `nearest_reference_isolate`: whether ANY isolate in `isolates`
     has a usable `segment` protein to compare `candidate_protein` against, without
     doing the k-mer profile / cosine-distance work. `nearest_reference_isolate` returns
@@ -1458,8 +1458,8 @@ def _isolates_with_usable_protein(
 
 
 def nearest_reference_isolate(
-    candidate_protein: str, segment: str, isolates: List["ah.IsolateRecord"],
-) -> Optional["ah.IsolateRecord"]:
+    candidate_protein: str, segment: str, isolates: List["prep.IsolateRecord"],
+) -> Optional["prep.IsolateRecord"]:
     """The isolate (already filtered to one species) whose own `segment` protein is
     nearest `candidate_protein` by k-mer cosine distance -- the nearest-reference-isolate
     proxy `resolve_e_parent_isolates` falls back to for Factor E when a candidate's true
@@ -1473,9 +1473,9 @@ def nearest_reference_isolate(
     candidates = _isolates_with_usable_protein(candidate_protein, segment, isolates)
     if not candidates:
         return None
-    profiles = [ah.kmer_profile(candidate_protein)] + [
-        ah.kmer_profile(protein) for _isolate, protein in candidates]
-    matrix, _vocab = ah.profiles_to_matrix(profiles)
+    profiles = [prep.kmer_profile(candidate_protein)] + [
+        prep.kmer_profile(protein) for _isolate, protein in candidates]
+    matrix, _vocab = prep.profiles_to_matrix(profiles)
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     norms[norms == 0] = 1.0
     unit = matrix / norms
@@ -1486,10 +1486,10 @@ def nearest_reference_isolate(
 
 
 def resolve_e_parent_isolates(
-    implicated_species: List[str], isolates: List["ah.IsolateRecord"],
+    implicated_species: List[str], isolates: List["prep.IsolateRecord"],
     gate1: "Gate1Result", orf_proteins: Dict[str, str],
-    known_isolates: Optional[Dict[str, "ah.IsolateRecord"]] = None,
-) -> Tuple[Dict[str, "ah.IsolateRecord"], str]:
+    known_isolates: Optional[Dict[str, "prep.IsolateRecord"]] = None,
+) -> Tuple[Dict[str, "prep.IsolateRecord"], str]:
     """(species -> the one isolate standing for it, basis) for `ecological_opportunity`
     (design doc section 1a).
 
@@ -1524,7 +1524,7 @@ def resolve_e_parent_isolates(
     # `SkipsExpensiveResolutionWhenBasisOnlyMattersTest`).
     skip_identity_resolution = len(implicated_species) < 2
 
-    resolved: Dict[str, "ah.IsolateRecord"] = {}
+    resolved: Dict[str, "prep.IsolateRecord"] = {}
     basis = "nearest_reference"
     for species in implicated_species:
         segment = next(
@@ -1817,7 +1817,7 @@ def m_pol_variance_check(
 
 
 def _wild_isolates_of_species(
-        isolates: List["ah.IsolateRecord"], species: str) -> List["ah.IsolateRecord"]:
+        isolates: List["prep.IsolateRecord"], species: str) -> List["prep.IsolateRecord"]:
     """Real (not lab-derived, not vaccine-strain) isolates of one species (D3).
 
     Shared by every "implicated parent/donor consensus" builder -- M_pack's genomic
@@ -2188,8 +2188,8 @@ def _rpi_decimals(floor_value: float) -> int:
 
 
 def compute_rpi(
-    implicated_species: List[str], isolates: List["ah.IsolateRecord"],
-    parent_isolates: Dict[str, "ah.IsolateRecord"], isolate_basis: str,
+    implicated_species: List[str], isolates: List["prep.IsolateRecord"],
+    parent_isolates: Dict[str, "prep.IsolateRecord"], isolate_basis: str,
     odd_segment: str, identity: float, m_pack: float, m_pack_status: str, m_pol: float,
     m_pol_status: str, structural_intact: bool,
     weights: Optional[Dict[str, Any]] = None,
@@ -2500,8 +2500,8 @@ def retrospective_reproduction(holdout: Optional[str] = None) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def _make_ecology_isolate(species: str, country: str, host_order: str, year: str,
-                          lab: bool = False, vaccine: bool = False) -> "ah.IsolateRecord":
-    return ah.IsolateRecord(
+                          lab: bool = False, vaccine: bool = False) -> "prep.IsolateRecord":
+    return prep.IsolateRecord(
         isolate_key=f"{species}|{country}|{year}", species_name=species, species_taxid="999",
         species_status="classified", biosample="", isolate="", strain="", host_name="Test host",
         host_taxid="1", host_order=host_order, host_family="", host_role="reservoir_rodent",
@@ -2521,7 +2521,7 @@ def _make_ecology_isolate(species: str, country: str, host_order: str, year: str
 
 def _eco_isolate(species: str, country: str, year: str, host_order: str = "Rodentia",
                  host_family: str = "Cricetidae",
-                 host_name: str = "Peromyscus maniculatus") -> "ah.IsolateRecord":
+                 host_name: str = "Peromyscus maniculatus") -> "prep.IsolateRecord":
     """IsolateRecord has host_name (a binomial), host_order and host_family -- but NO
     host_genus and NO observed_host. Genus is derived from host_name."""
     isolate = _make_ecology_isolate(species, country, host_order, year)
@@ -3041,7 +3041,7 @@ def veto_vs_continuous_e(
 
 def read_candidate(candidate_id: str, s_path: Path, m_path: Path, l_path: Path) -> CandidateInput:
     def read_one(path: Path) -> str:
-        record = next(iter(ah.parse_fasta(Path(path)).values()), None)
+        record = next(iter(prep.parse_fasta(Path(path)).values()), None)
         return record.sequence if record else ""
 
     return CandidateInput(
@@ -3322,7 +3322,7 @@ def write_rpi_report(scored_rows: Sequence[Dict[str, Any]], output_dir: Path) ->
 
 def _detector_main(argv=None) -> int:
     args = parse_args(argv)
-    ah.configure_logging(Path(args.output) / "reassortment_detector.log", verbose=args.verbose)
+    prep.configure_logging(Path(args.output) / "reassortment_detector.log", verbose=args.verbose)
 
     if args.candidates_manifest:
         candidates = read_manifest(Path(args.candidates_manifest))
@@ -3564,7 +3564,7 @@ class Gate0CheckTest(unittest.TestCase):
                         result.failures)
 
     def test_absurdly_long_segment_is_rejected_as_a_concatenation(self):
-        """all_hanta.py's SEGMENT_LENGTH_ABSURD_MAX stays a hard ceiling -- beyond it a
+        """prepare_dataset.py's SEGMENT_LENGTH_ABSURD_MAX stays a hard ceiling -- beyond it a
         record 'is almost certainly a multi-segment concatenation or a mis-label'."""
         candidate = CandidateInput(
             candidate_id="CONCATENATED",
@@ -3893,7 +3893,7 @@ def _make_isolate(key, species, s_protein, m_protein, l_protein):
     identical fixture, kept as one copy after the merge that used to duplicate it across
     test_detector_gates.py and test_detector_reference.py.
     """
-    return ah.IsolateRecord(
+    return prep.IsolateRecord(
         isolate_key=key, species_name=species, species_taxid="999", species_status="classified",
         biosample="", isolate=key, strain="", host_name="Test host", host_taxid="1",
         host_order="Rodentia", host_family="", host_role="reservoir_rodent",
@@ -4209,8 +4209,8 @@ class LoadReferenceDataIntegrationTest(unittest.TestCase):
     """Exercises load_reference_data against the real all_hanta/ NCBI package already
     present in this repo -- skipped if it isn't there (e.g. a fresh checkout before
     Step 0 of the README has been run). This is plumbing around already-tested
-    all_hanta.py functions, so a synthetic fixture package would just re-test
-    all_hanta.py itself; using the real package matches how the rest of this repo
+    prepare_dataset.py functions, so a synthetic fixture package would just re-test
+    prepare_dataset.py itself; using the real package matches how the rest of this repo
     validates the pipeline (see README's own reproducibility instructions).
     """
 
@@ -4513,7 +4513,7 @@ class DivergenceStratumTest(unittest.TestCase):
             divergence_stratum(-0.1)
 
 
-def _parent_map(*isolates: "ah.IsolateRecord") -> Dict[str, "ah.IsolateRecord"]:
+def _parent_map(*isolates: "prep.IsolateRecord") -> Dict[str, "prep.IsolateRecord"]:
     """species -> isolate, for tests that already have exactly one isolate per
     implicated species and want to hand it to ecological_opportunity as its real,
     known parent (basis "actual_parents")."""
@@ -4625,7 +4625,7 @@ class EcologicalOpportunityTest(unittest.TestCase):
     def test_unknown_host_metadata_stays_neutral_not_maximal_separation(self):
         """When one side's isolates carry no host taxonomy at all -- host_name,
         host_family, and host_order all empty, as happens when resolve_host_taxonomy
-        fails and no biosample host is available (all_hanta.py:1560-1565, flagged
+        fails and no biosample host is available (prepare_dataset.py:1560-1565, flagged
         'missing_host') -- that is unknown, not separated. It must not fall through
         to 'different_order' (0.01), the harshest value in the ladder."""
         a = _eco_isolate("A", "USA", "2001")
@@ -4755,7 +4755,7 @@ class ResolveEParentIsolatesSkipsExpensiveResolutionTest(unittest.TestCase):
     def test_single_species_that_resolves_gets_nearest_reference_basis_without_kmer_work(self):
         ref = _make_isolate("ref", "SpA", "MEQRSTVCLCLFLTGLLLW", "M" * 10, "M" * 10)
         gate1 = self._gate1({"S": "SpA", "M": "SpA", "L": "SpA"})
-        with unittest.mock.patch.object(ah, "kmer_profile", wraps=ah.kmer_profile) as spy:
+        with unittest.mock.patch.object(prep, "kmer_profile", wraps=prep.kmer_profile) as spy:
             resolved, basis = resolve_e_parent_isolates(
                 gate1.implicated_species, [ref], gate1,
                 {"S": "MEQRSTVCLCLFLTGLLLW", "M": "M" * 10, "L": "M" * 10},
@@ -4782,7 +4782,7 @@ class ResolveEParentIsolatesSkipsExpensiveResolutionTest(unittest.TestCase):
         ref_a = _make_isolate("ref_a", "SpA", "MEQRSTVCLCLFLTGLLLW", "M" * 10, "M" * 10)
         ref_b = _make_isolate("ref_b", "SpB", "M" * 10, "MEQRSTVCLCLFLTGLLLW", "M" * 10)
         gate1 = self._gate1({"S": "SpA", "M": "SpB", "L": "SpB"})
-        with unittest.mock.patch.object(ah, "kmer_profile", wraps=ah.kmer_profile) as spy:
+        with unittest.mock.patch.object(prep, "kmer_profile", wraps=prep.kmer_profile) as spy:
             resolved, basis = resolve_e_parent_isolates(
                 gate1.implicated_species, [ref_a, ref_b], gate1,
                 {"S": "MEQRSTVCLCLFLTGLLLW", "M": "MEQRSTVCLCLFLTGLLLW", "L": "M" * 10},
@@ -5118,13 +5118,13 @@ class HasGenomicPanhandleTerminiTest(unittest.TestCase):
 
 def _genomic_isolate(species: str, key_suffix: str, s_seq: str = "", m_seq: str = "",
                      l_seq: str = "", lab: bool = False, vaccine: bool = False,
-                     ) -> "ah.IsolateRecord":
+                     ) -> "prep.IsolateRecord":
     """Minimal IsolateRecord carrying real accessions, for tests that need
     reference.genomic_index lookups to actually resolve -- _eco_isolate's isolates
     above all have empty accessions, which is fine for ecological_opportunity but
     cannot exercise species_consensus_panhandle_window or score_m_pack."""
     key = f"{species}:{key_suffix}"
-    return ah.IsolateRecord(
+    return prep.IsolateRecord(
         isolate_key=key, species_name=species, species_taxid="1",
         species_status="classified", biosample="", isolate=key_suffix, strain="",
         host_name="Test host", host_taxid="1", host_order="Rodentia",
@@ -5144,12 +5144,12 @@ def _genomic_isolate(species: str, key_suffix: str, s_seq: str = "", m_seq: str 
     )
 
 
-def _genomic_reference(isolates: List["ah.IsolateRecord"],
+def _genomic_reference(isolates: List["prep.IsolateRecord"],
                        sequences: Dict[str, str]) -> ReferenceData:
     """ReferenceData whose genomic_index resolves every accession in `sequences` (keyed
     by accession, e.g. "SpA:iso1_S") to a FastaRecord carrying that sequence."""
     genomic_index = {
-        accession: ah.FastaRecord(accession=accession, accession_base=accession,
+        accession: prep.FastaRecord(accession=accession, accession_base=accession,
                                   header="", sequence=seq, length=len(seq))
         for accession, seq in sequences.items()
     }
@@ -6603,7 +6603,7 @@ TAU_SPAN_HIGH_PERCENTILE = 95.0
 # ---------------------------------------------------------------------------
 
 
-def segment_accession(isolate: "ah.IsolateRecord", segment: str) -> str:
+def segment_accession(isolate: "prep.IsolateRecord", segment: str) -> str:
     if segment not in SEGMENTS:
         raise ValueError(f"segment must be one of {SEGMENTS}, got {segment!r}")
     return {"S": isolate.s_accession, "M": isolate.m_accession,
@@ -6646,19 +6646,19 @@ def has_terminal_panhandle(sequence: str) -> bool:
             and sequence.endswith(HANTAVIRUS_TERMINAL_3P_TAG))
 
 
-def _is_wild(isolate: "ah.IsolateRecord") -> bool:
+def _is_wild(isolate: "prep.IsolateRecord") -> bool:
     return not isolate.is_lab_derived and not isolate.is_vaccine_strain
 
 
 def _segment_is_full_length(reference: "rd.ReferenceData",
-                            isolate: "ah.IsolateRecord", segment: str) -> bool:
+                            isolate: "prep.IsolateRecord", segment: str) -> bool:
     sequence = genomic_sequence(reference, segment_accession(isolate, segment))
-    low, high = ah.SEGMENT_LENGTH_RANGE[segment]
+    low, high = prep.SEGMENT_LENGTH_RANGE[segment]
     return bool(sequence) and low <= len(sequence) <= high
 
 
 def terminally_complete_isolates(
-        reference: "rd.ReferenceData") -> List["ah.IsolateRecord"]:
+        reference: "rd.ReferenceData") -> List["prep.IsolateRecord"]:
     """Wild, classified isolates whose S, M and L are all full-length AND terminal.
 
     Returned in `isolate_key` order so the pool is deterministic regardless of the order
@@ -6710,7 +6710,7 @@ def ws4_reserved_accessions(reference: "rd.ReferenceData") -> Set[str]:
     return reserved
 
 
-def _isolate_touches(reference: "rd.ReferenceData", isolate: "ah.IsolateRecord",
+def _isolate_touches(reference: "rd.ReferenceData", isolate: "prep.IsolateRecord",
                      accessions: Set[str]) -> bool:
     """Is any of this isolate's three segments one of `accessions`?
 
@@ -6732,18 +6732,18 @@ def select_calibration_isolates(
         reference: "rd.ReferenceData",
         max_per_species: int = CALIBRATION_MAX_ISOLATES_PER_SPECIES,
         seed: int = RPI_CALIBRATION_SEED,
-) -> Tuple[List["ah.IsolateRecord"], Dict[str, Any]]:
+) -> Tuple[List["prep.IsolateRecord"], Dict[str, Any]]:
     """The calibration pool: terminally complete, disjoint from WS4, depth-matched."""
     pool = terminally_complete_isolates(reference)
     reserved = ws4_reserved_accessions(reference)
     eligible = [i for i in pool if not _isolate_touches(reference, i, reserved)]
 
-    by_species: Dict[str, List["ah.IsolateRecord"]] = defaultdict(list)
+    by_species: Dict[str, List["prep.IsolateRecord"]] = defaultdict(list)
     for isolate in eligible:
         by_species[isolate.species_name].append(isolate)
 
     rng = random.Random(seed)
-    selected: List["ah.IsolateRecord"] = []
+    selected: List["prep.IsolateRecord"] = []
     for species in sorted(by_species):
         members = sorted(by_species[species], key=lambda i: i.isolate_key)
         if len(members) > max_per_species:
@@ -6771,8 +6771,8 @@ def select_calibration_isolates(
 
 
 def duplex_dg(reference: "rd.ReferenceData",
-              five_prime_isolate: "ah.IsolateRecord", five_prime_segment: str,
-              three_prime_isolate: "ah.IsolateRecord", three_prime_segment: str,
+              five_prime_isolate: "prep.IsolateRecord", five_prime_segment: str,
+              three_prime_isolate: "prep.IsolateRecord", three_prime_segment: str,
               window_nt: int) -> float:
     """dG of the (5' window of one segment) x (3' window of another) duplex.
 
@@ -6832,7 +6832,7 @@ def _calibration_build_panel(
             f"calibration pool has {len(selected)} isolate(s) -- cannot build "
             "cognate/non-cognate pairs")
 
-    by_species: Dict[str, List["ah.IsolateRecord"]] = defaultdict(list)
+    by_species: Dict[str, List["prep.IsolateRecord"]] = defaultdict(list)
     for isolate in selected:
         by_species[isolate.species_name].append(isolate)
     all_species = sorted(by_species)
@@ -8144,7 +8144,7 @@ def reserved_calibration_isolate_keys(
 
 def usable_pool(
         reference: "rd.ReferenceData",
-        reserved_keys: Optional[Set[str]] = None) -> List["ah.IsolateRecord"]:
+        reserved_keys: Optional[Set[str]] = None) -> List["prep.IsolateRecord"]:
     """Terminally complete, wild isolates, excluding calibration's reserved 42 (binding
     constraint, PROJECT-STATE.md section 7b). Reuses rpi_calibration.py's own filter
     (`terminally_complete_isolates`) rather than a separate implementation -- both this
@@ -8161,7 +8161,7 @@ def usable_pool(
 
 def _candidate_from_isolates(
         candidate_id: str, reference: "rd.ReferenceData",
-        segment_sources: Dict[str, "ah.IsolateRecord"]) -> "rd.CandidateInput":
+        segment_sources: Dict[str, "prep.IsolateRecord"]) -> "rd.CandidateInput":
     """A CandidateInput whose S/M/L each come from `segment_sources[seg]` -- one isolate
     per segment, which may be the same isolate for all three (a real, unmodified genome)
     or three different ones (a constructed shuffle).
@@ -8185,7 +8185,7 @@ def _candidate_from_isolates(
         l_genomic=genomic["L"], known_segment_isolates=dict(segment_sources))
 
 
-def _label(isolate: "ah.IsolateRecord") -> str:
+def _label(isolate: "prep.IsolateRecord") -> str:
     return vd.PanelBuilder.label(isolate)
 
 
@@ -8195,7 +8195,7 @@ def _label(isolate: "ah.IsolateRecord") -> str:
 
 
 def build_group_a_random(
-        reference: "rd.ReferenceData", pool: Sequence["ah.IsolateRecord"],
+        reference: "rd.ReferenceData", pool: Sequence["prep.IsolateRecord"],
         seed: int = RPI_DISCRIMINATION_SEED, target: int = RANDOM_FAKES_TARGET,
 ) -> List[Dict[str, Any]]:
     """Full S+M+L triplets, each segment from a different isolate, with all three
@@ -8256,7 +8256,7 @@ def build_group_a_random(
 
 
 def build_group_b1_within_species(
-        reference: "rd.ReferenceData", pool: Sequence["ah.IsolateRecord"],
+        reference: "rd.ReferenceData", pool: Sequence["prep.IsolateRecord"],
         seed: int = RPI_DISCRIMINATION_SEED,
         per_species: int = WITHIN_SPECIES_SHUFFLES_PER_SPECIES,
 ) -> List[Dict[str, Any]]:
@@ -8269,7 +8269,7 @@ def build_group_b1_within_species(
     for the smallest species, requiring disjoint draws ACROSS shuffles too would leave
     almost no shuffles for that species.
     """
-    by_species: Dict[str, List["ah.IsolateRecord"]] = defaultdict(list)
+    by_species: Dict[str, List["prep.IsolateRecord"]] = defaultdict(list)
     for isolate in pool:
         by_species[isolate.species_name].append(isolate)
 
@@ -8316,14 +8316,14 @@ def _year_int(year: str) -> Optional[int]:
 
 
 def find_sympatric_species_pairs(
-        pool: Sequence["ah.IsolateRecord"],
+        pool: Sequence["prep.IsolateRecord"],
 ) -> List[Tuple[str, str, str, str]]:
     """(host_order, country, species_a, species_b) tuples where two DIFFERENT species
     genuinely co-occur in this dataset: same host order, same country, and overlapping
     collection years. D7 group b2's precondition -- see module docstring for why this
     is deliberately NOT a large set.
     """
-    by_key: Dict[Tuple[str, str], List["ah.IsolateRecord"]] = defaultdict(list)
+    by_key: Dict[Tuple[str, str], List["prep.IsolateRecord"]] = defaultdict(list)
     for isolate in pool:
         if isolate.host_order and isolate.country:
             by_key[(isolate.host_order, isolate.country)].append(isolate)
@@ -8346,7 +8346,7 @@ def find_sympatric_species_pairs(
 
 
 def build_group_b2_sympatric(
-        reference: "rd.ReferenceData", pool: Sequence["ah.IsolateRecord"],
+        reference: "rd.ReferenceData", pool: Sequence["prep.IsolateRecord"],
 ) -> List[Dict[str, Any]]:
     """Full S+M+L triplets built across genuinely sympatric species pairs (D7 group b2).
 
@@ -8356,7 +8356,7 @@ def build_group_b2_sympatric(
     limiting factor; there is no larger population to subsample from.
     """
     tuples = find_sympatric_species_pairs(pool)
-    by_species: Dict[str, List["ah.IsolateRecord"]] = defaultdict(list)
+    by_species: Dict[str, List["prep.IsolateRecord"]] = defaultdict(list)
     for isolate in pool:
         by_species[isolate.species_name].append(isolate)
 
@@ -8401,7 +8401,7 @@ def load_supported_reassortment_candidates(
         reference: "rd.ReferenceData",
         table_path: Path = ORTHO_REASSORTMENT_TABLE_PATH,
 ) -> List[Dict[str, Any]]:
-    """The `supported_reassortment_candidate` rows from all_hanta.py's own genome-wide
+    """The `supported_reassortment_candidate` rows from prepare_dataset.py's own genome-wide
     phylogenetic surveillance (`output/ortho_reassortment_table.csv`) -- an
     INDEPENDENTLY-sourced set of real positives, not constructed by this module. Scored
     on the isolate's own real, unmodified S/M/L.
@@ -8432,7 +8432,7 @@ def load_supported_reassortment_candidates(
                 "backbone_species": isolate.species_name,
                 "donor_species": isolate.species_name,
                 "donated_segment": row.get("discordant_segment", ""),
-                "source": "all_hanta.py genome-wide phylogenetic surveillance "
+                "source": "prepare_dataset.py genome-wide phylogenetic surveillance "
                           "(output/ortho_reassortment_table.csv)",
                 "source_isolate_key": key,
                 "source_bootstrap_support": row.get("discordant_clade_bootstrap_support"),
@@ -8561,14 +8561,14 @@ def _fixture_isolate(
         species: str, key_suffix: str, host_order: str = "Rodentia",
         country: str = "USA", year: str = "2001", s_seq: str = "ATG" + "A" * 30 + "TAA",
         m_seq: str = "ATG" + "A" * 30 + "TAA", l_seq: str = "ATG" + "A" * 30 + "TAA",
-        lab: bool = False, vaccine: bool = False) -> "ah.IsolateRecord":
+        lab: bool = False, vaccine: bool = False) -> "prep.IsolateRecord":
     """Minimal real-shaped IsolateRecord for this module's own tests -- deliberately
     NOT terminally-complete (no genomic panhandle tags), since these tests exercise
     group-construction LOGIC against a synthetic pool passed in directly, never
     `terminally_complete_isolates` itself (that filter has its own tests in
     rpi_calibration.py)."""
     key = f"{species}:{key_suffix}"
-    return ah.IsolateRecord(
+    return prep.IsolateRecord(
         isolate_key=key, species_name=species, species_taxid="1",
         species_status="classified", biosample="", isolate=key_suffix, strain="",
         host_name="Test host", host_taxid="1", host_order=host_order,
@@ -8594,7 +8594,7 @@ def _fixture_reference(*isolate_and_seqs) -> "rd.ReferenceData":
     for _isolate, seqs in isolate_and_seqs:
         sequences.update(seqs)
     genomic_index = {
-        acc: ah.FastaRecord(accession=acc, accession_base=acc, header="", sequence=seq,
+        acc: prep.FastaRecord(accession=acc, accession_base=acc, header="", sequence=seq,
                             length=len(seq))
         for acc, seq in sequences.items()
     }
@@ -8916,7 +8916,7 @@ PUBLISHED_CROSSES: List[Dict[str, Any]] = [
         # D5 / Task 12. donor_species is "Orthohantavirus nigrorivense", NOT
         # "Orthohantavirus bayoui" -- an earlier lookup for this task assumed ICTV had
         # folded Black Creek Canal virus (BCCV) into the Bayou virus species, but
-        # this project's own curated species table (all_hanta.py's SPECIES_INFO,
+        # this project's own curated species table (prepare_dataset.py's SPECIES_INFO,
         # confirmed against output/ortho_species_table.csv) already resolves BCCV to
         # its own species, "Orthohantavirus nigrorivense" (abbrev "BCCV"), separate
         # from "Orthohantavirus bayoui". Verified directly: every isolate under
@@ -9040,7 +9040,7 @@ class PanelBuilder:
         junk_sequence verdict means something about the detector.
         """
         sequence = self.genomic(self._accession(isolate, segment))
-        low, high = rd.ah.SEGMENT_LENGTH_RANGE[segment]
+        low, high = rd.prep.SEGMENT_LENGTH_RANGE[segment]
         return bool(sequence) and low <= len(sequence) <= high
 
     def find_donor(self, species: str, segment: str,
