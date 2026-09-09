@@ -1105,15 +1105,17 @@ tree-based detector) doing exactly the job it exists for, not a limitation. See
 `output/ga_search_corrected_pool_long/gate4_confirmation.json` and the per-triplet
 detail in `seed_20260904.json` for full rows (backbone/donor identities, RPI factors).
 
-### Redundancy survey (candidates only — no deletion performed)
+### Redundancy survey — actioned 2026-09-09 on explicit instruction
 
 - `output/ga_search_corrected_pool_long/gate4_confirmation.{json,log,log.stdout,
   log.stderr}`, `gate4_confirmation_checkpoint.jsonl`, and
   `candidate_phylogenetics/ga-confirm/` (66 files) — the §7f stalled run that
-  actually finished on its own (see above). Fully superseded by this session's
-  correctly-organized `ga-confirm-0`..`ga-confirm-9` output. Complete and
-  byte-identical to the new run, not broken — redundant, not junk.
-- Stray `__pycache__/` directories (standard, regenerable).
+  actually finished on its own (see above), fully superseded by this session's
+  correctly-organized `ga-confirm-0`..`ga-confirm-9` output and byte-identical to
+  it. These had been swept into the bulk promotion commit (`8219386`) despite being
+  flagged as redundant, not tonight's pipeline output — `git rm -r`'d on explicit
+  instruction, commit `<filled in below>`.
+- Stray `__pycache__/` (gitignored, was never tracked — removed from disk directly).
 
 **Explicitly NOT redundant — preserve as-is, outside tonight's pipeline scope:**
 `output/consolidation_baseline/` (9 files, module-consolidation era evidence),
