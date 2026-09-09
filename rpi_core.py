@@ -380,38 +380,10 @@ def constellation_prior(stratum: str, alpha: Optional[float] = None,
 # ---------------------------------------------------------------------------
 # Reference dataset loading.
 #
-# load_reference_data replicates the ingest portion of prepare_dataset.py's run_pipeline (see
-# that function, lines ~3960-4001) without any of the table-building, ML-matrix, or
-# output-writing steps this detector doesn't need.
+# prep.ReferenceData/load_reference_data now live in prepare_dataset.py (Stage 1 owns both the
+# write and read side of the snapshot format it defines) -- see prep.ReferenceData and
+# prep.load_reference_data.
 # ---------------------------------------------------------------------------
-
-@dataclass
-class ReferenceData:
-    isolates: List["prep.IsolateRecord"]
-    cds_index: Dict[str, List[Tuple[str, str]]]
-    genomic_index: Dict[str, "prep.FastaRecord"]
-
-
-def load_reference_data(root: Path) -> ReferenceData:
-    paths = prep.resolve_inputs(root)
-
-    data_records = list(prep.iter_jsonl(paths.data_report))
-    annotation_index = prep.build_annotation_index(prep.iter_jsonl(paths.annotation_report))
-    biosample_index = prep.build_biosample_index(prep.iter_jsonl(paths.biosample_report))
-    genomic_index = prep.parse_fasta(paths.genomic_fasta)
-    protein_index = prep.parse_fasta(paths.protein_fasta)
-
-    accessions = []
-    for record in data_records:
-        transformed, _qc_row = prep.transform_one_record(
-            record, annotation_index, biosample_index, genomic_index, protein_index)
-        if transformed is not None:
-            accessions.append(transformed)
-
-    isolates = prep.build_isolate_records(accessions)
-    cds_index = ph.parse_cds_fasta(paths.cds_fasta)
-
-    return ReferenceData(isolates=isolates, cds_index=cds_index, genomic_index=genomic_index)
 
 
 def protein_lengths_by_segment(isolates: List["prep.IsolateRecord"]) -> Dict[str, List[int]]:
@@ -1135,7 +1107,7 @@ def build_candidate_isolate_record(candidate_id: str, species_label: str) -> "pr
 
 
 def build_comparator_members(
-    implicated_species: List[str], reference: "ReferenceData", phylo_min_taxa: int,
+    implicated_species: List[str], reference: "prep.ReferenceData", phylo_min_taxa: int,
 ) -> Tuple[List["ph.PhyloCandidate"], str]:
     """Union of reference isolates (with full S+M+L CDS) from every implicated species --
     not a single-species tree, so an M-only exchange candidate has both the S/L-matching
@@ -1175,7 +1147,7 @@ def gate4_check(
     candidate: CandidateInput,
     candidate_cds: Dict[str, str],
     implicated_species: List[str],
-    reference: "ReferenceData",
+    reference: "prep.ReferenceData",
     output_dir: Path,
     mafft_bin: str,
     iqtree_bin: str,
@@ -1829,7 +1801,7 @@ def _wild_isolates_of_species(
 
 
 def _wild_species_genomic_sequences(
-        reference: ReferenceData, species: str, segment: str) -> List[str]:
+        reference: prep.ReferenceData, species: str, segment: str) -> List[str]:
     """Terminally complete wild genomic sequences for one species' segment (D3, M_pack).
 
     Filters on `has_genomic_panhandle_termini` for the same reason WS3.1's calibration
@@ -1842,7 +1814,7 @@ def _wild_species_genomic_sequences(
 
 
 def _wild_species_cds_windows(
-        reference: ReferenceData, species: str, segment: str, window: int) -> List[str]:
+        reference: prep.ReferenceData, species: str, segment: str, window: int) -> List[str]:
     """CDS-derived terminal windows for one species' segment (D3, M_pol) -- the ORF's
     own nucleotide span (`candidate_cds_from_orf`), same as `terminal_windows` is built
     from on the candidate side in score_candidate.
@@ -1861,7 +1833,7 @@ def _wild_species_cds_windows(
 
 
 def species_consensus_panhandle_window(
-        reference: ReferenceData, species: str, segment: str, end: str,
+        reference: prep.ReferenceData, species: str, segment: str, end: str,
         n: int = RPI_PANHANDLE_WINDOW_NT) -> str:
     """Majority-vote consensus terminal window for one species' segment (D3) -- the
     "implicated parent/donor consensus" M_pack is scored against.
@@ -1885,13 +1857,13 @@ def species_consensus_panhandle_window(
 # (id(reference), species, segment, window) -> (reference, consensus window string).
 # Storing `reference` alongside the result pins a strong reference to it for the life of
 # the cache entry, the same way _REFERENCE_KMER_MATRIX_CACHE pins its list -- so a
-# garbage-collected ReferenceData's id can never be reused by an unrelated later one. See
+# garbage-collected prep.ReferenceData's id can never be reused by an unrelated later one. See
 # species_consensus_cds_window's docstring.
-_SPECIES_CDS_WINDOW_CACHE: Dict[Tuple[int, str, str, int], Tuple["ReferenceData", str]] = {}
+_SPECIES_CDS_WINDOW_CACHE: Dict[Tuple[int, str, str, int], Tuple["prep.ReferenceData", str]] = {}
 
 
 def species_consensus_cds_window(
-        reference: ReferenceData, species: str, segment: str,
+        reference: prep.ReferenceData, species: str, segment: str,
         window: int = RPI_MPOL_CDS_WINDOW_NT) -> str:
     """Majority-vote consensus CDS-start window for one species' segment (D3, M_pol) --
     the "implicated parent/donor consensus" score_m_pol compares the candidate against.
@@ -1910,14 +1882,14 @@ def species_consensus_cds_window(
     reference set and which backbone species score_m_pol picked, never on the candidate
     itself, yet was recomputed from scratch on every score_m_pol call -- profiled at ~25%
     of a GA search's wall time (docs/superpowers, 2026-09-04). Keying on id(reference)
-    rather than trusting callers to pass one shared ReferenceData per process guards the
+    rather than trusting callers to pass one shared prep.ReferenceData per process guards the
     same failure mode _cached_reference_kmer_matrix's docstring describes: without pinning
-    a strong reference to the object behind the id, a garbage-collected ReferenceData's id
+    a strong reference to the object behind the id, a garbage-collected prep.ReferenceData's id
     could be reused by an unrelated later one and return its stale cached windows --
     exactly the risk SpeciesConsensusCdsWindowGoldenMasterTest's
     test_different_reference_objects_are_not_confused_by_the_cache exercises (mirroring
     how SpeciesConsensusCdsWindowTest's own fixtures reuse the species name "SpA" across
-    several distinct ReferenceData objects).
+    several distinct prep.ReferenceData objects).
     """
     key = (id(reference), species, segment, window)
     cached = _SPECIES_CDS_WINDOW_CACHE.get(key)
@@ -1970,7 +1942,7 @@ def rpi_species_assignment(
 
 
 def score_m_pack(
-        candidate: CandidateInput, reference: ReferenceData, gate1: "Gate1Result",
+        candidate: CandidateInput, reference: prep.ReferenceData, gate1: "Gate1Result",
         odd_segment: str, weights: Optional[Dict[str, Any]] = None,
 ) -> Tuple[float, str]:
     """Factor M_pack (D3): does the candidate's actual cross-segment panhandle duplex
@@ -2078,7 +2050,7 @@ def score_m_pack(
 
 
 def score_m_pol(
-        candidate_cds: Dict[str, str], reference: ReferenceData, gate1: "Gate1Result",
+        candidate_cds: Dict[str, str], reference: prep.ReferenceData, gate1: "Gate1Result",
         odd_segment: str, window: int = RPI_MPOL_CDS_WINDOW_NT,
 ) -> Tuple[float, str]:
     """Factor M_pol (D3, WS3.4): does the candidate's actual N-recognition footprint,
@@ -3062,7 +3034,7 @@ def read_manifest(path: Path) -> List[CandidateInput]:
     return candidates
 
 
-def _build_precomputed(reference: ReferenceData) -> Dict[str, Any]:
+def _build_precomputed(reference: prep.ReferenceData) -> Dict[str, Any]:
     protein_lengths = protein_lengths_by_segment(reference.isolates)
     genomic_sequences = genomic_sequences_by_segment(reference.isolates, reference.genomic_index)
     return {
@@ -3079,7 +3051,7 @@ def _build_precomputed(reference: ReferenceData) -> Dict[str, Any]:
 
 
 def score_candidate(
-    candidate: CandidateInput, reference: ReferenceData, precomputed: Dict[str, Any],
+    candidate: CandidateInput, reference: prep.ReferenceData, precomputed: Dict[str, Any],
     args: argparse.Namespace,
 ) -> Dict[str, Any]:
     gate0 = gate0_check(
@@ -3217,7 +3189,7 @@ def score_candidate(
 def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=_DETECTOR_MODULE_DOC)
     parser.add_argument("--reference-input", required=True,
-                        help="Package root containing all_hanta/ncbi_dataset/data")
+                        help="Stage 1 output directory containing the reference snapshot")
     parser.add_argument("--output", required=True, help="Output directory")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--candidate", help="candidate_id:s_fasta,m_fasta,l_fasta")
@@ -3331,7 +3303,7 @@ def _detector_main(argv=None) -> int:
         s_fasta, m_fasta, l_fasta = rest.split(",")
         candidates = [read_candidate(candidate_id, Path(s_fasta), Path(m_fasta), Path(l_fasta))]
 
-    reference = load_reference_data(Path(args.reference_input))
+    reference = prep.load_reference_data(Path(args.reference_input))
     precomputed = _build_precomputed(reference)
 
     mafft_bin = ph.resolve_binary(args.mafft_bin, "mafft")
@@ -3609,7 +3581,9 @@ class KmerIdentityAndNearestSpeciesGoldenMasterTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        reference = load_reference_data(Path("all_hanta"))
+        if not (Path("output") / "ortho_reference_isolates.json").exists():
+            raise unittest.SkipTest("output/ reference snapshot not present -- run prepare_dataset.py first")
+        reference = prep.load_reference_data(Path("output"))
         precomputed = _build_precomputed(reference)
         cls.profiles = precomputed["protein_profiles"]
 
@@ -3947,7 +3921,7 @@ class BuildComparatorMembersTest(unittest.TestCase):
                 cds_index[accession] = [("nucleocapsid" if segment == "S" else
                                          "glycoprotein" if segment == "M" else "polymerase",
                                          cds[segment])]
-        reference = ReferenceData(isolates=isolates, cds_index=cds_index, genomic_index={})
+        reference = prep.ReferenceData(isolates=isolates, cds_index=cds_index, genomic_index={})
         members, status = build_comparator_members(["SpA"], reference, phylo_min_taxa=4)
         self.assertEqual(status, "")
         self.assertEqual(len(members), 5)
@@ -3963,7 +3937,7 @@ class BuildComparatorMembersTest(unittest.TestCase):
                 cds_index[accession] = [("nucleocapsid" if segment == "S" else
                                          "glycoprotein" if segment == "M" else "polymerase",
                                          cds[segment])]
-        reference = ReferenceData(isolates=isolates, cds_index=cds_index, genomic_index={})
+        reference = prep.ReferenceData(isolates=isolates, cds_index=cds_index, genomic_index={})
         members, status = build_comparator_members(["SpA"], reference, phylo_min_taxa=4)
         self.assertEqual(status, "insufficient_comparators")
         self.assertEqual(members, [])
@@ -4060,7 +4034,7 @@ with open(f"{prefix}.treefile", "w") as f:
                 cds_index[accession] = [("nucleocapsid" if segment == "S" else
                                          "glycoprotein" if segment == "M" else "polymerase",
                                          cds[segment])]
-        self.reference = ReferenceData(isolates=isolates, cds_index=cds_index, genomic_index={})
+        self.reference = prep.ReferenceData(isolates=isolates, cds_index=cds_index, genomic_index={})
 
     def tearDown(self):
         self.tmpdir.cleanup()
@@ -4096,7 +4070,7 @@ with open(f"{prefix}.treefile", "w") as f:
     def test_insufficient_comparators_short_circuits_without_running_mafft(self):
         candidate = CandidateInput(candidate_id="CAND1", s_genomic="", m_genomic="", l_genomic="")
         candidate_cds = {"S": "ACGT" * 40, "M": "TGCA" * 40, "L": "AATT" * 40}
-        empty_reference = ReferenceData(isolates=[], cds_index={}, genomic_index={})
+        empty_reference = prep.ReferenceData(isolates=[], cds_index={}, genomic_index={})
         result = gate4_check(
             candidate, candidate_cds, ["SpUnknown"], empty_reference, self.output_dir,
             str(self.mafft_bin), str(self.iqtree_bin), phylo_min_taxa=4,
@@ -4206,19 +4180,19 @@ class ProteinProfilesBySegmentTest(unittest.TestCase):
 
 
 class LoadReferenceDataIntegrationTest(unittest.TestCase):
-    """Exercises load_reference_data against the real all_hanta/ NCBI package already
-    present in this repo -- skipped if it isn't there (e.g. a fresh checkout before
-    Step 0 of the README has been run). This is plumbing around already-tested
+    """Exercises prep.load_reference_data against the real output/ reference snapshot
+    already present in this repo -- skipped if it isn't there (e.g. a fresh checkout
+    before prepare_dataset.py has been run). This is plumbing around already-tested
     prepare_dataset.py functions, so a synthetic fixture package would just re-test
-    prepare_dataset.py itself; using the real package matches how the rest of this repo
+    prepare_dataset.py itself; using the real snapshot matches how the rest of this repo
     validates the pipeline (see README's own reproducibility instructions).
     """
 
     def test_loads_real_package_when_present(self):
-        root = Path(__file__).parent / "all_hanta"
-        if not (root / "ncbi_dataset" / "data" / "data_report.jsonl").exists():
-            self.skipTest("all_hanta/ NCBI package not present in this checkout")
-        data = load_reference_data(Path(__file__).parent)
+        root = Path(__file__).parent / "output"
+        if not (root / "ortho_reference_isolates.json").exists():
+            self.skipTest("output/ reference snapshot not present -- run prepare_dataset.py first")
+        data = prep.load_reference_data(root)
         self.assertGreater(len(data.isolates), 1000)
         self.assertGreater(len(data.cds_index), 1000)
         self.assertTrue(any(i.has_complete_triplet for i in data.isolates))
@@ -4264,7 +4238,7 @@ class ReadManifestTest(unittest.TestCase):
 class ParseArgsTest(unittest.TestCase):
     def test_single_candidate_form(self):
         args = parse_args([
-            "--reference-input", "all_hanta", "--output", "output",
+            "--reference-input", "output", "--output", "output",
             "--candidate", "CAND01:s.fa,m.fa,l.fa",
         ])
         self.assertEqual(args.candidate, "CAND01:s.fa,m.fa,l.fa")
@@ -4272,22 +4246,22 @@ class ParseArgsTest(unittest.TestCase):
 
     def test_batch_manifest_form(self):
         args = parse_args([
-            "--reference-input", "all_hanta", "--output", "output",
+            "--reference-input", "output", "--output", "output",
             "--candidates-manifest", "manifest.csv",
         ])
         self.assertEqual(args.candidates_manifest, "manifest.csv")
 
     def test_requires_one_of_candidate_or_manifest(self):
         with self.assertRaises(SystemExit):
-            parse_args(["--reference-input", "all_hanta", "--output", "output"])
+            parse_args(["--reference-input", "output", "--output", "output"])
 
 
 class EndToEndRealDataTest(unittest.TestCase):
     """Builds two synthetic candidates from REAL held-out reference sequences (pulled
-    from the actual all_hanta/ package, not fabricated) and scores them with fake
+    from the actual output/ reference snapshot, not fabricated) and scores them with fake
     mafft/iqtree binaries (same rationale as Gate4CheckEndToEndTest above -- neither
-    binary is installed in this environment). Skipped if all_hanta/ isn't present in
-    this checkout.
+    binary is installed in this environment). Skipped if the output/ snapshot isn't
+    present in this checkout.
 
     Candidate 1 ("no-conflict control"): all three segments' CDS come from one real
     isolate -- Gate 1/4 should find no discordance.
@@ -4297,10 +4271,10 @@ class EndToEndRealDataTest(unittest.TestCase):
     """
 
     def setUp(self):
-        root = Path(__file__).parent / "all_hanta"
-        if not (root / "ncbi_dataset" / "data" / "data_report.jsonl").exists():
-            self.skipTest("all_hanta/ NCBI package not present in this checkout")
-        self.reference = load_reference_data(root)
+        root = Path(__file__).parent / "output"
+        if not (root / "ortho_reference_isolates.json").exists():
+            self.skipTest("output/ reference snapshot not present -- run prepare_dataset.py first")
+        self.reference = prep.load_reference_data(root)
 
         self.tmpdir = tempfile.TemporaryDirectory()
         tmp_path = Path(self.tmpdir.name)
@@ -5145,15 +5119,15 @@ def _genomic_isolate(species: str, key_suffix: str, s_seq: str = "", m_seq: str 
 
 
 def _genomic_reference(isolates: List["prep.IsolateRecord"],
-                       sequences: Dict[str, str]) -> ReferenceData:
-    """ReferenceData whose genomic_index resolves every accession in `sequences` (keyed
+                       sequences: Dict[str, str]) -> prep.ReferenceData:
+    """prep.ReferenceData whose genomic_index resolves every accession in `sequences` (keyed
     by accession, e.g. "SpA:iso1_S") to a FastaRecord carrying that sequence."""
     genomic_index = {
         accession: prep.FastaRecord(accession=accession, accession_base=accession,
                                   header="", sequence=seq, length=len(seq))
         for accession, seq in sequences.items()
     }
-    return ReferenceData(isolates=isolates, cds_index={}, genomic_index=genomic_index)
+    return prep.ReferenceData(isolates=isolates, cds_index={}, genomic_index=genomic_index)
 
 
 # Test-only, deliberately SHORTER than RPI_PANHANDLE_WINDOW_NT (50): these tests pass a
@@ -5433,7 +5407,9 @@ class SpeciesConsensusCdsWindowGoldenMasterTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.reference = load_reference_data(Path("all_hanta"))
+        if not (Path("output") / "ortho_reference_isolates.json").exists():
+            raise unittest.SkipTest("output/ reference snapshot not present -- run prepare_dataset.py first")
+        cls.reference = prep.load_reference_data(Path("output"))
 
     def test_matches_golden_values_for_real_species(self):
         golden = {
@@ -5465,7 +5441,7 @@ class SpeciesConsensusCdsWindowGoldenMasterTest(unittest.TestCase):
 
     def test_different_reference_objects_are_not_confused_by_the_cache(self):
         """The real risk in caching this by (species, segment, window) alone: two
-        DIFFERENT ReferenceData objects (e.g. two separate tests, or two separate runs in
+        DIFFERENT prep.ReferenceData objects (e.g. two separate tests, or two separate runs in
         one process) that happen to share a species name must never share a cached
         result. Mirrors how SpeciesConsensusCdsWindowTest reuses the species name 'SpA'
         across several small, differently-built reference fixtures."""
@@ -6312,10 +6288,10 @@ class WriteRpiReportTest(unittest.TestCase):
 
     def test_cli_flag_is_off_by_default(self):
         """Existing invocations must stay byte-identical."""
-        args = parse_args(["--reference-input", "all_hanta", "--output", "output",
+        args = parse_args(["--reference-input", "output", "--output", "output",
                            "--candidate", "CAND01:s.fa,m.fa,l.fa"])
         self.assertFalse(args.rpi_report)
-        args = parse_args(["--reference-input", "all_hanta", "--output", "output",
+        args = parse_args(["--reference-input", "output", "--output", "output",
                            "--candidate", "CAND01:s.fa,m.fa,l.fa", "--rpi-report"])
         self.assertTrue(args.rpi_report)
 
@@ -6610,7 +6586,7 @@ def segment_accession(isolate: "prep.IsolateRecord", segment: str) -> str:
             "L": isolate.l_accession}[segment]
 
 
-def genomic_sequence(reference: "rd.ReferenceData", accession: str) -> str:
+def genomic_sequence(reference: "prep.ReferenceData", accession: str) -> str:
     """The genomic sequence for `accession`, or "" if the index does not hold it.
 
     Mirrors PanelBuilder.genomic's versioned/unversioned lookup rather than reimplementing
@@ -6650,7 +6626,7 @@ def _is_wild(isolate: "prep.IsolateRecord") -> bool:
     return not isolate.is_lab_derived and not isolate.is_vaccine_strain
 
 
-def _segment_is_full_length(reference: "rd.ReferenceData",
+def _segment_is_full_length(reference: "prep.ReferenceData",
                             isolate: "prep.IsolateRecord", segment: str) -> bool:
     sequence = genomic_sequence(reference, segment_accession(isolate, segment))
     low, high = prep.SEGMENT_LENGTH_RANGE[segment]
@@ -6658,7 +6634,7 @@ def _segment_is_full_length(reference: "rd.ReferenceData",
 
 
 def terminally_complete_isolates(
-        reference: "rd.ReferenceData") -> List["prep.IsolateRecord"]:
+        reference: "prep.ReferenceData") -> List["prep.IsolateRecord"]:
     """Wild, classified isolates whose S, M and L are all full-length AND terminal.
 
     Returned in `isolate_key` order so the pool is deterministic regardless of the order
@@ -6686,7 +6662,7 @@ def terminally_complete_isolates(
 # ---------------------------------------------------------------------------
 
 
-def ws4_reserved_accessions(reference: "rd.ReferenceData") -> Set[str]:
+def ws4_reserved_accessions(reference: "prep.ReferenceData") -> Set[str]:
     """Every accession consumed by the WS4 validation panel as it stands today.
 
     Sourced by BUILDING THE ACTUAL PANEL rather than by re-deriving the specs, per D11's
@@ -6710,7 +6686,7 @@ def ws4_reserved_accessions(reference: "rd.ReferenceData") -> Set[str]:
     return reserved
 
 
-def _isolate_touches(reference: "rd.ReferenceData", isolate: "prep.IsolateRecord",
+def _isolate_touches(reference: "prep.ReferenceData", isolate: "prep.IsolateRecord",
                      accessions: Set[str]) -> bool:
     """Is any of this isolate's three segments one of `accessions`?
 
@@ -6729,7 +6705,7 @@ def _isolate_touches(reference: "rd.ReferenceData", isolate: "prep.IsolateRecord
 
 
 def select_calibration_isolates(
-        reference: "rd.ReferenceData",
+        reference: "prep.ReferenceData",
         max_per_species: int = CALIBRATION_MAX_ISOLATES_PER_SPECIES,
         seed: int = RPI_CALIBRATION_SEED,
 ) -> Tuple[List["prep.IsolateRecord"], Dict[str, Any]]:
@@ -6770,7 +6746,7 @@ def select_calibration_isolates(
 # ---------------------------------------------------------------------------
 
 
-def duplex_dg(reference: "rd.ReferenceData",
+def duplex_dg(reference: "prep.ReferenceData",
               five_prime_isolate: "prep.IsolateRecord", five_prime_segment: str,
               three_prime_isolate: "prep.IsolateRecord", three_prime_segment: str,
               window_nt: int) -> float:
@@ -6802,7 +6778,7 @@ def duplex_dg(reference: "rd.ReferenceData",
 
 
 def _calibration_build_panel(
-        reference: "rd.ReferenceData",
+        reference: "prep.ReferenceData",
         window_nt: int = rd.RPI_PANHANDLE_WINDOW_NT,
         seed: int = RPI_CALIBRATION_SEED,
         max_per_species: int = CALIBRATION_MAX_ISOLATES_PER_SPECIES,
@@ -7221,7 +7197,7 @@ def choose_rescaling(values: Sequence[float],
 RPI_CALIBRATION_SCHEMA_VERSION = 1
 
 
-def calibrate(reference: "rd.ReferenceData",
+def calibrate(reference: "prep.ReferenceData",
               window_nt: int = rd.RPI_PANHANDLE_WINDOW_NT,
               seed: int = RPI_CALIBRATION_SEED,
               max_per_species: int = CALIBRATION_MAX_ISOLATES_PER_SPECIES,
@@ -7345,7 +7321,7 @@ STABILITY_SEEDS = (RPI_CALIBRATION_SEED, 1, 999)
 STABILITY_WINDOWS = (25, 50, 75)
 
 
-def stability_sweep(reference: "rd.ReferenceData",
+def stability_sweep(reference: "prep.ReferenceData",
                     seeds: Sequence[int] = STABILITY_SEEDS,
                     windows: Sequence[int] = STABILITY_WINDOWS,
                     ) -> List[Dict[str, Any]]:
@@ -7392,8 +7368,8 @@ def _stability_report(rows: Sequence[Dict[str, Any]]) -> str:
 
 def _calibration_main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=_CALIBRATION_MODULE_DOC.splitlines()[1])
-    parser.add_argument("--root", type=Path, default=Path("all_hanta"),
-                        help="dataset root passed to load_reference_data")
+    parser.add_argument("--root", type=Path, default=Path("output"),
+                        help="Stage 1 output directory passed to load_reference_data")
     parser.add_argument("--out", type=Path, default=DEFAULT_ARTIFACT_PATH)
     parser.add_argument("--window-nt", type=int, default=rd.RPI_PANHANDLE_WINDOW_NT,
                         help="panhandle window; D2 sweeps 25/50/75")
@@ -7404,7 +7380,7 @@ def _calibration_main(argv: Optional[Sequence[str]] = None) -> int:
                         help="re-run the branch across seeds and windows; writes nothing")
     args = parser.parse_args(argv)
 
-    reference = rd.load_reference_data(args.root)
+    reference = prep.load_reference_data(args.root)
     if args.stability:
         print(_stability_report(stability_sweep(reference)))
         return 0
@@ -8143,7 +8119,7 @@ def reserved_calibration_isolate_keys(
 
 
 def usable_pool(
-        reference: "rd.ReferenceData",
+        reference: "prep.ReferenceData",
         reserved_keys: Optional[Set[str]] = None) -> List["prep.IsolateRecord"]:
     """Terminally complete, wild isolates, excluding calibration's reserved 42 (binding
     constraint, PROJECT-STATE.md section 7b). Reuses rpi_calibration.py's own filter
@@ -8160,7 +8136,7 @@ def usable_pool(
 
 
 def _candidate_from_isolates(
-        candidate_id: str, reference: "rd.ReferenceData",
+        candidate_id: str, reference: "prep.ReferenceData",
         segment_sources: Dict[str, "prep.IsolateRecord"]) -> "rd.CandidateInput":
     """A CandidateInput whose S/M/L each come from `segment_sources[seg]` -- one isolate
     per segment, which may be the same isolate for all three (a real, unmodified genome)
@@ -8195,7 +8171,7 @@ def _label(isolate: "prep.IsolateRecord") -> str:
 
 
 def build_group_a_random(
-        reference: "rd.ReferenceData", pool: Sequence["prep.IsolateRecord"],
+        reference: "prep.ReferenceData", pool: Sequence["prep.IsolateRecord"],
         seed: int = RPI_DISCRIMINATION_SEED, target: int = RANDOM_FAKES_TARGET,
 ) -> List[Dict[str, Any]]:
     """Full S+M+L triplets, each segment from a different isolate, with all three
@@ -8256,7 +8232,7 @@ def build_group_a_random(
 
 
 def build_group_b1_within_species(
-        reference: "rd.ReferenceData", pool: Sequence["prep.IsolateRecord"],
+        reference: "prep.ReferenceData", pool: Sequence["prep.IsolateRecord"],
         seed: int = RPI_DISCRIMINATION_SEED,
         per_species: int = WITHIN_SPECIES_SHUFFLES_PER_SPECIES,
 ) -> List[Dict[str, Any]]:
@@ -8346,7 +8322,7 @@ def find_sympatric_species_pairs(
 
 
 def build_group_b2_sympatric(
-        reference: "rd.ReferenceData", pool: Sequence["prep.IsolateRecord"],
+        reference: "prep.ReferenceData", pool: Sequence["prep.IsolateRecord"],
 ) -> List[Dict[str, Any]]:
     """Full S+M+L triplets built across genuinely sympatric species pairs (D7 group b2).
 
@@ -8398,7 +8374,7 @@ def build_group_b2_sympatric(
 
 
 def load_supported_reassortment_candidates(
-        reference: "rd.ReferenceData",
+        reference: "prep.ReferenceData",
         table_path: Path = ORTHO_REASSORTMENT_TABLE_PATH,
 ) -> List[Dict[str, Any]]:
     """The `supported_reassortment_candidate` rows from prepare_dataset.py's own genome-wide
@@ -8441,7 +8417,7 @@ def load_supported_reassortment_candidates(
 
 
 def load_published_inter_species_crosses(
-        reference: "rd.ReferenceData", builder: "vd.PanelBuilder",
+        reference: "prep.ReferenceData", builder: "vd.PanelBuilder",
 ) -> List[Dict[str, Any]]:
     """The class-A (inter-species) entries of `validate_reassortment_detector.py`'s
     `PUBLISHED_CROSSES` -- real lab-published reassortants. Class B (intra-species) is
@@ -8468,7 +8444,7 @@ def load_published_inter_species_crosses(
 
 
 def build_group_c_real_positives(
-        reference: "rd.ReferenceData", builder: "vd.PanelBuilder",
+        reference: "prep.ReferenceData", builder: "vd.PanelBuilder",
 ) -> List[Dict[str, Any]]:
     return (load_supported_reassortment_candidates(reference)
             + load_published_inter_species_crosses(reference, builder))
@@ -8493,7 +8469,7 @@ def _score_args(output_dir: str = "output/discrimination_scratch") -> argparse.N
 
 
 def score_cases(
-        reference: "rd.ReferenceData", precomputed: Dict[str, Any],
+        reference: "prep.ReferenceData", precomputed: Dict[str, Any],
         cases: Sequence[Dict[str, Any]], args: Optional[argparse.Namespace] = None,
 ) -> List[Dict[str, Any]]:
     """Runs score_candidate on every case and folds the RPI columns into it."""
@@ -8514,7 +8490,7 @@ def score_cases(
 
 
 def build_discrimination_panel(
-        reference: "rd.ReferenceData", seed: int = RPI_DISCRIMINATION_SEED,
+        reference: "prep.ReferenceData", seed: int = RPI_DISCRIMINATION_SEED,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """Builds all four (unscored) groups. Separate from scoring so a caller can inspect
     or filter the panel before paying score_candidate's cost."""
@@ -8588,7 +8564,7 @@ def _fixture_isolate(
     ), {f"{key}_S": s_seq, f"{key}_M": m_seq, f"{key}_L": l_seq}
 
 
-def _fixture_reference(*isolate_and_seqs) -> "rd.ReferenceData":
+def _fixture_reference(*isolate_and_seqs) -> "prep.ReferenceData":
     isolates = [pair[0] for pair in isolate_and_seqs]
     sequences: Dict[str, str] = {}
     for _isolate, seqs in isolate_and_seqs:
@@ -8598,7 +8574,7 @@ def _fixture_reference(*isolate_and_seqs) -> "rd.ReferenceData":
                             length=len(seq))
         for acc, seq in sequences.items()
     }
-    return rd.ReferenceData(isolates=isolates, cds_index={}, genomic_index=genomic_index)
+    return prep.ReferenceData(isolates=isolates, cds_index={}, genomic_index=genomic_index)
 
 
 class CountryContinentTest(unittest.TestCase):
@@ -8611,7 +8587,9 @@ class CountryContinentTest(unittest.TestCase):
         module's group builders. A new country in a future all_hanta/ update must be
         added to COUNTRY_CONTINENT explicitly (see its own comment on why a KeyError,
         not a permissive default, is the intended failure when one does)."""
-        reference = rd.load_reference_data(Path("all_hanta"))
+        if not (Path("output") / "ortho_reference_isolates.json").exists():
+            self.skipTest("output/ reference snapshot not present -- run prepare_dataset.py first")
+        reference = prep.load_reference_data(Path("output"))
         pool = usable_pool(reference)
         unmapped = sorted({i.country for i in pool if i.country} - set(COUNTRY_CONTINENT))
         self.assertEqual(unmapped, [], f"unmapped countries: {unmapped}")
@@ -8623,7 +8601,9 @@ class ReservedCalibrationIsolateKeysTest(unittest.TestCase):
         self.assertEqual(len(keys), 42)
 
     def test_usable_pool_excludes_every_reserved_key(self):
-        reference = rd.load_reference_data(Path("all_hanta"))
+        if not (Path("output") / "ortho_reference_isolates.json").exists():
+            self.skipTest("output/ reference snapshot not present -- run prepare_dataset.py first")
+        reference = prep.load_reference_data(Path("output"))
         reserved = reserved_calibration_isolate_keys()
         pool = usable_pool(reference, reserved)
         self.assertTrue(reserved.isdisjoint({i.isolate_key for i in pool}))
@@ -9012,7 +8992,7 @@ PUBLISHED_CROSSES: List[Dict[str, Any]] = [
 class PanelBuilder:
     """Builds candidates from real sequences in all_hanta/."""
 
-    def __init__(self, reference: rd.ReferenceData):
+    def __init__(self, reference: prep.ReferenceData):
         self.reference = reference
         self.by_species: Dict[str, List[Any]] = {}
         for isolate in reference.isolates:
@@ -9491,7 +9471,7 @@ def summarise(results: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 def _validate_main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=_VALIDATE_MODULE_DOC.split("\n")[0])
-    parser.add_argument("--reference-input", default="all_hanta")
+    parser.add_argument("--reference-input", default="output")
     parser.add_argument("--json", help="write the full report to this path")
     parser.add_argument("--with-phylogeny", action="store_true",
                         help="run gate4 (needs mafft and iqtree on PATH)")
@@ -9499,12 +9479,13 @@ def _validate_main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     root = Path(args.reference_input)
-    if not (root / "ncbi_dataset" / "data" / "data_report.jsonl").exists():
-        print(f"ERROR: {root}/ NCBI package not found.", file=sys.stderr)
+    if not (root / "ortho_reference_isolates.json").exists():
+        print(f"ERROR: {root}/ reference snapshot not found "
+              f"(run prepare_dataset.py first).", file=sys.stderr)
         return 2
 
     print(f"Loading reference from {root}/ ...", flush=True)
-    reference = rd.load_reference_data(root)
+    reference = prep.load_reference_data(root)
     precomputed = rd._build_precomputed(reference)
     builder = PanelBuilder(reference)
 
@@ -9646,7 +9627,7 @@ def _run_stage(name: str, fn):
 
 
 def _stage_calibrate(
-        reference: "rd.ReferenceData", recalibrate: bool,
+        reference: "prep.ReferenceData", recalibrate: bool,
         path: Path = cal.DEFAULT_ARTIFACT_PATH) -> Dict[str, Any]:
     """Reuses the pinned artifact unless it is missing or --recalibrate was passed --
     calibration is a distinct, auditable step (rpi_calibration.py's own docstring),
@@ -9658,7 +9639,7 @@ def _stage_calibrate(
 
 
 def _stage_discriminate(
-        reference: "rd.ReferenceData", seed: int) -> Dict[str, List[Dict[str, Any]]]:
+        reference: "prep.ReferenceData", seed: int) -> Dict[str, List[Dict[str, Any]]]:
     precomputed = rd._build_precomputed(reference)
     panel = disc.build_discrimination_panel(reference, seed=seed)
     return {name: disc.score_cases(reference, precomputed, cases)
@@ -9701,7 +9682,7 @@ def _format_summary(
 
 
 def run(args: argparse.Namespace) -> int:
-    reference = rd.load_reference_data(Path(args.reference_input) / "all_hanta")
+    reference = prep.load_reference_data(Path(args.reference_input) / "output")
     try:
         calibration = _run_stage(
             "calibrate", lambda: _stage_calibrate(reference, args.recalibrate))
@@ -9724,7 +9705,8 @@ def _parse_run_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--recalibrate", action="store_true",
                         help="rebuild data/rpi_calibration.json even if it exists")
     parser.add_argument("--reference-input", default=".",
-                        help="package root containing all_hanta/ncbi_dataset/data")
+                        help="project root containing the output/ directory "
+                             "(Stage 1's reference snapshot)")
     parser.add_argument("--output", type=Path, default=None,
                         help="combined report path (default output/pipeline/run_<ts>.json)")
     parser.add_argument("--seed", type=int, default=disc.RPI_DISCRIMINATION_SEED)
@@ -9806,7 +9788,7 @@ class RunHaltsOnStageFailureTest(unittest.TestCase):
         return args
 
     def test_discriminate_failure_halts_before_stats_or_report(self):
-        with mock.patch.object(rd, "load_reference_data", return_value=mock.Mock()), \
+        with mock.patch.object(prep, "load_reference_data", return_value=mock.Mock()), \
              mock.patch(__name__ + "._stage_calibrate",
                         return_value={"rescaling": {"parameters": {"tau": 1.0}}}), \
              mock.patch(__name__ + "._stage_discriminate",
@@ -9819,7 +9801,7 @@ class RunHaltsOnStageFailureTest(unittest.TestCase):
         fake_report.assert_not_called()
 
     def test_calibrate_failure_halts_before_discriminate(self):
-        with mock.patch.object(rd, "load_reference_data", return_value=mock.Mock()), \
+        with mock.patch.object(prep, "load_reference_data", return_value=mock.Mock()), \
              mock.patch(__name__ + "._stage_calibrate", side_effect=RuntimeError("boom")), \
              mock.patch(__name__ + "._stage_discriminate") as fake_discriminate:
             exit_code = run(self._args())
@@ -9830,7 +9812,7 @@ class RunHaltsOnStageFailureTest(unittest.TestCase):
         calibration = {"rescaling": {"parameters": {"tau": 3.914}}}
         scored_groups = {"a_random_fakes": [{"rpi_generation": 0.1}]}
         stats_result = {"overall_ranking_supported": False}
-        with mock.patch.object(rd, "load_reference_data", return_value=mock.Mock()), \
+        with mock.patch.object(prep, "load_reference_data", return_value=mock.Mock()), \
              mock.patch(__name__ + "._stage_calibrate", return_value=calibration), \
              mock.patch(__name__ + "._stage_discriminate", return_value=scored_groups), \
              mock.patch(__name__ + "._stage_stats", return_value=stats_result), \
