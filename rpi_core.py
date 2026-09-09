@@ -8135,6 +8135,19 @@ def usable_pool(
     return [i for i in pool if i.isolate_key not in reserved_keys]
 
 
+def strict_merged_pool(
+        reference: "prep.ReferenceData",
+        reserved_keys: Optional[Set[str]] = None) -> List["prep.IsolateRecord"]:
+    """The GA-search pool: BOTH completeness rulers must pass -- terminally
+    complete (usable_pool's filter) AND coding-complete (has_complete_triplet).
+    Validation/discrimination panels deliberately keep using usable_pool
+    (terminal-completeness only) so their results stay comparable with
+    already-computed runs; only the GA fitness function's search pool
+    tightens to this stricter intersection.
+    """
+    return [i for i in usable_pool(reference, reserved_keys) if i.has_complete_triplet]
+
+
 def _candidate_from_isolates(
         candidate_id: str, reference: "prep.ReferenceData",
         segment_sources: Dict[str, "prep.IsolateRecord"]) -> "rd.CandidateInput":
@@ -8607,6 +8620,43 @@ class ReservedCalibrationIsolateKeysTest(unittest.TestCase):
         reserved = reserved_calibration_isolate_keys()
         pool = usable_pool(reference, reserved)
         self.assertTrue(reserved.isdisjoint({i.isolate_key for i in pool}))
+
+
+class StrictMergedPoolTest(unittest.TestCase):
+    """strict_merged_pool is the GA-search pool: BOTH completeness rulers must pass.
+    usable_pool itself stays untouched (it still feeds the validation/discrimination
+    panel and its own tests above, unchanged) -- these tests cover only the new,
+    stricter function."""
+
+    def test_excludes_terminally_complete_isolate_lacking_coding_complete_triplet(self):
+        coding_and_terminal = _make_isolate("b1", "Orthohantavirus x", "S1", "M1", "L1")
+        coding_and_terminal.has_complete_triplet = True
+        terminal_only = _make_isolate("t1", "Orthohantavirus x", "S2", "M2", "L2")
+        terminal_only.has_complete_triplet = False
+        reference = prep.ReferenceData(
+            isolates=[coding_and_terminal, terminal_only], genomic_index={}, cds_index={})
+
+        with unittest.mock.patch(
+                "rpi_core.terminally_complete_isolates",
+                return_value=[coding_and_terminal, terminal_only]):
+            pool = strict_merged_pool(reference, reserved_keys=set())
+
+        self.assertEqual([i.isolate_key for i in pool], ["b1"])
+
+    def test_excludes_reserved_keys_same_as_usable_pool(self):
+        coding_and_terminal = _make_isolate("b1", "Orthohantavirus x", "S1", "M1", "L1")
+        coding_and_terminal.has_complete_triplet = True
+        reserved = _make_isolate("b2", "Orthohantavirus x", "S2", "M2", "L2")
+        reserved.has_complete_triplet = True
+        reference = prep.ReferenceData(
+            isolates=[coding_and_terminal, reserved], genomic_index={}, cds_index={})
+
+        with unittest.mock.patch(
+                "rpi_core.terminally_complete_isolates",
+                return_value=[coding_and_terminal, reserved]):
+            pool = strict_merged_pool(reference, reserved_keys={"b2"})
+
+        self.assertEqual([i.isolate_key for i in pool], ["b1"])
 
 
 class FindSympatricSpeciesPairsTest(unittest.TestCase):

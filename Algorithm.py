@@ -51,16 +51,37 @@ def isolate_key_of(isolate: Any) -> str:
     return _field(isolate, "isolate_key", "isolatekey")
 
 
-def build_pool(reference: Any, reserved_keys: set) -> List[str]:
-    """Use the canonical usable_pool from rpi_core rather than a reimplementation.
+def completeness_overlap(reference: Any, reserved_keys: set) -> Dict[str, int]:
+    """Set-arithmetic comparison between the two completeness rulers, as seen at
+    build_pool's call site: coding_complete (has_complete_triplet, the 206-set) vs
+    terminal_complete (rc.usable_pool's terminally-complete-and-not-reserved filter,
+    the 272-set). Reported so every run states which isolates each ruler agreed vs
+    disagreed on, and how many survive the GA's stricter intersection (strict_merged_pool
+    -- terminal_complete here is built from usable_pool, i.e. AFTER reserved-key removal,
+    matching what build_pool actually consumes)."""
+    coding_complete = {isolate_key_of(i) for i in reference.isolates if i.has_complete_triplet}
+    terminal_complete = {isolate_key_of(i) for i in rc.usable_pool(reference, reserved_keys)}
+    both = coding_complete & terminal_complete
+    only_coding = coding_complete - terminal_complete
+    only_terminal = terminal_complete - coding_complete
+    return {"both": len(both), "only_coding": len(only_coding), "only_terminal": len(only_terminal)}
 
-    usable_pool's docstring explicitly forbids a second implementation: it filters on
-    terminally_complete_isolates (all three segments full-length AND both panhandle tags)
-    to protect panhandle-adjacent computation like M_pack. The old build_pool only
-    checked has_complete_triplet and omitted terminal-completeness, contaminating 51% of
-    what it searched and missing 65% of the real pool.
+
+def build_pool(reference: Any, reserved_keys: set) -> List[str]:
+    """The GA search pool: rc.strict_merged_pool, the intersection of BOTH completeness
+    rulers (terminally-complete AND coding-complete). This is stricter than the
+    validation/discrimination panel's rc.usable_pool (terminal-completeness only) --
+    deliberately so, per the Task 13 ruling: the GA fitness function's search pool
+    tightens to this stricter intersection while validation stays comparable with
+    already-computed runs. Prints the coding-complete (206-set) / terminally-complete
+    (272-set) / merged overlap counts so the two rulers' relationship is visible on
+    every run.
     """
-    pool_records = rc.usable_pool(reference, reserved_keys)
+    overlap = completeness_overlap(reference, reserved_keys)
+    print(f"completeness overlap: in both {overlap['both']}, only coding-complete (206-set) "
+          f"{overlap['only_coding']}, only terminally-complete (272-set) {overlap['only_terminal']}, "
+          f"strict merged set {overlap['both']}")
+    pool_records = rc.strict_merged_pool(reference, reserved_keys)
     pool = sorted([isolate_key_of(i) for i in pool_records])
     if not pool:
         raise SystemExit("search pool is empty after filters -- nothing to sample from")
@@ -332,8 +353,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             break
     confirmation = confirm_winners(oracle, winners, Path(args.output), args.with_phylogeny)
 
+    overlap = completeness_overlap(reference, reserved)
     payload = {"config": vars(args), "calibration_reserved_excluded": len(reserved),
-               "pool_size": len(pool), "generations_run": result["generations_run"],
+               "pool_ruler": "strict_merged", "pool_size": len(pool),
+               "completeness_overlap": overlap,
+               "generations_run": result["generations_run"],
                "stopped_on_plateau": result["stopped_on_plateau"],
                "log": result["log"], "winners": winners, "confirmation": confirmation,
                "scoring_errors": [{"triplet": list(t), "error": e} for t, e in oracle.errors]}
@@ -405,9 +429,11 @@ class GaSearchTest(unittest.TestCase):
         winner = tournament(scored, rng, size=2)
         self.assertEqual(winner, ("d", "e", "f"))
 
-    def test_pool_matches_usable_pool(self):
-        """build_pool now calls the canonical rc.usable_pool, so test that it produces
-        the same result. This guards against accidental divergence."""
+    def test_pool_matches_strict_merged_pool(self):
+        """build_pool now calls rc.strict_merged_pool (the GA search pool: BOTH
+        completeness rulers), so test that it produces the same result. This guards
+        against accidental divergence. usable_pool alone is no longer what build_pool
+        consumes -- that ruler still feeds the validation/discrimination panel only."""
         from pathlib import Path
         if not Path("output/ortho_reference_isolates.json").exists():
             self.skipTest("output/ reference snapshot not present -- run prepare_dataset.py first")
@@ -415,8 +441,30 @@ class GaSearchTest(unittest.TestCase):
         reserved = rc.reserved_calibration_isolate_keys()
         # Both should produce the same pool
         alg_pool = set(build_pool(reference, reserved))
-        canonical = set(i.isolate_key for i in rc.usable_pool(reference, reserved))
+        canonical = set(i.isolate_key for i in rc.strict_merged_pool(reference, reserved))
         self.assertEqual(alg_pool, canonical)
+
+    def test_completeness_overlap_partitions_the_union(self):
+        """both + only_coding + only_terminal must partition coding_complete |
+        terminal_complete -- every key in the union appears in exactly one of the
+        three sets. Uses fixture isolates so it runs without the output/ snapshot."""
+        from types import SimpleNamespace as NS
+        coding_only = NS(isolate_key="c1", has_complete_triplet=True)
+        terminal_only = NS(isolate_key="t1", has_complete_triplet=False)
+        both_ruler = NS(isolate_key="b1", has_complete_triplet=True)
+        reference = NS(isolates=[coding_only, terminal_only, both_ruler])
+        reserved: set = set()
+
+        with mock.patch.object(
+                rc, "usable_pool", return_value=[terminal_only, both_ruler]):
+            overlap = completeness_overlap(reference, reserved)
+
+        coding_complete = {"c1", "b1"}
+        terminal_complete = {"t1", "b1"}
+        union = coding_complete | terminal_complete
+        self.assertEqual(overlap["both"] + overlap["only_coding"] + overlap["only_terminal"],
+                          len(union))
+        self.assertEqual(overlap, {"both": 1, "only_coding": 1, "only_terminal": 1})
 
 
 class ConfirmWinnersTest(unittest.TestCase):
