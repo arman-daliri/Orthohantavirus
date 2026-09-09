@@ -22,6 +22,7 @@ import os
 import shutil
 import subprocess
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, DefaultDict, Dict, List, Optional, Sequence, Tuple
@@ -804,6 +805,13 @@ def _run_phylogenetics_scope(
     run_phylogenetics_stage so --phylo-scope=both is just this called twice; the
     scope='species' call alone is exactly what run_phylogenetics_stage did before this
     function existed.
+
+    Groups are analyzed concurrently, up to args.phylo_workers at once (see
+    docs/superpowers/specs/2026-09-10-phylogeny-group-parallelism-design.md) --
+    submitted largest-taxa-first to minimize total makespan given this dataset's
+    extreme group-size skew, but always returned sorted by group_key so output row
+    order stays identical to a serial run regardless of worker count or completion
+    order.
     """
     by_group, group_drop_reasons = group_candidates(candidates, args.phylo_min_taxa, scope)
     for reason in group_drop_reasons:
@@ -824,11 +832,44 @@ def _run_phylogenetics_scope(
     # species-scope-only run's directory tree (and therefore the alignment/tree path
     # columns it writes) stays exactly what it was before scope existed.
     group_dir_root = output_dir / "phylogenetics" if scope == "species" else output_dir / "phylogenetics_phylogroup"
-    for group_key, members in sorted(by_group.items()):
+
+    # Largest-taxa-first submission order (the "longest processing time first"
+    # scheduling heuristic): with a fixed worker count and this dataset's extreme
+    # group-size skew, starting the biggest groups immediately -- rather than possibly
+    # queuing them behind small ones -- minimizes total makespan. Ties broken by
+    # group_key for determinism.
+    submission_order = sorted(by_group.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+
+    def _run_one_group(group_key: str, members: List[PhyloCandidate]) -> List[Dict[str, Any]]:
         logging.info("Phylogenetics (%s): %s (%s taxa) -- aligning + building trees",
                      scope, group_key, len(members))
-        rows.extend(_analyze_group(
-            group_key, scope, members, group_dir_root, output_dir, args, mafft_bin, iqtree_bin))
+        return _analyze_group(
+            group_key, scope, members, group_dir_root, output_dir, args, mafft_bin, iqtree_bin)
+
+    group_rows: Dict[str, List[Dict[str, Any]]] = {}
+    with ThreadPoolExecutor(max_workers=args.phylo_workers) as executor:
+        future_to_group = {
+            executor.submit(_run_one_group, group_key, members): (group_key, members)
+            for group_key, members in submission_order
+        }
+        for future in as_completed(future_to_group):
+            group_key, members = future_to_group[future]
+            try:
+                group_rows[group_key] = future.result()
+            except Exception as exc:  # noqa: BLE001 - one group's failure must not kill the run
+                # _analyze_group already catches everything inside its own try/except and
+                # returns 'failed' rows instead of raising (see its docstring) -- this only
+                # fires for something outside that guard, e.g. a labels.json write failure
+                # before its try block starts. Same isolation guarantee, one layer out.
+                logging.exception("Phylogenetics failed for %s (%s scope)", group_key, scope)
+                error = f"{type(exc).__name__}:{exc}"
+                group_rows[group_key] = [
+                    _phylo_row(c, c.isolate.species_name, len(members), "failed", error, scope,
+                              _assignment_basis(c, scope))
+                    for c in members]
+
+    for group_key in sorted(group_rows):
+        rows.extend(group_rows[group_key])
     return rows
 
 
@@ -1023,6 +1064,7 @@ import sys
 import tempfile
 import unittest
 from io import StringIO
+from unittest import mock
 
 try:
     import Bio.Phylo
@@ -1349,6 +1391,77 @@ class ParseArgsPhyloWorkersTest(unittest.TestCase):
             parse_args(["--phylo-workers", "-1"])
 
 
+class GroupSubmissionOrderTest(unittest.TestCase):
+    """_run_phylogenetics_scope must submit groups largest-taxa-first (the "longest
+    processing time first" scheduling heuristic -- see docs/superpowers/specs/
+    2026-09-10-phylogeny-group-parallelism-design.md section 4.1), not
+    group_candidates' incidental alphabetical order. Uses phylo_workers=1 so execution
+    order is deterministically submission order -- a single-worker ThreadPoolExecutor
+    runs queued tasks strictly FIFO -- making this a scheduling-order test, not a
+    timing-based concurrency test. Mocks _analyze_group entirely, so it needs neither
+    Bio.Phylo/dendropy nor real mafft/iqtree.
+    """
+
+    def test_groups_analyzed_largest_taxa_first(self):
+        candidates = (
+            _make_candidates(["Orthohantavirus hantanense"], n_per_species=4, seed=1)
+            + _make_candidates(["Orthohantavirus dobravaense"], n_per_species=9, seed=2)
+            + _make_candidates(["Orthohantavirus puumalaense"], n_per_species=6, seed=3)
+        )
+        call_order: List[str] = []
+
+        def fake_analyze_group(group_key, scope, members, *_a, **_kw):
+            call_order.append(group_key)
+            return []
+
+        args = argparse.Namespace(phylo_min_taxa=4, phylo_workers=1)
+        with mock.patch("phylogeny._analyze_group", side_effect=fake_analyze_group):
+            _run_phylogenetics_scope("species", candidates, Path("unused"), args, "mafft", "iqtree")
+
+        self.assertEqual(call_order, [
+            "Orthohantavirus dobravaense",   # 9 candidates -- largest
+            "Orthohantavirus puumalaense",   # 6 candidates
+            "Orthohantavirus hantanense",    # 4 candidates -- smallest
+        ])
+
+
+class GroupFailureIsolationTest(unittest.TestCase):
+    """One group's failure must not lose other groups' results under the concurrent
+    path -- extends _analyze_group's existing per-group error isolation (its own
+    try/except, unchanged) with a defensive layer at the future.result() collection
+    point, for whatever could still raise before that try block starts (e.g. the
+    labels.json write). Mocks _analyze_group entirely.
+    """
+
+    def test_one_groups_exception_does_not_lose_other_groups_rows(self):
+        candidates = (
+            _make_candidates(["Orthohantavirus hantanense"], n_per_species=4, seed=1)
+            + _make_candidates(["Orthohantavirus dobravaense"], n_per_species=4, seed=2)
+        )
+
+        def fake_analyze_group(group_key, scope, members, *_a, **_kw):
+            if group_key == "Orthohantavirus dobravaense":
+                raise RuntimeError("simulated failure before _analyze_group's own try block")
+            return [{"isolate_key": c.isolate.isolate_key, "phylo_status": "analyzed"}
+                    for c in members]
+
+        args = argparse.Namespace(phylo_min_taxa=4, phylo_workers=2)
+        with mock.patch("phylogeny._analyze_group", side_effect=fake_analyze_group):
+            rows = _run_phylogenetics_scope(
+                "species", candidates, Path("unused"), args, "mafft", "iqtree")
+
+        by_key = {row.get("isolate_key"): row for row in rows}
+        hantanense_keys = [c.isolate.isolate_key for c in candidates
+                           if c.isolate.species_name == "Orthohantavirus hantanense"]
+        dobravaense_keys = [c.isolate.isolate_key for c in candidates
+                            if c.isolate.species_name == "Orthohantavirus dobravaense"]
+
+        for key in hantanense_keys:
+            self.assertEqual(by_key[key]["phylo_status"], "analyzed")
+        for key in dobravaense_keys:
+            self.assertEqual(by_key[key]["phylo_status"], "failed")
+
+
 @unittest.skipUnless(_HAVE_PHYLO_DEPS, "biopython/dendropy not installed")
 class PhylogeneticsScopeEndToEndTest(unittest.TestCase):
     """Runs _run_phylogenetics_scope for real, against fake mafft/iqtree scripts, to
@@ -1443,7 +1556,7 @@ with open(f"{prefix}.treefile", "w") as f:
         import argparse
         return argparse.Namespace(
             phylo_min_taxa=4, bootstrap=100, min_bootstrap_support=95.0, phylo_seed=42,
-            phylo_threads=1, phylo_scope=scope, phylo_outgroup=outgroup,
+            phylo_threads=1, phylo_scope=scope, phylo_outgroup=outgroup, phylo_workers=1,
         )
 
     def test_both_scopes_each_report_every_candidate_once(self):
@@ -1484,6 +1597,29 @@ with open(f"{prefix}.treefile", "w") as f:
         self.assertIn("not a member of group Orthohantavirus dobravaense", messages)
         # hantanense's tree DOES contain it -- no such message for that group.
         self.assertNotIn("not a member of group Orthohantavirus hantanense", messages)
+
+    def test_worker_count_does_not_change_output_rows(self):
+        """Regression: docs/superpowers/specs/2026-09-10-phylogeny-group-parallelism-
+        design.md's correctness contract -- parallelizing WHEN groups run must not
+        change WHAT rows come out or their order. Runs against separate output
+        directories so file writes don't collide; recorded paths are relative to each
+        call's own output_dir, so they come out identical either way."""
+        serial_out = self.output_dir / "serial"
+        serial_out.mkdir()
+        parallel_out = self.output_dir / "parallel"
+        parallel_out.mkdir()
+
+        serial_rows = _run_phylogenetics_scope(
+            "species", self.candidates, serial_out, self._args("species"),
+            str(self.mafft_bin), str(self.iqtree_bin))
+
+        parallel_args = self._args("species")
+        parallel_args.phylo_workers = 4
+        parallel_rows = _run_phylogenetics_scope(
+            "species", self.candidates, parallel_out, parallel_args,
+            str(self.mafft_bin), str(self.iqtree_bin))
+
+        self.assertEqual(serial_rows, parallel_rows)
 
 
 @unittest.skipUnless(_HAVE_PHYLO_DEPS, "biopython/dendropy not installed")
