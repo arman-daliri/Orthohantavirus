@@ -988,6 +988,45 @@ def parse_cds_fasta(path: Optional[Path]) -> Dict[str, List[Tuple[str, str]]]:
     return dict(index)
 
 
+@dataclass
+class ReferenceData:
+    """Everything a downstream stage needs, reconstructed from Stage 1's snapshot --
+    never from a raw all_hanta/ read. isolates is the full, UNFILTERED set; Stage 2's
+    206-coding-complete and Stage 3's 272-terminally-complete/strict-merged filters are
+    applied by their own callers, not here.
+    """
+    isolates: List[IsolateRecord]
+    genomic_index: Dict[str, FastaRecord]
+    cds_index: Dict[str, List[Tuple[str, str]]]
+
+
+def load_reference_data(output_dir: Path) -> ReferenceData:
+    """Reads the 3 snapshot files Stage 1's run_pipeline writes. Raises FileNotFoundError
+    (not a silent empty result) if Stage 1 hasn't been run against this output_dir yet --
+    a missing snapshot is a setup error, not an empty-dataset condition.
+    """
+    isolates_path = output_dir / "ortho_reference_isolates.json"
+    genomic_path = output_dir / "ortho_reference_genomic.json"
+    cds_path = output_dir / "ortho_reference_cds.json"
+    for path in (isolates_path, genomic_path, cds_path):
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Reference snapshot file missing: {path}. Run prepare_dataset.py "
+                f"(Stage 1) against this output directory first.")
+
+    isolates = [IsolateRecord(**row) for row in json.loads(isolates_path.read_text(encoding="utf-8"))]
+    genomic_index: Dict[str, FastaRecord] = {}
+    for row in json.loads(genomic_path.read_text(encoding="utf-8")):
+        record = FastaRecord(**row)
+        genomic_index.setdefault(record.accession, record)
+        if record.accession_base and record.accession_base != record.accession:
+            genomic_index.setdefault(record.accession_base, record)
+    raw_cds = json.loads(cds_path.read_text(encoding="utf-8"))
+    cds_index = {k: [tuple(pair) for pair in v] for k, v in raw_cds.items()}
+
+    return ReferenceData(isolates=isolates, genomic_index=genomic_index, cds_index=cds_index)
+
+
 # --------------------------------------------------------------------------------------
 # Integrity gate -- verify against NCBI's published checksums
 # --------------------------------------------------------------------------------------
@@ -3463,5 +3502,61 @@ class ReferenceSnapshotWriteTest(unittest.TestCase):
             self.assertEqual(loaded_isolates[0]["isolate_key"], "iso1")
             loaded_cds = json.loads((out / "ortho_reference_cds.json").read_text())
             self.assertEqual(loaded_cds["S1"], [["nucleocapsid protein", "ACGTACGT"]])
+
+
+class ReferenceDataRoundTripTest(unittest.TestCase):
+    """load_reference_data must reconstruct exactly what run_pipeline wrote --
+    key-for-key on genomic_index, not just matching counts."""
+
+    def test_genomic_index_keying_matches_parse_fasta_exactly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fasta_path = Path(tmp) / "genomic.fna"
+            fasta_path.write_text(
+                ">PX111111.1 Orthohantavirus x segment S\nACGTACGTACGT\n"
+                ">PX222222.1 Orthohantavirus x segment M\nTTTTGGGGCCCC\n",
+                encoding="utf-8")
+            original_index = parse_fasta(fasta_path)
+
+            out = Path(tmp) / "output"
+            out.mkdir()
+            safe_write_json(out / "ortho_reference_isolates.json", [])
+            safe_write_json(
+                out / "ortho_reference_genomic.json",
+                [asdict(r) for r in original_index.values()])
+            safe_write_json(out / "ortho_reference_cds.json", {})
+
+            reference = load_reference_data(out)
+
+            self.assertEqual(set(reference.genomic_index.keys()), set(original_index.keys()))
+            for key, original_record in original_index.items():
+                self.assertEqual(reference.genomic_index[key].sequence, original_record.sequence)
+                self.assertEqual(reference.genomic_index[key].accession, original_record.accession)
+
+    def test_cds_index_round_trips_as_list_of_pairs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            safe_write_json(out / "ortho_reference_isolates.json", [])
+            safe_write_json(out / "ortho_reference_genomic.json", [])
+            safe_write_json(out / "ortho_reference_cds.json",
+                            {"PX111111": [("nucleocapsid protein", "ACGT")]})
+
+            reference = load_reference_data(out)
+
+            self.assertEqual(reference.cds_index["PX111111"], [("nucleocapsid protein", "ACGT")])
+            self.assertIsInstance(reference.cds_index["PX111111"][0], tuple)
+
+    def test_isolates_reconstruct_as_isolate_record_instances(self):
+        isolate = _make_isolate("iso1", "Orthohantavirus x", "S1.1", "M1.1", "L1.1")
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            safe_write_json(out / "ortho_reference_isolates.json", [asdict(isolate)])
+            safe_write_json(out / "ortho_reference_genomic.json", [])
+            safe_write_json(out / "ortho_reference_cds.json", {})
+
+            reference = load_reference_data(out)
+
+            self.assertEqual(len(reference.isolates), 1)
+            self.assertIsInstance(reference.isolates[0], IsolateRecord)
+            self.assertEqual(reference.isolates[0].isolate_key, "iso1")
 
 
