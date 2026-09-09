@@ -979,7 +979,16 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
                              "show. both: run each independently.")
     parser.add_argument("--phylo-outgroup", default=None,
                         help="Accession or isolate_key to root trees on, via IQ-TREE's -o.")
-    return parser.parse_args(argv)
+    parser.add_argument("--phylo-workers", type=int, default=4,
+                        help="Number of groups (species/phylogroup trees) to align + build "
+                             "concurrently. Each worker still uses --phylo-threads threads for "
+                             "its own mafft/iqtree calls, so total thread demand is roughly "
+                             "workers x --phylo-threads -- lower --phylo-threads manually if "
+                             "you raise this and see CPU oversubscription.")
+    parsed = parser.parse_args(argv)
+    if parsed.phylo_workers < 1:
+        parser.error("--phylo-workers must be >= 1")
+    return parsed
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
@@ -1315,6 +1324,29 @@ class GroupCandidatesTest(unittest.TestCase):
         self.assertEqual(pooled_species, set(self.species_list))
         self.assertEqual(len(grouped["murinae_borne"]), len(self.candidates))
         self.assertEqual(dict(exclusions), {})
+
+
+class ParseArgsPhyloWorkersTest(unittest.TestCase):
+    """--phylo-workers: new flag from docs/superpowers/specs/2026-09-10-phylogeny-
+    group-parallelism-design.md. Defaults to 4, rejects non-positive values at parse
+    time rather than failing later inside ThreadPoolExecutor with a confusing error.
+    """
+
+    def test_defaults_to_four(self):
+        args = parse_args([])
+        self.assertEqual(args.phylo_workers, 4)
+
+    def test_accepts_explicit_value(self):
+        args = parse_args(["--phylo-workers", "8"])
+        self.assertEqual(args.phylo_workers, 8)
+
+    def test_rejects_zero(self):
+        with self.assertRaises(SystemExit):
+            parse_args(["--phylo-workers", "0"])
+
+    def test_rejects_negative(self):
+        with self.assertRaises(SystemExit):
+            parse_args(["--phylo-workers", "-1"])
 
 
 @unittest.skipUnless(_HAVE_PHYLO_DEPS, "biopython/dendropy not installed")
