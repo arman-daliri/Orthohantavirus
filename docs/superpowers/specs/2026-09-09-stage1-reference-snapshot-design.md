@@ -118,6 +118,10 @@ sha256 returned for the checksum manifest) — no new I/O helper needed:
   in-memory `cds_index` (built today by `phylogeny.py`'s `parse_cds_fasta`,
   moved into Stage 1's own ingest run).
 
+`parse_cds_fasta` (the function itself, not just its call site) moves from
+`phylogeny.py` to `prepare_dataset.py`: only Stage 1 reads `cds.fna` after
+this change, and Stage 1 must not import from Stage 2 to get it.
+
 All three are added to `ortho_output_checksums.txt` like every other Stage 1
 output.
 
@@ -199,6 +203,19 @@ def load_reference_data(output_dir: Path) -> ReferenceData:
 No file after Stage 1 calls `resolve_inputs`, `iter_jsonl`, `parse_fasta`,
 `transform_one_record`, or `build_isolate_records` against a raw path again.
 
+## Implementation-plan assertion
+
+`ortho_reference_genomic.json`'s keying must match `parse_fasta`'s current
+in-memory keying exactly: keyed by accession, first token of the FASTA
+header, setdefault-first-wins on duplicate keys. The reload path
+(`{r["accession"]: prep.FastaRecord(**r) for r in ...}`) reproduces this only
+if the write path preserves the same first-wins order and does not
+accidentally key by `accession_base` or last-wins. The implementation plan
+must include a test asserting `load_reference_data(...).genomic_index` is
+key-for-key identical (same keys, same `.sequence` values) to today's
+`parse_fasta(...)` output on the same input package — not just "roughly the
+same size."
+
 ## Existing call sites needing disposition (inventory, not exhaustive editing here)
 
 `grep -rn "all_hanta" --include="*.py" .` currently returns ~70 hits outside
@@ -225,9 +242,14 @@ package being present in the checkout.
 
 ```
 grep -rn "\bah\.\|import all_hanta" --include="*.py" .   # must be empty
-grep -rn "Path(\"all_hanta\")" --include="*.py" .        # must be empty except
+grep -rn '"all_hanta"' --include="*.py" .                # must be empty except
                                                           # inside prepare_dataset.py
 ```
+
+The second check is on the string literal `"all_hanta"`, not just
+`Path("all_hanta")` — that also catches default-argument strings like
+`Algorithm.py`'s `--reference-input` default `"all_hanta"`, which wouldn't
+match a `Path(...)`-only grep.
 
 Full test suite green. `python prepare_dataset.py` (Stage 1) still produces
 every existing output plus the 3 new snapshot files; `phylogeny.py` and
