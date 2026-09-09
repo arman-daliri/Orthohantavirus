@@ -95,7 +95,7 @@ module name).
   | `phylogeny.py` | Delete its raw re-derivation (`resolve_inputs`, `iter_jsonl`, `parse_fasta`, `transform_one_record`, `build_isolate_records`, `assign_kmer_clusters`, `compute_segment_divergence`). Load the Stage 1 snapshot instead. |
   | `rpi_core.py` | Rewrite `load_reference_data(Path("all_hanta"))` → `load_reference_data(Path("output"))`, reading the 3 JSON snapshot files. Drop `ph.parse_cds_fasta`. |
   | `Algorithm.py` | `--reference-input` default `"all_hanta"` → `"output"`; the one `Path("all_hanta")` call site becomes `Path("output")`. |
-  | `figures.py` | Keep its `prep` import (pure code only — no raw access to begin with). Move its smoke test's existence-check from `all_hanta/ncbi_dataset/data` to `output/ortho_reference_isolates.json`. |
+  | `figures.py` | **Correction, discovered while writing the implementation plan:** `figures.py:60-88`'s `load_ingest()` is not pure-code-only — it independently re-derives isolates from raw `all_hanta/` the same way `phylogeny.py` used to (`resolve_inputs`/`iter_jsonl`/`parse_fasta`/`transform_one_record`/`build_isolate_records`/`assign_kmer_clusters`/`compute_segment_divergence`/`ph.parse_cds_fasta`), because it needs the exact same isolate population Stage 2 scored. Treat it like `phylogeny.py`: rewrite `load_ingest()` to load the snapshot instead. Its smoke test's existence-check also moves from `all_hanta/ncbi_dataset/data` to `output/ortho_reference_isolates.json`. |
 
 - `README.md`'s download commands (`datasets download ... --filename
   all_hanta.zip`, `unzip -d all_hanta`) are untouched — that's just where the
@@ -184,24 +184,41 @@ respectively.
 
 ### 8. Interface after this change
 
+`load_reference_data` (the snapshot reader) lives in `prepare_dataset.py`
+itself, not `rpi_core.py` — Stage 1 owns both the write and the read side of
+the format it defines, and all three consumers (`phylogeny.py`, `rpi_core.py`,
+`figures.py`) need it, not just Stage 3:
+
 ```python
 # Stage 1 (prepare_dataset.py) -- unchanged ingest, +3 new writes:
 write_json("ortho_reference_isolates.json", [asdict(i) for i in isolates])
 write_json("ortho_reference_genomic.json", [asdict(r) for r in genomic_index.values()])
 write_json("ortho_reference_cds.json", cds_index)  # already {accession: [(product, seq), ...]}
 
-# Stage 2 (phylogeny.py) / Stage 3 (rpi_core.py):
+# Also in prepare_dataset.py -- the shared reader:
+@dataclass
+class ReferenceData:
+    isolates: List["IsolateRecord"]
+    genomic_index: Dict[str, "FastaRecord"]
+    cds_index: Dict[str, List[Tuple[str, str]]]
+
 def load_reference_data(output_dir: Path) -> ReferenceData:
-    isolates = [prep.IsolateRecord(**row) for row in load_json(output_dir / "ortho_reference_isolates.json")]
-    genomic_index = {r["accession"]: prep.FastaRecord(**r)
+    isolates = [IsolateRecord(**row) for row in load_json(output_dir / "ortho_reference_isolates.json")]
+    genomic_index = {r["accession"]: FastaRecord(**r)
                       for r in load_json(output_dir / "ortho_reference_genomic.json")}
     cds_index = {k: [tuple(pair) for pair in v]
                  for k, v in load_json(output_dir / "ortho_reference_cds.json").items()}
     return ReferenceData(isolates=isolates, genomic_index=genomic_index, cds_index=cds_index)
+
+# Stage 2 (phylogeny.py) / Stage 3 (rpi_core.py, Algorithm.py) / figures.py:
+reference = prep.load_reference_data(Path(output_dir))
 ```
 
-No file after Stage 1 calls `resolve_inputs`, `iter_jsonl`, `parse_fasta`,
-`transform_one_record`, or `build_isolate_records` against a raw path again.
+`rpi_core.py`'s existing `ReferenceData` dataclass and `load_reference_data`
+function are removed in favor of `prep`'s; call sites become
+`prep.load_reference_data(...)` and `prep.ReferenceData`. No file after Stage
+1 calls `resolve_inputs`, `iter_jsonl`, `parse_fasta`, `transform_one_record`,
+or `build_isolate_records` against a raw path again.
 
 ## Implementation-plan assertion
 
