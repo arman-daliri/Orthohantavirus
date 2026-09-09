@@ -912,6 +912,39 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 (Note: after Task 2's rename this file already says `prep.` for these calls — this step is presented with `prep.` throughout since Task 2 landed first.)
 
+- [ ] **Step 4b: Persist the tip-label map as `labels.json`**
+
+In `_analyze_group` (see the code around `label_map: Dict[str, PhyloCandidate] = dict(zip(labels, members))`), add immediately after that line:
+
+```python
+    prep.safe_write_json(group_dir / "labels.json",
+                         {label: candidate.isolate.isolate_key for label, candidate in label_map.items()})
+```
+
+This writes one `labels.json` per group (shared across its S/M/L segment subdirectories, since the label assignment is the same for all three), so `figures.py` (Task 12) can relabel tree tips without re-deriving the grouping via `collect_phylo_candidates`/`group_candidates` and risking a `--cluster-threshold`/`--min-species-size` mismatch against whatever values this Stage 2 run actually used.
+
+- [ ] **Step 4c: Test that `labels.json` is written and matches the label map**
+
+```python
+class GroupLabelsPersistedTest(unittest.TestCase):
+    """_analyze_group must persist label -> isolate_key so figures.py never has to
+    reconstruct group membership to relabel a committed tree."""
+
+    def test_labels_json_matches_label_assignment(self):
+        # Reuses whatever fixture members/mafft-iqtree-faking pattern this file's
+        # existing _analyze_group tests already use (see the PhylogeneticsScopeEndToEndTest
+        # -style fake-binary tests) -- do not invent a second fixture pattern. After
+        # calling _analyze_group with a fake mafft/iqtree pair against a temp group_dir_root:
+        group_dir = group_dir_root / prep.normalize_attr_name(group_key)
+        labels_path = group_dir / "labels.json"
+        self.assertTrue(labels_path.exists())
+        written = json.loads(labels_path.read_text(encoding="utf-8"))
+        expected = {f"I{i:04d}": m.isolate.isolate_key for i, m in enumerate(members)}
+        self.assertEqual(written, expected)
+```
+
+Adapt this to whichever existing fake-mafft/fake-iqtree test scaffolding `phylogeny.py` already has for `_analyze_group` (do not build a second, parallel fixture mechanism) — the assertion that matters is `labels.json`'s content equals `{f"I{i:04d}": m.isolate.isolate_key ...}` for the same `members` ordering `_analyze_group` received.
+
 - [ ] **Step 5: Fix the `--phylo-outgroup`/`ah.PHYLOGROUP` help-text reference and the `--input` help removal's downstream mention**
 
 Search for any remaining `all_hanta/ncbi_dataset/data` mention in `phylogeny.py`'s CLI help text (the `--input` help string just removed in Step 3 was the only one) — confirm none remain:
@@ -969,6 +1002,10 @@ Deletes the raw re-derivation (resolve_inputs / iter_jsonl / parse_fasta
 prep.load_reference_data(output_dir); the CLI drops --input entirely
 (there is no raw package to point it at anymore) and --output becomes
 both the read and write location.
+
+Also persists each tree group's synthetic tip-label -> isolate_key
+map as labels.json, so figures.py (next task) can relabel committed
+trees without re-deriving group membership itself.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_013CpAeTwfkmTkgJUnk2Uwm1
@@ -1237,54 +1274,50 @@ EOF
 
 ---
 
-### Task 12: `figures.py` — rewrite `load_ingest` to use the snapshot
+### Task 12: `figures.py` — drop group reconstruction, read `labels.json` + tree paths directly
 
 **Files:**
-- Modify: `figures.py` (`load_ingest`, smoke test)
+- Modify: `figures.py` (`load_ingest`, `group_for_scope`, `label_map_for_members`, `find_group_for_isolate`, `load_tree_relabeled`, `render_before_figures`, `render_after_figures`, `main`, smoke test)
 
 **Interfaces:**
-- Consumes: `prep.load_reference_data` (Task 8).
-- Produces: `load_ingest(output_dir: str = "output", cluster_threshold: float = 0.02, min_species_size: int = 8) -> Tuple[List[IsolateRecord], Dict[str, SegmentDivergenceProfile], Dict[str, List[Tuple[str, str]]]]` (drops the `InputPaths` return value — nothing downstream in `figures.py` used it for raw-file access anymore; confirm via grep before removing it from the signature).
+- Consumes: `prep.load_reference_data` (Task 8); `labels.json` + `s_tree_path`/`m_tree_path`/`l_tree_path` columns in `ortho_reassortment_table.csv`, both written by `phylogeny.py` (Task 9, Step 4b).
+- Produces: `load_ingest(output_dir: str = "output") -> List[IsolateRecord]` (shrinks from a 4-tuple to a plain list — grouping/divergence/cds_index are no longer needed here at all). `load_tree_relabeled(tree_path: Path) -> Bio.Phylo.BaseTree.Tree` (drops its `group_dir_root`/`group_key`/`segment`/`label_map` parameters in favor of one path). `group_for_scope`, `label_map_for_members`, `find_group_for_isolate` are deleted.
 
-- [ ] **Step 1: Confirm nothing else in `figures.py` uses `load_ingest`'s 4th return value (`paths`)**
+- [ ] **Step 1: Delete `group_for_scope`, `label_map_for_members`, `find_group_for_isolate`**
 
-```bash
-grep -n "load_ingest(" figures.py
-```
+Remove these three functions (lines 91-119 as of this plan) entirely — nothing in `figures.py` reconstructs tree groups after this task.
 
-Check every call site's unpacking (e.g. `isolates, divergence_by_key, cds_index, paths = load_ingest(...)`) — if `paths` is used afterward (e.g. `paths.output_dir` to know where to write figures), keep a `output_dir: Path` in the return tuple instead of the removed `InputPaths`; if unused, drop it from the signature entirely.
-
-- [ ] **Step 2: Rewrite `load_ingest`**
+- [ ] **Step 2: Simplify `load_ingest`**
 
 Replace (lines 60-88 as of this plan):
 
 ```python
 def load_ingest(
     input_dir: str = ".", cluster_threshold: float = 0.02, min_species_size: int = 8,
-) -> Tuple[List["prep.IsolateRecord"], Dict[str, "prep.SegmentDivergenceProfile"],
-          Dict[str, List[Tuple[str, str]]], "prep.InputPaths"]:
+) -> Tuple[List["ah.IsolateRecord"], Dict[str, "ah.SegmentDivergenceProfile"],
+          Dict[str, List[Tuple[str, str]]], "ah.InputPaths"]:
     """Mirrors phylogeny.run_phylogeny's ingest chain through cds_index -- the same
     ~15-line duplication the three-stage split spec already accepts (§3.2), here for a
     fourth reason: figures need the same isolate population Stage 2 scored, not a
     filtered output table.
     """
-    paths = prep.resolve_inputs(Path(input_dir))
-    data_records = list(prep.iter_jsonl(paths.data_report))
-    annotation_index = prep.build_annotation_index(prep.iter_jsonl(paths.annotation_report))
-    biosample_index = prep.build_biosample_index(prep.iter_jsonl(paths.biosample_report))
-    genomic_index = prep.parse_fasta(paths.genomic_fasta)
-    protein_index = prep.parse_fasta(paths.protein_fasta)
+    paths = ah.resolve_inputs(Path(input_dir))
+    data_records = list(ah.iter_jsonl(paths.data_report))
+    annotation_index = ah.build_annotation_index(ah.iter_jsonl(paths.annotation_report))
+    biosample_index = ah.build_biosample_index(ah.iter_jsonl(paths.biosample_report))
+    genomic_index = ah.parse_fasta(paths.genomic_fasta)
+    protein_index = ah.parse_fasta(paths.protein_fasta)
 
     accessions = []
     for record in data_records:
-        transformed, _qc_row = prep.transform_one_record(
+        transformed, _qc_row = ah.transform_one_record(
             record, annotation_index, biosample_index, genomic_index, protein_index)
         if transformed is not None:
             accessions.append(transformed)
 
-    isolates = prep.build_isolate_records(accessions)
-    prep.assign_kmer_clusters(isolates, cluster_threshold)
-    divergence = prep.compute_segment_divergence(isolates, min_species_size=min_species_size)
+    isolates = ah.build_isolate_records(accessions)
+    ah.assign_kmer_clusters(isolates, cluster_threshold)
+    divergence = ah.compute_segment_divergence(isolates, min_species_size=min_species_size)
     divergence_by_key = {d.isolate_key: d for d in divergence}
     cds_index = ph.parse_cds_fasta(paths.cds_fasta)
     return isolates, divergence_by_key, cds_index, paths
@@ -1293,33 +1326,341 @@ def load_ingest(
 with:
 
 ```python
-def load_ingest(
-    output_dir: str = "output", cluster_threshold: float = 0.02, min_species_size: int = 8,
-) -> Tuple[List["prep.IsolateRecord"], Dict[str, "prep.SegmentDivergenceProfile"],
-          Dict[str, List[Tuple[str, str]]]]:
-    """Loads Stage 1's reference snapshot (never all_hanta/ncbi_dataset/ directly) and
-    re-applies the same k-mer clustering + divergence diagnostics phylogeny.py's Stage 2
-    run applied, so figures see the exact isolate population Stage 2 scored -- not a
-    filtered output table.
+def load_ingest(output_dir: str = "output") -> List["prep.IsolateRecord"]:
+    """Isolate metadata only (species/country/host, for the AFTER panel's parent-metadata
+    table) -- loaded from Stage 1's reference snapshot, never all_hanta/ncbi_dataset/
+    directly. Grouping/divergence/cds_index are not needed here: phylogeny.py now
+    persists tip-label -> isolate_key maps as labels.json per tree group, and tree paths
+    are read straight off ortho_reassortment_table.csv, so this module never reconstructs
+    group membership itself (see docs/superpowers/specs/2026-09-09-stage1-reference-
+    snapshot-design.md's amendment).
     """
-    reference = prep.load_reference_data(Path(output_dir))
-    isolates = reference.isolates
-    prep.assign_kmer_clusters(isolates, cluster_threshold)
-    divergence = prep.compute_segment_divergence(isolates, min_species_size=min_species_size)
-    divergence_by_key = {d.isolate_key: d for d in divergence}
-    cds_index = reference.cds_index
-    return isolates, divergence_by_key, cds_index
+    return prep.load_reference_data(Path(output_dir)).isolates
 ```
 
-(If Step 1 found `paths` genuinely needed downstream, add `output_dir_path = Path(output_dir)` to the return tuple instead of the deleted `paths`, and update every call site's unpacking accordingly — do not leave a 4-tuple unpack against a 3-tuple return.)
+Note the module-level `import phylogeny as ph` may now be unused — check with `grep -n "\bph\." figures.py` after this task's other steps land; if nothing references `ph.` anymore, remove the import.
 
-- [ ] **Step 3: Update every call site's unpacking**
+- [ ] **Step 3: Simplify `load_tree_relabeled`**
 
-For each `isolates, divergence_by_key, cds_index, paths = load_ingest(...)` found in Step 1, change to `isolates, divergence_by_key, cds_index = load_ingest(...)` (or the 4-tuple form from Step 2's parenthetical, if needed) and fix any use of `paths` afterward (e.g. `paths.output_dir / "..."` → `Path(output_dir) / "..."` using whatever local variable holds the output directory string/path at that call site — check `main()`'s `before`/`after` subcommand handlers for how `--output` is threaded through).
+Replace (lines 121-132 as of this plan):
 
-- [ ] **Step 4: Fix the module docstring and smoke test**
+```python
+def load_tree_relabeled(group_dir_root: Path, group_key: str, segment: str,
+                        label_map: Dict[str, "ph.PhyloCandidate"]) -> "Bio.Phylo.BaseTree.Tree":
+    from Bio import Phylo
+    path = group_dir_root / ah.normalize_attr_name(group_key) / segment / "tree.treefile"
+    if not path.exists():
+        raise FileNotFoundError(f"committed tree not found: {path}")
+    tree = Phylo.read(str(path), "newick")
+    for tip in tree.get_terminals():
+        candidate = label_map.get(tip.name)
+        if candidate is not None:
+            tip.name = candidate.isolate.isolate_key
+    return tree
+```
 
-Module docstring line 18: already fixed to say "prepare_dataset.py's own..." in Task 4 — leave as-is (no further change needed here).
+with:
+
+```python
+def load_tree_relabeled(tree_path: Path) -> "Bio.Phylo.BaseTree.Tree":
+    """Loads a committed tree.treefile and relabels its synthetic tip names (I0000, ...)
+    back to isolate_key, using the labels.json phylogeny.py wrote alongside the group's
+    S/M/L segment directories (tree_path.parent is the segment dir, tree_path.parent.parent
+    is the group dir labels.json lives in).
+    """
+    from Bio import Phylo
+    if not tree_path.exists():
+        raise FileNotFoundError(f"committed tree not found: {tree_path}")
+    labels_path = tree_path.parent.parent / "labels.json"
+    if not labels_path.exists():
+        raise FileNotFoundError(f"labels.json not found next to {tree_path} "
+                                f"(expected at {labels_path})")
+    label_to_isolate_key = json.loads(labels_path.read_text(encoding="utf-8"))
+    tree = Phylo.read(str(tree_path), "newick")
+    for tip in tree.get_terminals():
+        isolate_key = label_to_isolate_key.get(tip.name)
+        if isolate_key is not None:
+            tip.name = isolate_key
+    return tree
+```
+
+- [ ] **Step 4: Rewrite `render_before_figures` to use tree paths from the CSV row**
+
+Replace the ingest/grouping preamble and the per-segment loop body (lines 246-283 as of this plan):
+
+```python
+def render_before_figures(output_dir: Path, input_dir: str = ".",
+                          reassortment_table: Optional[Path] = None,
+                          min_tips: int = DEFAULT_MIN_TIPS) -> List[Path]:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import ConnectionPatch
+
+    isolates, divergence_by_key, cds_index, paths = load_ingest(input_dir)
+    by_group = {
+        "species": group_for_scope(isolates, divergence_by_key, cds_index, "species"),
+        "phylogroup": group_for_scope(isolates, divergence_by_key, cds_index, "phylogroup"),
+    }
+    group_dir_root = {
+        "species": paths.output_dir / "phylogenetics",
+        "phylogroup": paths.output_dir / "phylogenetics_phylogroup",
+    }
+
+    table_path = reassortment_table or (paths.output_dir / "ortho_reassortment_table.csv")
+    rows = supported_reassortment_rows(table_path)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    written: List[Path] = []
+    for row in rows:
+        isolate_key = row["isolate_key"]
+        scope = row["analysis_scope"]
+        discordant = row.get("discordant_segment") or ""
+        fig, axes = plt.subplots(1, 3, figsize=(13, 5))
+        tip_pos: Dict[str, Tuple[float, float]] = {}
+        for ax, segment in zip(axes, SEGMENTS):
+            group_key, members = find_group_for_isolate(by_group[scope], isolate_key)
+            if group_key is None:
+                ax.set_axis_off()
+                ax.text(0.5, 0.5, f"{segment}: not in a\n{scope}-scope tree",
+                        ha="center", va="center", wrap=True, transform=ax.transAxes)
+                continue
+            label_map = label_map_for_members(members)
+            tree = load_tree_relabeled(group_dir_root[scope], group_key, segment, label_map)
+```
+
+with:
+
+```python
+def render_before_figures(output_dir: Path, data_dir: str = "output",
+                          reassortment_table: Optional[Path] = None,
+                          min_tips: int = DEFAULT_MIN_TIPS) -> List[Path]:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import ConnectionPatch
+
+    stage_dir = Path(data_dir)
+    table_path = reassortment_table or (stage_dir / "ortho_reassortment_table.csv")
+    rows = supported_reassortment_rows(table_path)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    written: List[Path] = []
+    for row in rows:
+        isolate_key = row["isolate_key"]
+        discordant = row.get("discordant_segment") or ""
+        fig, axes = plt.subplots(1, 3, figsize=(13, 5))
+        tip_pos: Dict[str, Tuple[float, float]] = {}
+        for ax, segment in zip(axes, SEGMENTS):
+            tree_path_str = row.get(f"{segment.lower()}_tree_path") or ""
+            if not tree_path_str:
+                ax.set_axis_off()
+                ax.text(0.5, 0.5, f"{segment}: not in a committed tree",
+                        ha="center", va="center", wrap=True, transform=ax.transAxes)
+                continue
+            tree = load_tree_relabeled(stage_dir / tree_path_str)
+```
+
+The rest of the loop body (`clade = local_neighborhood(...)` through `written.append(out_path)`) is unchanged, EXCEPT the caption text at the bottom, which referenced the removed `scope` variable:
+
+```python
+        fig.text(0.5, 0.01,
+                 "Real, unmodified S/M/L sequences from a single deposited isolate; "
+                 "trees pruned to a local neighborhood for legibility (full tree in "
+                 f"output/phylogenetics{'_phylogroup' if scope == 'phylogroup' else ''}/).",
+                 ha="center", fontsize=7, color="#555555")
+```
+
+becomes (reading the scope straight from the row instead of a loop-local variable):
+
+```python
+        row_scope = row["analysis_scope"]
+        fig.text(0.5, 0.01,
+                 "Real, unmodified S/M/L sequences from a single deposited isolate; "
+                 "trees pruned to a local neighborhood for legibility (full tree in "
+                 f"output/phylogenetics{'_phylogroup' if row_scope == 'phylogroup' else ''}/).",
+                 ha="center", fontsize=7, color="#555555")
+```
+
+Also update `ah.normalize_attr_name` → `prep.normalize_attr_name` at the `out_path = output_dir / f"{...}.png"` line if Task 4's rename hasn't already covered it (it should have — confirm with `grep -n "ah\." figures.py` returning nothing at this point).
+
+- [ ] **Step 5: Rewrite `render_after_figures` similarly**
+
+Replace the ingest/grouping preamble and per-segment loop body (lines 331-372 as of this plan):
+
+```python
+def render_after_figures(ga_search_json: Path, output_dir: Path, input_dir: str = ".",
+                         min_tips: int = DEFAULT_MIN_TIPS) -> Tuple[List[Path], Path]:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    payload = json.loads(ga_search_json.read_text(encoding="utf-8"))
+    winners = payload["winners"]
+
+    isolates, divergence_by_key, cds_index, paths = load_ingest(input_dir)
+    by_key = {i.isolate_key: i for i in isolates}
+    by_group = {
+        "species": group_for_scope(isolates, divergence_by_key, cds_index, "species"),
+        "phylogroup": group_for_scope(isolates, divergence_by_key, cds_index, "phylogroup"),
+    }
+    group_dir_root = {
+        "species": paths.output_dir / "phylogenetics",
+        "phylogroup": paths.output_dir / "phylogenetics_phylogroup",
+    }
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    written: List[Path] = []
+    table_rows: List[Dict[str, str]] = []
+
+    for idx, winner in enumerate(winners):
+        triplet = winner["triplet"]
+        candidate_id = f"ga-winner-{idx:02d}"
+        fig, axes = plt.subplots(1, 3, figsize=(13, 5))
+        for ax, segment, donor_key in zip(axes, SEGMENTS, triplet):
+            group_key = members = scope_used = None
+            for scope in ("species", "phylogroup"):
+                group_key, members = find_group_for_isolate(by_group[scope], donor_key)
+                if group_key is not None:
+                    scope_used = scope
+                    break
+            if group_key is None:
+                ax.set_axis_off()
+                ax.text(0.5, 0.5, f"{segment} donor:\nnot in a committed tree",
+                        ha="center", va="center", wrap=True, transform=ax.transAxes)
+                continue
+            label_map = label_map_for_members(members)
+            tree = load_tree_relabeled(group_dir_root[scope_used], group_key, segment, label_map)
+```
+
+with:
+
+```python
+def render_after_figures(ga_search_json: Path, output_dir: Path, data_dir: str = "output",
+                         min_tips: int = DEFAULT_MIN_TIPS) -> Tuple[List[Path], Path]:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    payload = json.loads(ga_search_json.read_text(encoding="utf-8"))
+    winners = payload["winners"]
+
+    stage_dir = Path(data_dir)
+    isolates = load_ingest(data_dir)
+    by_key = {i.isolate_key: i for i in isolates}
+    tree_paths_by_isolate = tree_paths_by_isolate_from_table(stage_dir / "ortho_reassortment_table.csv")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    written: List[Path] = []
+    table_rows: List[Dict[str, str]] = []
+
+    for idx, winner in enumerate(winners):
+        triplet = winner["triplet"]
+        candidate_id = f"ga-winner-{idx:02d}"
+        fig, axes = plt.subplots(1, 3, figsize=(13, 5))
+        for ax, segment, donor_key in zip(axes, SEGMENTS, triplet):
+            tree_path_str = tree_paths_by_isolate.get(donor_key, {}).get(segment, "")
+            if not tree_path_str:
+                ax.set_axis_off()
+                ax.text(0.5, 0.5, f"{segment} donor:\nnot in a committed tree",
+                        ha="center", va="center", wrap=True, transform=ax.transAxes)
+                continue
+            tree = load_tree_relabeled(stage_dir / tree_path_str)
+```
+
+The rest of the loop body is unchanged.
+
+- [ ] **Step 6: Add the `tree_paths_by_isolate_from_table` helper**
+
+`render_after_figures` needs one isolate's tree paths regardless of `reassortment_call` (a GA winner need not be a `supported_reassortment_candidate`) — unlike `supported_reassortment_rows`, which filters to that call. Add, near `supported_reassortment_rows`:
+
+```python
+def tree_paths_by_isolate_from_table(reassortment_table: Path) -> Dict[str, Dict[str, str]]:
+    """isolate_key -> {segment: tree_path}, for every analyzed isolate regardless of its
+    reassortment_call -- a GA winner need not be a supported_reassortment_candidate to
+    have a committed tree. Species-scope preferred over phylogroup-scope per isolate,
+    same precedence supported_reassortment_rows uses, and only rows with at least one
+    non-empty tree path are kept (phylo_status='species_below_min_taxa'/'failed' rows
+    have none).
+    """
+    with reassortment_table.open(encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+
+    by_isolate: Dict[str, Dict[str, str]] = {}
+    scope_used: Dict[str, str] = {}
+    for row in rows:
+        paths = {seg: row.get(f"{seg.lower()}_tree_path") or "" for seg in SEGMENTS}
+        if not any(paths.values()):
+            continue
+        key = row["isolate_key"]
+        scope = row["analysis_scope"]
+        if key not in by_isolate or (scope_used[key] == "phylogroup" and scope == "species"):
+            by_isolate[key] = paths
+            scope_used[key] = scope
+    return by_isolate
+```
+
+- [ ] **Step 7: Update `main`'s CLI wiring**
+
+```python
+    before = sub.add_parser("before")
+    before.add_argument("--input", default=".")
+    before.add_argument("--output", default="output/figures/before")
+    before.add_argument("--min-tips", type=int, default=DEFAULT_MIN_TIPS)
+
+    after = sub.add_parser("after")
+    after.add_argument("--input", default=".")
+    after.add_argument("--ga-search-json", required=True)
+    after.add_argument("--output", default="output/figures/after")
+    after.add_argument("--min-tips", type=int, default=DEFAULT_MIN_TIPS)
+
+    args = parser.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    if args.command == "before":
+        written = render_before_figures(Path(args.output), args.input, min_tips=args.min_tips)
+        print(f"wrote {len(written)} figure(s) to {args.output}")
+    else:
+        written, table_path = render_after_figures(
+            Path(args.ga_search_json), Path(args.output), args.input, min_tips=args.min_tips)
+        print(f"wrote {len(written)} figure(s) and {table_path}")
+```
+
+becomes (renaming `--input`'s meaning from "project root containing all_hanta/" to "Stage 1/2 output directory", default changes from `"."` to `"output"`; `--output` is unchanged — it's always been figures' own render-output directory, a different thing):
+
+```python
+    before = sub.add_parser("before")
+    before.add_argument("--input", default="output",
+                        help="Stage 1/2 output directory (reference snapshot + "
+                             "ortho_reassortment_table.csv + phylogenetics*/)")
+    before.add_argument("--output", default="output/figures/before")
+    before.add_argument("--min-tips", type=int, default=DEFAULT_MIN_TIPS)
+
+    after = sub.add_parser("after")
+    after.add_argument("--input", default="output",
+                        help="Stage 1/2 output directory (reference snapshot + "
+                             "ortho_reassortment_table.csv + phylogenetics*/)")
+    after.add_argument("--ga-search-json", required=True)
+    after.add_argument("--output", default="output/figures/after")
+    after.add_argument("--min-tips", type=int, default=DEFAULT_MIN_TIPS)
+
+    args = parser.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    if args.command == "before":
+        written = render_before_figures(Path(args.output), args.input, min_tips=args.min_tips)
+        print(f"wrote {len(written)} figure(s) to {args.output}")
+    else:
+        written, table_path = render_after_figures(
+            Path(args.ga_search_json), Path(args.output), args.input, min_tips=args.min_tips)
+        print(f"wrote {len(written)} figure(s) and {table_path}")
+```
+
+(The positional argument `args.input` is passed to `render_before_figures`/`render_after_figures`'s `data_dir` parameter — the parameter rename in Steps 4-5 is internal; the CLI flag name `--input` is kept as-is to minimize churn, only its default and help text change.)
+
+- [ ] **Step 8: Fix the module docstring and smoke test**
+
+Module docstring line 18 was already fixed to say "prepare_dataset.py's own..." in Task 4 — leave as-is.
 
 Smoke test (lines 558, 564-565 as of this plan):
 
@@ -1333,21 +1674,30 @@ Smoke test (lines 558, 564-565 as of this plan):
 →
 
 ```python
-    """Smoke test against the real committed reference snapshot under output/ -- confirms
+    """Smoke test against the real committed reference snapshot and phylogenetics output
+    under output/ -- confirms
     ...
         if not Path("output/ortho_reference_isolates.json").exists():
             self.skipTest("output/ reference snapshot not present -- run prepare_dataset.py first")
 ```
 
-- [ ] **Step 5: Confirm no raw access remains**
+- [ ] **Step 9: Update any test that constructed `by_group`/called the deleted functions directly**
 
 ```bash
-grep -n "all_hanta\|resolve_inputs\|iter_jsonl\|transform_one_record\|build_isolate_records" figures.py
+grep -n "group_for_scope\|label_map_for_members\|find_group_for_isolate\|load_tree_relabeled(" figures.py
+```
+
+The test section has direct unit tests for `label_map_for_members` and `find_group_for_isolate` (referenced around lines 456, 472, 479-485 in the original file) — delete those test cases along with the functions (Step 1). Any test exercising `load_tree_relabeled` needs updating to call the new one-argument form, constructing a temp directory with a `tree.treefile` and sibling (parent-of-parent) `labels.json` fixture instead of a `label_map` of fake `PhyloCandidate` objects.
+
+- [ ] **Step 10: Confirm no raw access or deleted-function references remain**
+
+```bash
+grep -n "all_hanta\|resolve_inputs\|iter_jsonl\|transform_one_record\|build_isolate_records\|group_for_scope\|label_map_for_members\|find_group_for_isolate" figures.py
 ```
 
 Expected: no output.
 
-- [ ] **Step 6: Run the test suite**
+- [ ] **Step 11: Run the test suite**
 
 ```bash
 python -m unittest figures -v
@@ -1355,16 +1705,22 @@ python -m unittest figures -v
 
 Expected: all pass.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 12: Commit**
 
 ```bash
 git add figures.py
 git commit -m "$(cat <<'EOF'
-figures.py: load_ingest reads Stage 1's snapshot, not all_hanta/
+figures.py: read labels.json + CSV tree paths, delete group reconstruction
 
-Same treatment as phylogeny.py (Task 9) -- figures.py needed the exact
-isolate population Stage 2 scored, which is now available from the
-snapshot without re-deriving it from raw NCBI files.
+load_ingest shrinks to isolate metadata only (species/country/host) --
+grouping, divergence, and cds_index were only ever needed to feed the
+now-deleted group_for_scope/label_map_for_members/find_group_for_isolate,
+which re-ran phylogeny.py's grouping logic and risked a
+--cluster-threshold/--min-species-size mismatch against whatever Stage
+2 was actually run with. Tree paths now come straight from
+ortho_reassortment_table.csv's s/m/l_tree_path columns, and tip
+relabeling reads phylogeny.py's newly-persisted labels.json instead of
+reconstructing the label assignment.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_013CpAeTwfkmTkgJUnk2Uwm1
@@ -1588,6 +1944,6 @@ No commit for this task (verification only) — report the final acceptance grep
 
 ## Self-Review Notes
 
-- **Spec coverage:** Rules 1 (rename) → Task 1. Rule 2 (alias rename + safety steps) → Tasks 2-5. Rule 3 (raw-data ban + per-file disposition, including the figures.py correction) → Tasks 6, 9, 10, 11, 12. Rule 4 (find-then-classify) → the grep-driven steps throughout Tasks 2-4 and 9-12. Rule 5 (leave README downloads alone) → Task 14 does not touch download/unzip commands. Rule 6 (approved snapshot design) → Tasks 7-8 (writer + reader), Task 13 (merged set + overlap, kept out of Stage 1). Rule 7 (acceptance) → Task 15, using the amended `"all_hanta"` string-literal grep. The spec's Task-6-adjacent amendment (parse_cds_fasta relocation) is its own task (Task 6). The keying-equality assertion is Task 8, Step 1.
+- **Spec coverage:** Rules 1 (rename) → Task 1. Rule 2 (alias rename + safety steps) → Tasks 2-5. Rule 3 (raw-data ban + per-file disposition, including the figures.py correction) → Tasks 6, 9, 10, 11, 12. Rule 4 (find-then-classify) → the grep-driven steps throughout Tasks 2-4 and 9-12. Rule 5 (leave README downloads alone) → Task 14 does not touch download/unzip commands. Rule 6 (approved snapshot design) → Tasks 7-8 (writer + reader), Task 13 (merged set + overlap, kept out of Stage 1). Rule 7 (acceptance) → Task 15, using the amended `"all_hanta"` string-literal grep. The spec's Task-6-adjacent amendment (parse_cds_fasta relocation) is its own task (Task 6). The keying-equality assertion is Task 8, Step 1. The FINAL spec amendment (labels.json persistence, figures.py's group-reconstruction removal) is Task 9 Steps 4b-4c (writer side) and the rewritten Task 12 (reader side).
 - **Type consistency:** `ReferenceData`/`load_reference_data` are defined once, in `prepare_dataset.py` (Task 8), and every other task (9, 10, 11, 12, 13) consumes that exact name via `prep.` — no task redefines it locally.
 - **Ambiguity flagged inline:** Task 11 Step 1 and Task 12 Step 1 both instruct the executor to check actual behavior (`python -c "import ..."`, grep for existing usage) before committing to one of two possible edits, since this plan cannot know rpi_core.py's exact re-export shape or figures.py's exact call-site unpacking without running Task 10/earlier tasks first. Task 13 Step 6 explicitly requires flagging to the user if the merged-set filter changes actual scoring behavior beyond a plumbing refactor, rather than silently proceeding — this is a deliberate stop-and-ask condition, not a gap.
