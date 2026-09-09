@@ -21,6 +21,7 @@ import logging
 import os
 import shutil
 import subprocess
+import time
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -843,11 +844,15 @@ def _run_phylogenetics_scope(
     def _run_one_group(group_key: str, members: List[PhyloCandidate]) -> List[Dict[str, Any]]:
         logging.info("Phylogenetics (%s): %s (%s taxa) -- aligning + building trees",
                      scope, group_key, len(members))
-        return _analyze_group(
+        _t0 = time.monotonic()
+        result = _analyze_group(
             group_key, scope, members, group_dir_root, output_dir, args, mafft_bin, iqtree_bin)
+        logging.info("Phylogenetics (%s): %s done in %.1fs", scope, group_key, time.monotonic() - _t0)
+        return result
 
     group_rows: Dict[str, List[Dict[str, Any]]] = {}
-    with ThreadPoolExecutor(max_workers=args.phylo_workers) as executor:
+    executor = ThreadPoolExecutor(max_workers=args.phylo_workers)
+    try:
         future_to_group = {
             executor.submit(_run_one_group, group_key, members): (group_key, members)
             for group_key, members in submission_order
@@ -867,6 +872,8 @@ def _run_phylogenetics_scope(
                     _phylo_row(c, c.isolate.species_name, len(members), "failed", error, scope,
                               _assignment_basis(c, scope))
                     for c in members]
+    finally:
+        executor.shutdown(wait=True, cancel_futures=True)
 
     for group_key in sorted(group_rows):
         rows.extend(group_rows[group_key])

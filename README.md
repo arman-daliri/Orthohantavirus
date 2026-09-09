@@ -260,6 +260,7 @@ python3 phylogeny.py --output output
 | `--min-bootstrap-support` | `95.0` | Minimum ufboot support to call a topology conflict *supported* |
 | `--phylo-seed` | `42` | Fixed IQ-TREE random seed, for reproducible trees |
 | `--phylo-threads` | cores − 1 | Threads for `mafft` and `iqtree` |
+| `--phylo-workers` | `4` | Parallel group workers; each worker runs one group's mafft+iqtree calls at a time. Total thread demand ≈ `--phylo-workers` × `--phylo-threads` — reduce `--phylo-threads` manually on machines with fewer cores |
 | `--phylo-scope` | `both` | `species`, `phylogroup`, or `both` — which comparator groupings to analyze (see the two `phylogenetics*/` output rows below) |
 | `--phylo-outgroup` | none | Accession or isolate to root phylogroup-scope trees on, via IQ-TREE's `-o` |
 

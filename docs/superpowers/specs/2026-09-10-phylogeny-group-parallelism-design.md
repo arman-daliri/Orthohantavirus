@@ -130,6 +130,15 @@ verification method (`docs/superpowers/specs/2026-09-06-overnight-full-pipeline-
 not byte-identical, since IQ-TREE could in principle differ run-to-run even under a fixed
 seed for reasons unrelated to this change).
 
+**Unit test coverage note (added after implementation):** `test_worker_count_does_not_change_output_rows`
+covers row plumbing only — same rows, correctly sorted by `group_key` — using the fake
+mafft/iqtree stubs. It cannot detect numeric violations of this contract (e.g., different
+RF-distance values, different alignment columns) because the stubs produce identical
+fixed output regardless of worker count. The full byte-identity contract is validated at
+Task 3 (§7), which diffs the real `ortho_reassortment_table.csv` and tree files. Note for
+Task 3: to isolate concurrent-run variability from other sources, set `OMP_NUM_THREADS=1`
+(or `OMP_DYNAMIC=false`) on the benchmark machine before comparing runs.
+
 ### 4.5 Error handling
 
 `_analyze_group`'s existing try/except already produces `status='failed'` rows on any
