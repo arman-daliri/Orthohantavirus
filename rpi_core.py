@@ -8118,6 +8118,32 @@ def reserved_calibration_isolate_keys(
     return set(artifact["reserved_for_calibration"]["isolate_keys"])
 
 
+def wild_classified_pool(
+        reference: "prep.ReferenceData",
+        reserved_keys: Optional[Set[str]] = None) -> List["prep.IsolateRecord"]:
+    """Wild, classified isolates minus calibration's reserved keys -- `usable_pool`'s
+    base eligibility filter, exposed without its terminal-completeness check. Lets a
+    caller compare a different completeness ruler (e.g. `has_complete_triplet`) against
+    `usable_pool`'s ruler over the SAME underlying universe, rather than against the
+    full unfiltered reference.isolates (which would count isolates neither ruler could
+    ever have selected -- non-wild, unclassified, or reserved-for-calibration -- as if
+    they were a real disagreement between the two rulers). See Algorithm.py's
+    completeness_overlap.
+    """
+    if reserved_keys is None:
+        reserved_keys = reserved_calibration_isolate_keys()
+    pool = []
+    for isolate in reference.isolates:
+        if not _is_wild(isolate):
+            continue
+        if isolate.species_name == UNCLASSIFIED_SPECIES_LABEL or not isolate.species_name:
+            continue
+        if isolate.isolate_key in reserved_keys:
+            continue
+        pool.append(isolate)
+    return sorted(pool, key=lambda i: i.isolate_key)
+
+
 def usable_pool(
         reference: "prep.ReferenceData",
         reserved_keys: Optional[Set[str]] = None) -> List["prep.IsolateRecord"]:
@@ -8657,6 +8683,41 @@ class StrictMergedPoolTest(unittest.TestCase):
             pool = strict_merged_pool(reference, reserved_keys={"b2"})
 
         self.assertEqual([i.isolate_key for i in pool], ["b1"])
+
+
+class WildClassifiedPoolTest(unittest.TestCase):
+    """wild_classified_pool is usable_pool's base eligibility filter (wild, classified,
+    not-reserved) exposed without the terminal-completeness check -- added so
+    Algorithm.py's completeness_overlap can compare two completeness rulers over the
+    SAME universe (regression for review finding I4)."""
+
+    def test_excludes_lab_derived_vaccine_unclassified_and_reserved(self):
+        wild = _make_isolate("w1", "Orthohantavirus x", "S1", "M1", "L1")
+        lab_derived = _make_isolate("l1", "Orthohantavirus x", "S2", "M2", "L2")
+        lab_derived.is_lab_derived = True
+        vaccine = _make_isolate("v1", "Orthohantavirus x", "S3", "M3", "L3")
+        vaccine.is_vaccine_strain = True
+        unclassified = _make_isolate("u1", UNCLASSIFIED_SPECIES_LABEL, "S4", "M4", "L4")
+        reserved = _make_isolate("r1", "Orthohantavirus x", "S5", "M5", "L5")
+        reference = prep.ReferenceData(
+            isolates=[wild, lab_derived, vaccine, unclassified, reserved],
+            genomic_index={}, cds_index={})
+
+        pool = wild_classified_pool(reference, reserved_keys={"r1"})
+
+        self.assertEqual([i.isolate_key for i in pool], ["w1"])
+
+    def test_ignores_terminal_completeness(self):
+        """Unlike usable_pool, this pool doesn't require full-length/terminal segments --
+        it's the shared universe both completeness rulers get compared against, not a
+        completeness ruler itself."""
+        not_terminally_complete = _make_isolate("w1", "Orthohantavirus x", "S1", "M1", "L1")
+        reference = prep.ReferenceData(
+            isolates=[not_terminally_complete], genomic_index={}, cds_index={})
+
+        pool = wild_classified_pool(reference, reserved_keys=set())
+
+        self.assertEqual([i.isolate_key for i in pool], ["w1"])
 
 
 class FindSympatricSpeciesPairsTest(unittest.TestCase):

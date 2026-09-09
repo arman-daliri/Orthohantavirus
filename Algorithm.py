@@ -53,13 +53,17 @@ def isolate_key_of(isolate: Any) -> str:
 
 def completeness_overlap(reference: Any, reserved_keys: set) -> Dict[str, int]:
     """Set-arithmetic comparison between the two completeness rulers, as seen at
-    build_pool's call site: coding_complete (has_complete_triplet, the 206-set) vs
-    terminal_complete (rc.usable_pool's terminally-complete-and-not-reserved filter,
-    the 272-set). Reported so every run states which isolates each ruler agreed vs
-    disagreed on, and how many survive the GA's stricter intersection (strict_merged_pool
-    -- terminal_complete here is built from usable_pool, i.e. AFTER reserved-key removal,
-    matching what build_pool actually consumes)."""
-    coding_complete = {isolate_key_of(i) for i in reference.isolates if i.has_complete_triplet}
+    build_pool's call site: coding_complete (has_complete_triplet) vs terminal_complete
+    (rc.usable_pool's terminally-complete-and-not-reserved filter). Both rulers are
+    evaluated over the SAME universe -- rc.wild_classified_pool (wild, classified,
+    not-reserved) -- so only_coding/only_terminal report genuine ruler disagreement,
+    not isolates that were never eligible for either pool (non-wild, unclassified, or
+    reserved-for-calibration). Reported so every run states which isolates each ruler
+    agreed vs disagreed on, and how many survive the GA's stricter intersection
+    (strict_merged_pool -- terminal_complete here is built from usable_pool, i.e. AFTER
+    reserved-key removal, matching what build_pool actually consumes)."""
+    eligible = rc.wild_classified_pool(reference, reserved_keys)
+    coding_complete = {isolate_key_of(i) for i in eligible if i.has_complete_triplet}
     terminal_complete = {isolate_key_of(i) for i in rc.usable_pool(reference, reserved_keys)}
     both = coding_complete & terminal_complete
     only_coding = coding_complete - terminal_complete
@@ -73,13 +77,13 @@ def build_pool(reference: Any, reserved_keys: set) -> List[str]:
     validation/discrimination panel's rc.usable_pool (terminal-completeness only) --
     deliberately so, per the Task 13 ruling: the GA fitness function's search pool
     tightens to this stricter intersection while validation stays comparable with
-    already-computed runs. Prints the coding-complete (206-set) / terminally-complete
-    (272-set) / merged overlap counts so the two rulers' relationship is visible on
-    every run.
+    already-computed runs. Prints the coding-complete / terminally-complete / merged
+    overlap counts (over the shared wild-classified-not-reserved universe -- see
+    completeness_overlap) so the two rulers' relationship is visible on every run.
     """
     overlap = completeness_overlap(reference, reserved_keys)
-    print(f"completeness overlap: in both {overlap['both']}, only coding-complete (206-set) "
-          f"{overlap['only_coding']}, only terminally-complete (272-set) {overlap['only_terminal']}, "
+    print(f"completeness overlap: in both {overlap['both']}, only coding-complete "
+          f"{overlap['only_coding']}, only terminally-complete {overlap['only_terminal']}, "
           f"strict merged set {overlap['both']}")
     pool_records = rc.strict_merged_pool(reference, reserved_keys)
     pool = sorted([isolate_key_of(i) for i in pool_records])
@@ -456,6 +460,9 @@ class GaSearchTest(unittest.TestCase):
         reserved: set = set()
 
         with mock.patch.object(
+                rc, "wild_classified_pool",
+                return_value=[coding_only, terminal_only, both_ruler]), \
+             mock.patch.object(
                 rc, "usable_pool", return_value=[terminal_only, both_ruler]):
             overlap = completeness_overlap(reference, reserved)
 
@@ -465,6 +472,24 @@ class GaSearchTest(unittest.TestCase):
         self.assertEqual(overlap["both"] + overlap["only_coding"] + overlap["only_terminal"],
                           len(union))
         self.assertEqual(overlap, {"both": 1, "only_coding": 1, "only_terminal": 1})
+
+    def test_completeness_overlap_ignores_isolates_outside_shared_universe(self):
+        """Regression for I4: an isolate with has_complete_triplet=True that is NOT in
+        rc.wild_classified_pool's universe (e.g. non-wild, unclassified, or reserved)
+        must not inflate only_coding -- it was never eligible for either ruler's pool,
+        so it isn't a real disagreement between the two rulers."""
+        from types import SimpleNamespace as NS
+        eligible_and_coding = NS(isolate_key="e1", has_complete_triplet=True)
+        ineligible_but_coding = NS(isolate_key="x1", has_complete_triplet=True)
+        reference = NS(isolates=[eligible_and_coding, ineligible_but_coding])
+        reserved: set = set()
+
+        with mock.patch.object(
+                rc, "wild_classified_pool", return_value=[eligible_and_coding]), \
+             mock.patch.object(rc, "usable_pool", return_value=[]):
+            overlap = completeness_overlap(reference, reserved)
+
+        self.assertEqual(overlap, {"both": 0, "only_coding": 1, "only_terminal": 0})
 
 
 class ConfirmWinnersTest(unittest.TestCase):
