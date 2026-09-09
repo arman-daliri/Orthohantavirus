@@ -233,6 +233,49 @@ key-for-key identical (same keys, same `.sequence` values) to today's
 `parse_fasta(...)` output on the same input package — not just "roughly the
 same size."
 
+## Amendment: phylogeny.py persists tip labels; figures.py stops reconstructing groups
+
+Adopted after further review, spec is FINAL as of this amendment.
+
+`figures.py`'s `load_ingest()` (see the correction above) was re-deriving isolates
+*and* re-running `phylogeny.collect_phylo_candidates`/`group_candidates` just to
+reconstruct the synthetic tip-label (`I0000`, `I0001`, ...) → `isolate_key` mapping
+`phylogeny._analyze_group` assigned when it built the committed trees — that mapping
+is otherwise not persisted to disk. Reconstructing it requires calling
+`_analyze_group`'s grouping logic with the *same* `--cluster-threshold` /
+`--min-species-size` Stage 2's committed run used; any drift between the values
+`figures.py` assumes and the values Stage 2 was actually run with silently
+mislabels tree tips.
+
+Fix: `phylogeny.py`'s `_analyze_group` writes `labels.json` (a flat
+`{label: isolate_key}` JSON object) into each group's directory
+(`group_dir / "labels.json"`, a sibling of the `S/`, `M/`, `L/` segment
+subdirectories it already writes) at the point the label map is constructed, right
+after `label_map: Dict[str, PhyloCandidate] = dict(zip(labels, members))`. One file
+per group, shared across all three segments (the label assignment is
+segment-independent).
+
+`figures.py` then reads this file directly instead of reconstructing it:
+
+- `ortho_reassortment_table.csv` already carries `s_tree_path`/`m_tree_path`/
+  `l_tree_path` per isolate per row (written by `_analyze_group`'s `out_row.update(...)`)
+  — `figures.py` looks up an isolate's tree path directly from its CSV row instead of
+  rebuilding `by_group`/`group_key`/`members` to find it.
+- `load_tree_relabeled` takes a tree path directly, reads `labels.json` from
+  `tree_path.parent.parent / "labels.json"`, and relabels tips from that dict — no
+  `PhyloCandidate` objects involved.
+- `group_for_scope`, `label_map_for_members`, and `find_group_for_isolate` are deleted
+  entirely — nothing in `figures.py` reconstructs groups anymore.
+- `load_ingest()` shrinks to just `prep.load_reference_data(output_dir).isolates` — the
+  only thing `figures.py` still needs from the snapshot is isolate metadata
+  (species/country/host) for the AFTER panel's parent-metadata table. `divergence_by_key`
+  and `cds_index` are no longer needed by `figures.py` at all (they existed only to feed
+  the now-deleted `collect_phylo_candidates` call).
+
+This removes the last piece of parameter-drift risk in `figures.py` and reduces it to
+what its own module docstring already claims: drawing figures from Stage 2's committed
+outputs, never re-deriving anything Stage 2 computed.
+
 ## Existing call sites needing disposition (inventory, not exhaustive editing here)
 
 `grep -rn "all_hanta" --include="*.py" .` currently returns ~70 hits outside
