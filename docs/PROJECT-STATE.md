@@ -1114,7 +1114,7 @@ detail in `seed_20260904.json` for full rows (backbone/donor identities, RPI fac
   correctly-organized `ga-confirm-0`..`ga-confirm-9` output and byte-identical to
   it. These had been swept into the bulk promotion commit (`8219386`) despite being
   flagged as redundant, not tonight's pipeline output — `git rm -r`'d on explicit
-  instruction, commit `<filled in below>`.
+  instruction, commit `be098b0`.
 - Stray `__pycache__/` (gitignored, was never tracked — removed from disk directly).
 
 **Explicitly NOT redundant — preserve as-is, outside tonight's pipeline scope:**
