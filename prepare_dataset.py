@@ -954,6 +954,40 @@ def parse_fasta(path: Optional[Path]) -> Dict[str, FastaRecord]:
     return index
 
 
+def parse_cds_fasta(path: Optional[Path]) -> Dict[str, List[Tuple[str, str]]]:
+    """Index cds.fna by NUCLEOTIDE accession -- not protein accession.
+
+    Unlike protein.faa (keyed by protein accessionVersion), cds.fna's defline carries the
+    parent nucleotide accession plus a coordinate suffix (e.g. 'PX492530.1:1-430'),
+    because a CDS is a coordinate range on its parent nucleotide record. A single
+    nucleotide accession can carry more than one CDS -- 134 in this package, mostly
+    ambisense S segments encoding both N and NSs on overlapping reading frames, plus a
+    few M segments annotated with separate G1/G2 CDS alongside a combined precursor
+    entry. parse_fasta's setdefault-first-wins index would silently keep whichever CDS
+    happened to be read first and drop the other, so this keeps every distinct
+    (product, sequence) pair per accession and leaves selection to select_primary_cds
+    (phylogeny.py).
+    """
+    index: DefaultDict[str, List[Tuple[str, str]]] = defaultdict(list)
+    seen: set = set()
+    for desc, seq in _iter_fasta_records(path):
+        if not desc:
+            continue
+        tokens = desc.split(None, 1)
+        acc = tokens[0].split(":")[0]
+        base = accession_base(acc)
+        product = tokens[1].split("[")[0].strip() if len(tokens) > 1 else ""
+        seq = seq.upper()
+        if not seq or not base:
+            continue
+        dedupe_key = (base, product, seq)
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        index[base].append((product, seq))
+    return dict(index)
+
+
 # --------------------------------------------------------------------------------------
 # Integrity gate -- verify against NCBI's published checksums
 # --------------------------------------------------------------------------------------
