@@ -287,7 +287,7 @@ def dump_scored_table(oracle: "Oracle", output_dir: Path, seed: int) -> Tuple[Pa
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--reference-input", default="all_hanta")
+    parser.add_argument("--reference-input", default="output")
     parser.add_argument("--output", default="output/ga_search")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--population", type=int, default=150)
@@ -305,7 +305,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                              "all_scored_seed_<seed>.{jsonl,csv} in --output")
     args = parser.parse_args(argv)
 
-    reference = rc.load_reference_data(Path(args.reference_input))
+    reference = rc.prep.load_reference_data(Path(args.reference_input))
     precomputed = rc._build_precomputed(reference)
     fast_args = rc._score_args(args.output)  # positional: keyword name is internal
     oracle = Oracle(reference, precomputed, fast_args)
@@ -409,7 +409,9 @@ class GaSearchTest(unittest.TestCase):
         """build_pool now calls the canonical rc.usable_pool, so test that it produces
         the same result. This guards against accidental divergence."""
         from pathlib import Path
-        reference = rc.load_reference_data(Path("all_hanta"))
+        if not Path("output/ortho_reference_isolates.json").exists():
+            self.skipTest("output/ reference snapshot not present -- run prepare_dataset.py first")
+        reference = rc.prep.load_reference_data(Path("output"))
         reserved = rc.reserved_calibration_isolate_keys()
         # Both should produce the same pool
         alg_pool = set(build_pool(reference, reserved))
