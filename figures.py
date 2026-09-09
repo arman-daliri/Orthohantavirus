@@ -15,7 +15,7 @@ committed run used. This re-derives a label ASSIGNMENT, not a tree -- no mafft/i
 subprocess runs anywhere in this module.
 
 BEFORE panel: the 8 `supported_reassortment_candidate` isolates from
-`output/ortho_reassortment_table.csv` (all_hanta.py's own genome-wide phylogenetic
+`output/ortho_reassortment_table.csv` (prepare_dataset.py's own genome-wide phylogenetic
 surveillance). For each, render its S/M/L segment trees' LOCAL NEIGHBORHOOD (the
 smallest ancestor clade with at least `--min-tips` taxa, since several species trees
 here run into the hundreds of taxa and a full tree would be illegible), highlighting
@@ -44,7 +44,7 @@ import unittest
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-import all_hanta as ah
+import prepare_dataset as prep
 import phylogeny as ph
 
 SEGMENTS = ("S", "M", "L")
@@ -59,37 +59,37 @@ DEFAULT_MIN_TIPS = 8
 
 def load_ingest(
     input_dir: str = ".", cluster_threshold: float = 0.02, min_species_size: int = 8,
-) -> Tuple[List["ah.IsolateRecord"], Dict[str, "ah.SegmentDivergenceProfile"],
-          Dict[str, List[Tuple[str, str]]], "ah.InputPaths"]:
+) -> Tuple[List["prep.IsolateRecord"], Dict[str, "prep.SegmentDivergenceProfile"],
+          Dict[str, List[Tuple[str, str]]], "prep.InputPaths"]:
     """Mirrors phylogeny.run_phylogeny's ingest chain through cds_index -- the same
     ~15-line duplication the three-stage split spec already accepts (§3.2), here for a
     fourth reason: figures need the same isolate population Stage 2 scored, not a
     filtered output table.
     """
-    paths = ah.resolve_inputs(Path(input_dir))
-    data_records = list(ah.iter_jsonl(paths.data_report))
-    annotation_index = ah.build_annotation_index(ah.iter_jsonl(paths.annotation_report))
-    biosample_index = ah.build_biosample_index(ah.iter_jsonl(paths.biosample_report))
-    genomic_index = ah.parse_fasta(paths.genomic_fasta)
-    protein_index = ah.parse_fasta(paths.protein_fasta)
+    paths = prep.resolve_inputs(Path(input_dir))
+    data_records = list(prep.iter_jsonl(paths.data_report))
+    annotation_index = prep.build_annotation_index(prep.iter_jsonl(paths.annotation_report))
+    biosample_index = prep.build_biosample_index(prep.iter_jsonl(paths.biosample_report))
+    genomic_index = prep.parse_fasta(paths.genomic_fasta)
+    protein_index = prep.parse_fasta(paths.protein_fasta)
 
     accessions = []
     for record in data_records:
-        transformed, _qc_row = ah.transform_one_record(
+        transformed, _qc_row = prep.transform_one_record(
             record, annotation_index, biosample_index, genomic_index, protein_index)
         if transformed is not None:
             accessions.append(transformed)
 
-    isolates = ah.build_isolate_records(accessions)
-    ah.assign_kmer_clusters(isolates, cluster_threshold)
-    divergence = ah.compute_segment_divergence(isolates, min_species_size=min_species_size)
+    isolates = prep.build_isolate_records(accessions)
+    prep.assign_kmer_clusters(isolates, cluster_threshold)
+    divergence = prep.compute_segment_divergence(isolates, min_species_size=min_species_size)
     divergence_by_key = {d.isolate_key: d for d in divergence}
     cds_index = ph.parse_cds_fasta(paths.cds_fasta)
     return isolates, divergence_by_key, cds_index, paths
 
 
 def group_for_scope(
-    isolates: Sequence["ah.IsolateRecord"], divergence_by_key: Dict[str, Any],
+    isolates: Sequence["prep.IsolateRecord"], divergence_by_key: Dict[str, Any],
     cds_index: Dict[str, Any], scope: str, phylo_min_taxa: int = 4,
 ) -> Dict[str, List["ph.PhyloCandidate"]]:
     """by_group exactly as phylogeny._run_phylogenetics_scope built it: same candidate
@@ -121,7 +121,7 @@ def find_group_for_isolate(
 def load_tree_relabeled(group_dir_root: Path, group_key: str, segment: str,
                         label_map: Dict[str, "ph.PhyloCandidate"]) -> "Bio.Phylo.BaseTree.Tree":
     from Bio import Phylo
-    path = group_dir_root / ah.normalize_attr_name(group_key) / segment / "tree.treefile"
+    path = group_dir_root / prep.normalize_attr_name(group_key) / segment / "tree.treefile"
     if not path.exists():
         raise FileNotFoundError(f"committed tree not found: {path}")
     tree = Phylo.read(str(path), "newick")
@@ -309,7 +309,7 @@ def render_before_figures(output_dir: Path, input_dir: str = ".",
                  f"output/phylogenetics{'_phylogroup' if scope == 'phylogroup' else ''}/).",
                  ha="center", fontsize=7, color="#555555")
         fig.tight_layout(rect=(0, 0.03, 1, 1))
-        out_path = output_dir / f"{ah.normalize_attr_name(isolate_key)}.png"
+        out_path = output_dir / f"{prep.normalize_attr_name(isolate_key)}.png"
         fig.savefig(out_path, dpi=150)
         plt.close(fig)
         written.append(out_path)
@@ -320,7 +320,7 @@ def render_before_figures(output_dir: Path, input_dir: str = ".",
 # AFTER panel (GA winners)
 # ============================================================================
 
-def parent_metadata(isolate_key: str, by_key: Dict[str, "ah.IsolateRecord"]) -> Dict[str, str]:
+def parent_metadata(isolate_key: str, by_key: Dict[str, "prep.IsolateRecord"]) -> Dict[str, str]:
     isolate = by_key.get(isolate_key)
     if isolate is None:
         return {"isolate_key": isolate_key, "species": "", "country": "", "host": ""}
