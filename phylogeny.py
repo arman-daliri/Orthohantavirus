@@ -4,13 +4,13 @@
 Stage 2 of the three-stage pipeline documented in README.md's "Pipeline stages" section.
 Analyzes the reference isolate set ingested from an NCBI Datasets Orthohantavirus package
 for real, tree-based reassortment evidence -- the rigorous replacement for the k-mer
-divergence diagnostics all_hanta.py (Stage 1) still emits as informational-only columns.
+divergence diagnostics prepare_dataset.py (Stage 1) still emits as informational-only columns.
 
-Independent of all_hanta.py's output files: re-derives isolates, the genomic/protein FASTA
-index, and the CDS index from --input itself, the same way all_hanta.py's own run_pipeline
+Independent of prepare_dataset.py's output files: re-derives isolates, the genomic/protein FASTA
+index, and the CDS index from --input itself, the same way prepare_dataset.py's own run_pipeline
 did before this code was split out (docs/superpowers/specs/2026-08-13-three-stage-pipeline-
 split-design.md has the split rationale and the exact symbol inventory this file was
-extracted from). Reuses all_hanta.py's ingest primitives via `import all_hanta as ah`.
+extracted from). Reuses prepare_dataset.py's ingest primitives via `import prepare_dataset as prep`.
 """
 
 from __future__ import annotations
@@ -27,16 +27,16 @@ from typing import Any, DefaultDict, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-import all_hanta as ah
+import prepare_dataset as prep
 
 
-# Host-order fallback for isolates ah.PHYLOGROUP can't place -- species not yet formally
+# Host-order fallback for isolates prep.PHYLOGROUP can't place -- species not yet formally
 # named or classified (species_status != 'classified'), which have no curated reservoir
 # to look up. Only usable where a WHOLE taxonomic order maps to one phylogroup: every
-# Eulipotyphla genus in ah.GENUS_PHYLOGROUP is soricomorpha_borne, so an unclassified
+# Eulipotyphla genus in prep.GENUS_PHYLOGROUP is soricomorpha_borne, so an unclassified
 # isolate observed in any shrew or mole is unambiguous even without a species-level
 # identification. Chiroptera is included for the same reason, even though no curated
-# ah.SPECIES_RISK reservoir is bat-borne -- this fallback is the only route into
+# prep.SPECIES_RISK reservoir is bat-borne -- this fallback is the only route into
 # chiroptera_borne. Rodentia is deliberately absent: it spans Murinae, Arvicolinae and
 # Sigmodontinae (three different phylogroups) all at once, so the order alone can't
 # pick one -- see _phylogroup_for_isolate, below.
@@ -59,7 +59,7 @@ class PhyloCandidate:
     the full genomic sequence and never the amino acid translation, see
     select_primary_cds.
     """
-    isolate: "ah.IsolateRecord"
+    isolate: "prep.IsolateRecord"
     tags: List[str]
     sequences: Dict[str, str]
 
@@ -108,7 +108,7 @@ def _segment_rank_metrics(
 # Rigorous phylogenetic reassortment analysis (tree-based MAFFT + IQ-TREE stage)
 # --------------------------------------------------------------------------------------
 #
-# all_hanta.py's k-mer diagnostics (assign_kmer_clusters, compute_segment_divergence) are
+# prepare_dataset.py's k-mer diagnostics (assign_kmer_clusters, compute_segment_divergence) are
 # alignment-free and deliberately NOT a reassortment call -- see compute_segment_divergence's docstring
 # for the validation failure that got that classifier withdrawn. This section is the
 # real thing it pointed to: per-segment CDS-nucleotide alignments (MAFFT) and
@@ -125,7 +125,7 @@ def _segment_rank_metrics(
 # trees (scope='species') can only ever show reassortment WITHIN a species, because a
 # segment acquired from a different species has no possible donor in a single-species
 # tree; phylogroup trees (scope='phylogroup') group candidates by reservoir-host
-# phylogroup (ah.PHYLOGROUP) instead, spanning every species that shares one, so
+# phylogroup (prep.PHYLOGROUP) instead, spanning every species that shares one, so
 # interspecies exchange has somewhere to show up (Laenen et al. 2019,
 # 10.3390/v11090788). --phylo-scope=both (the default) runs both, so a candidate can
 # appear up to twice, once per scope, distinguished by the analysis_scope column -- the
@@ -188,12 +188,12 @@ def parse_cds_fasta(path: Optional[Path]) -> Dict[str, List[Tuple[str, str]]]:
     """
     index: DefaultDict[str, List[Tuple[str, str]]] = defaultdict(list)
     seen: set = set()
-    for desc, seq in ah._iter_fasta_records(path):
+    for desc, seq in prep._iter_fasta_records(path):
         if not desc:
             continue
         tokens = desc.split(None, 1)
         acc = tokens[0].split(":")[0]
-        base = ah.accession_base(acc)
+        base = prep.accession_base(acc)
         product = tokens[1].split("[")[0].strip() if len(tokens) > 1 else ""
         seq = seq.upper()
         if not seq or not base:
@@ -209,22 +209,22 @@ def parse_cds_fasta(path: Optional[Path]) -> Dict[str, List[Tuple[str, str]]]:
 def select_primary_cds(records: Optional[Sequence[Tuple[str, str]]], segment: str) -> str:
     """Pick the CDS nucleotide sequence matching the segment's primary product.
 
-    Mirrors select_primary_protein's role-matching (ah.classify_protein_role), longest-wins
+    Mirrors select_primary_protein's role-matching (prep.classify_protein_role), longest-wins
     among matches -- for M segments annotated with separate G1/G2 CDS *and* a combined
     G1+G2 precursor entry, this correctly prefers the full precursor over either half.
     """
     if not records:
         return ""
-    wanted = ah.SEGMENT_PRIMARY_PRODUCT.get(segment)
+    wanted = prep.SEGMENT_PRIMARY_PRODUCT.get(segment)
     if not wanted:
         return ""
-    candidates = [seq for product, seq in records if ah.classify_protein_role(product) == wanted]
+    candidates = [seq for product, seq in records if prep.classify_protein_role(product) == wanted]
     return max(candidates, key=len) if candidates else ""
 
 
 def collect_phylo_candidates(
-    isolates: Sequence[ah.IsolateRecord],
-    divergence_by_key: Dict[str, ah.SegmentDivergenceProfile],
+    isolates: Sequence[prep.IsolateRecord],
+    divergence_by_key: Dict[str, prep.SegmentDivergenceProfile],
     cds_index: Dict[str, List[Tuple[str, str]]],
     scope: str,
 ) -> Tuple[List[PhyloCandidate], Counter]:
@@ -280,7 +280,7 @@ def collect_phylo_candidates(
             # else: basis == 'observed_host_order' -- admitted, falls through below
             # exactly like a classified isolate.
 
-        risk = ah.species_risk_profile(isolate.species_name)
+        risk = prep.species_risk_profile(isolate.species_name)
         tags: List[str] = []
         if is_human_affecting_or_likely(risk["pathogenicity_class"], isolate.host_role):
             tags.append("human_affecting_or_likely")
@@ -295,7 +295,7 @@ def collect_phylo_candidates(
         sequences: Dict[str, str] = {}
         for segment, accession in (("S", isolate.s_accession), ("M", isolate.m_accession),
                                    ("L", isolate.l_accession)):
-            records = cds_index.get(ah.accession_base(accession)) if accession else None
+            records = cds_index.get(prep.accession_base(accession)) if accession else None
             seq = select_primary_cds(records, segment)
             if len(seq) >= MIN_CDS_LENGTH:
                 sequences[segment] = seq
@@ -309,11 +309,11 @@ def collect_phylo_candidates(
     return candidates, exclusions
 
 
-def _phylogroup_for_isolate(isolate: ah.IsolateRecord) -> Tuple[str, str]:
+def _phylogroup_for_isolate(isolate: prep.IsolateRecord) -> Tuple[str, str]:
     """Phylogroup and assignment basis for one isolate at scope='phylogroup'.
 
-    Classified species use the curated ah.PHYLOGROUP lookup (basis='curated_reservoir') --
-    every ah.SPECIES_RISK entry resolves here, so this branch never falls through to
+    Classified species use the curated prep.PHYLOGROUP lookup (basis='curated_reservoir') --
+    every prep.SPECIES_RISK entry resolves here, so this branch never falls through to
     'unassigned' for a classified isolate.
 
     Unclassified isolates (species_status != 'classified') have no curated reservoir to
@@ -327,7 +327,7 @@ def _phylogroup_for_isolate(isolate: ah.IsolateRecord) -> Tuple[str, str]:
     alone cannot tell which rodent subfamily it belongs to, and guessing one would
     misrepresent where the isolate actually sits, which is worse than excluding it.
     """
-    curated = ah.PHYLOGROUP.get(isolate.species_name)
+    curated = prep.PHYLOGROUP.get(isolate.species_name)
     if curated is not None:
         return curated, "curated_reservoir"
     fallback = HOST_ORDER_PHYLOGROUP_FALLBACK.get(isolate.host_order)
@@ -369,7 +369,7 @@ def group_candidates(
     WITHIN a species -- a segment acquired from a different species has no possible donor
     in a single-species tree.
 
-    scope='phylogroup': one group per reservoir-host phylogroup (ah.PHYLOGROUP), spanning
+    scope='phylogroup': one group per reservoir-host phylogroup (prep.PHYLOGROUP), spanning
     every species that shares one. Makes interspecies reassortment visible, which
     species-scope structurally cannot (Laenen et al. 2019, 10.3390/v11090788). These
     groups are larger and taxonomically heterogeneous, so unlike species trees they need
@@ -392,7 +392,7 @@ def group_candidates(
             # Species-scope message text is unchanged from the pre-scope version (no
             # "species:" prefix) so a species-only run's log output stays byte-identical
             # to before this function existed (this stage's own log, ortho_phylogeny.log,
-            # not all_hanta.py's ortho_pipeline.log -- they're separate files).
+            # not prepare_dataset.py's ortho_pipeline.log -- they're separate files).
             label = key if scope == "species" else f"phylogroup {key}"
             exclusions[f"{label}: only {len(members)} candidate(s), need {min_taxa}"] += 1
             continue
@@ -500,7 +500,7 @@ def tree_divergence_for_species(labels: Sequence[str], trees: Dict[str, Any]) ->
         order[segment] = np.argsort(dist, axis=1)
         distance[segment] = dist
 
-    position = ah._rank_positions(order)
+    position = prep._rank_positions(order)
 
     rows_out: List[Dict[str, Any]] = []
     for i, label in enumerate(labels):
@@ -624,11 +624,11 @@ def _phylo_row(candidate: PhyloCandidate, species: str, n_taxa_in_tree: int,
 
     ``species`` is always the isolate's own true canonical species -- never the group
     label a phylogroup-scope tree was built from, since a phylogroup tree spans several
-    species. Which phylogroup that species belongs to is recoverable from ah.PHYLOGROUP.
+    species. Which phylogroup that species belongs to is recoverable from prep.PHYLOGROUP.
 
     ``phylogroup_assignment_basis`` is only meaningful at scope='phylogroup' (empty
     string at scope='species', where the concept doesn't apply): 'curated_reservoir' for
-    a classified species looked up in ah.PHYLOGROUP, 'observed_host_order' for an
+    a classified species looked up in prep.PHYLOGROUP, 'observed_host_order' for an
     unclassified isolate placed via HOST_ORDER_PHYLOGROUP_FALLBACK instead -- see
     _phylogroup_for_isolate.
     """
@@ -679,12 +679,12 @@ def _resolve_outgroup_label(label_map: Dict[str, "PhyloCandidate"], outgroup: st
     (I0000, ...) used in THIS group's alignment/tree, or None if that isolate isn't one
     of this group's members -- one global outgroup will not be present in every tree.
     """
-    base = ah.accession_base(outgroup)
+    base = prep.accession_base(outgroup)
     for label, candidate in label_map.items():
         isolate = candidate.isolate
         if outgroup == isolate.isolate_key:
             return label
-        if base and base in {ah.accession_base(a) for a in
+        if base and base in {prep.accession_base(a) for a in
                              (isolate.s_accession, isolate.m_accession, isolate.l_accession) if a}:
             return label
     return None
@@ -733,7 +733,7 @@ def _analyze_group(
     import dendropy
     from dendropy.calculate import treecompare
 
-    group_dir = group_dir_root / ah.normalize_attr_name(group_key)
+    group_dir = group_dir_root / prep.normalize_attr_name(group_key)
     labels = [f"I{i:04d}" for i in range(len(members))]
     label_map: Dict[str, PhyloCandidate] = dict(zip(labels, members))
 
@@ -863,8 +863,8 @@ def _run_phylogenetics_scope(
 
 
 def run_phylogenetics_stage(
-    isolates: Sequence[ah.IsolateRecord],
-    divergence_by_key: Dict[str, ah.SegmentDivergenceProfile],
+    isolates: Sequence[prep.IsolateRecord],
+    divergence_by_key: Dict[str, prep.SegmentDivergenceProfile],
     cds_index: Dict[str, List[Tuple[str, str]]],
     output_dir: Path,
     args: argparse.Namespace,
@@ -923,7 +923,7 @@ def phylo_call_by_isolate(phylo_rows: Sequence[Dict[str, Any]]) -> Dict[str, str
     """Reduce ortho_reassortment_table.csv's rows to one reassortment_call per isolate.
 
     Public utility, not called anywhere in this pipeline's own scripts: before the
-    three-stage split, this fed all_hanta.py's surveillance_priority(phylo_call=...)
+    three-stage split, this fed prepare_dataset.py's surveillance_priority(phylo_call=...)
     directly, in the same process. Post-split, ortho_risk_table.csv (Stage 1) is
     unconditionally phylo-blind by design (see README's Pipeline stages section and
     docs/superpowers/specs/2026-08-13-three-stage-pipeline-split-design.md section 5),
@@ -954,40 +954,40 @@ def phylo_call_by_isolate(phylo_rows: Sequence[Dict[str, Any]]) -> Dict[str, str
     return best
 
 
-def run_phylogeny(paths: "ah.InputPaths", args: argparse.Namespace) -> None:
-    """Mirrors all_hanta.py's run_pipeline() ingest chain exactly through
+def run_phylogeny(paths: "prep.InputPaths", args: argparse.Namespace) -> None:
+    """Mirrors prepare_dataset.py's run_pipeline() ingest chain exactly through
     compute_segment_divergence (needed for divergence_by_key, which
     collect_phylo_candidates uses to tag divergence_candidate isolates) -- see spec
     section 3.2 for why this ~duplication is a deliberate choice, not an oversight.
     """
     logging.info("Verifying package integrity against NCBI md5sum.txt")
-    checksums = ah.verify_inputs(paths)
-    ah.report_checksums(checksums, allow_mismatch=args.allow_checksum_mismatch)
+    checksums = prep.verify_inputs(paths)
+    prep.report_checksums(checksums, allow_mismatch=args.allow_checksum_mismatch)
 
     logging.info("Loading reports")
-    data_records = list(ah.iter_jsonl(paths.data_report))
-    annotation_index = ah.build_annotation_index(ah.iter_jsonl(paths.annotation_report))
-    biosample_index = ah.build_biosample_index(ah.iter_jsonl(paths.biosample_report))
+    data_records = list(prep.iter_jsonl(paths.data_report))
+    annotation_index = prep.build_annotation_index(prep.iter_jsonl(paths.annotation_report))
+    biosample_index = prep.build_biosample_index(prep.iter_jsonl(paths.biosample_report))
 
     logging.info("Parsing FASTA")
-    genomic_index = ah.parse_fasta(paths.genomic_fasta)
-    protein_index = ah.parse_fasta(paths.protein_fasta)
+    genomic_index = prep.parse_fasta(paths.genomic_fasta)
+    protein_index = prep.parse_fasta(paths.protein_fasta)
 
     logging.info("Transforming accession records")
     accessions = []
     for record in data_records:
-        transformed, _qc_row = ah.transform_one_record(
+        transformed, _qc_row = prep.transform_one_record(
             record, annotation_index, biosample_index, genomic_index, protein_index)
         if transformed is not None:
             accessions.append(transformed)
 
     logging.info("Reconstructing isolates")
-    isolates = ah.build_isolate_records(accessions)
+    isolates = prep.build_isolate_records(accessions)
     logging.info("  %s isolates, %s complete triplets",
                  len(isolates), sum(1 for i in isolates if i.has_complete_triplet))
 
-    ah.assign_kmer_clusters(isolates, args.cluster_threshold)
-    divergence = ah.compute_segment_divergence(isolates, min_species_size=args.min_species_size)
+    prep.assign_kmer_clusters(isolates, args.cluster_threshold)
+    divergence = prep.compute_segment_divergence(isolates, min_species_size=args.min_species_size)
     divergence_by_key = {d.isolate_key: d for d in divergence}
 
     logging.info("Loading CDS")
@@ -996,7 +996,7 @@ def run_phylogeny(paths: "ah.InputPaths", args: argparse.Namespace) -> None:
 
     logging.info("Running phylogenetics stage")
     phylo_rows = run_phylogenetics_stage(isolates, divergence_by_key, cds_index, paths.output_dir, args)
-    ah.safe_write_csv(paths.output_dir / "ortho_reassortment_table.csv", phylo_rows)
+    prep.safe_write_csv(paths.output_dir / "ortho_reassortment_table.csv", phylo_rows)
     logging.info("Done. %s candidate rows written to ortho_reassortment_table.csv", len(phylo_rows))
 
 
@@ -1030,7 +1030,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
                         help="Threads for mafft and iqtree")
     parser.add_argument("--phylo-scope", choices=("species", "phylogroup", "both"), default="both",
                         help="species: within-species trees only. phylogroup: trees spanning "
-                             "every species in a reservoir-host phylogroup (see ah.PHYLOGROUP), "
+                             "every species in a reservoir-host phylogroup (see prep.PHYLOGROUP), "
                              "for interspecies signal a species-only tree structurally cannot "
                              "show. both: run each independently.")
     parser.add_argument("--phylo-outgroup", default=None,
@@ -1040,8 +1040,8 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
-    paths = ah.resolve_inputs(Path(args.input), output=Path(args.output) if args.output else None)
-    ah.configure_logging(paths.output_dir / "ortho_phylogeny.log", verbose=args.verbose)
+    paths = prep.resolve_inputs(Path(args.input), output=Path(args.output) if args.output else None)
+    prep.configure_logging(paths.output_dir / "ortho_phylogeny.log", verbose=args.verbose)
     logging.info("Orthohantavirus phylogenetics stage (Stage 2)")
     logging.info("Package: %s", paths.data_dir)
     logging.info("Output : %s", paths.output_dir)
@@ -1217,12 +1217,12 @@ class BootstrapSupportRootFallbackTest(unittest.TestCase):
 
 
 def _make_isolate(key: str, species: str, s_acc: str, m_acc: str, l_acc: str,
-                  species_status: str = "classified", host_order: str = "Rodentia") -> "ah.IsolateRecord":
+                  species_status: str = "classified", host_order: str = "Rodentia") -> "prep.IsolateRecord":
     """Minimal but fully-populated IsolateRecord for phylogenetics-stage tests -- only the
     fields _analyze_group/collect_phylo_candidates actually read are given meaningful
     values; everything else is a valid placeholder of the right type.
     """
-    return ah.IsolateRecord(
+    return prep.IsolateRecord(
         isolate_key=key, species_name=species, species_taxid="999", species_status=species_status,
         biosample="", isolate=key, strain="", host_name="Test host", host_taxid="1",
         host_order=host_order, host_family="", host_role="reservoir_rodent",
@@ -1272,9 +1272,9 @@ def _cds_index_for(s_acc, m_acc, l_acc, seq_len=150):
         return "".join(rng.choice(bases) for _ in range(n))
 
     return {
-        ah.accession_base(s_acc): [("nucleocapsid protein", rand_seq(seq_len))],
-        ah.accession_base(m_acc): [("glycoprotein precursor", rand_seq(seq_len))],
-        ah.accession_base(l_acc): [("RNA polymerase", rand_seq(seq_len))],
+        prep.accession_base(s_acc): [("nucleocapsid protein", rand_seq(seq_len))],
+        prep.accession_base(m_acc): [("glycoprotein precursor", rand_seq(seq_len))],
+        prep.accession_base(l_acc): [("RNA polymerase", rand_seq(seq_len))],
     }
 
 
