@@ -1,0 +1,297 @@
+IQ-TREE version 3.1.3 for Windows 64-bit built Jun 19 2026
+Developed by Bui Quang Minh, Thomas Wong, Nhan Ly-Trong, Huaiyan Ren
+Contributed by Lam-Tung Nguyen, Dominik Schrempf, Chris Bielow,
+Olga Chernomor, Michael Woodhams, Diep Thi Hoang, Heiko Schmidt
+
+Host:    ario (AVX2, FMA3, 15 GB RAM)
+Command: C:\git-projects\Orthohantavirus\tools\iqtree-3.1.3-Windows\bin\iqtree3.exe -s output_rerun_20260906\validation\candidate_phylogenetics\NEG_NM R11\orthohantavirus_sinnombreense\L\aligned.fasta --seqtype DNA -m MFP -B 1000 -T 1 --seed 42 --prefix output_rerun_20260906\validation\candidate_phylogenetics\NEG_NM R11\orthohantavirus_sinnombreense\L\tree --quiet --redo
+Seed:    42 (Using SPRNG - Scalable Parallel Random Number Generator)
+Time:    Mon Sep 07 10:47:57 2026
+Kernel:  AVX+FMA - 1 threads (12 CPU cores detected)
+
+HINT: Use -nt option to specify number of threads because your CPU has 12 cores!
+HINT: -nt AUTO will automatically determine the best number of threads to use.
+
+Reading alignment file output_rerun_20260906\validation\candidate_phylogenetics\NEG_NM R11\orthohantavirus_sinnombreense\L\aligned.fasta ... Fasta format detected
+Reading fasta file: done in 0.0043639 secs
+Alignment most likely contains DNA/RNA sequences
+Constructing alignment: done in 0.0070173 secs
+WARNING: 56 sites contain only gaps or ambiguous characters.
+Alignment has 50 sequences with 6526 columns, 2661 distinct patterns
+1727 parsimony-informative, 541 singleton sites, 4258 constant sites
+       Gap/Ambiguity  Composition  p-value
+Analyzing sequences: done in 0.0002965 secs
+   1  I0000    0.98%    passed     98.61%
+   2  I0001    0.98%    passed     96.96%
+   3  I0002   13.75%    passed     99.33%
+   4  I0003    0.98%    passed     99.54%
+   5  I0004    0.98%    passed     99.76%
+   6  I0005    7.45%    passed     84.07%
+   7  I0006    0.98%    passed     94.87%
+   8  I0007   11.84%    passed     89.97%
+   9  I0008    0.98%    passed     94.24%
+  10  I0009    0.98%    passed     95.37%
+  11  I0010    0.98%    passed     92.45%
+  12  I0011    0.98%    passed     99.90%
+  13  I0012    0.98%    passed     95.29%
+  14  I0013   29.08%    passed     78.61%
+  15  I0014    0.98%    passed     96.84%
+  16  I0015   11.78%    passed     95.92%
+  17  I0016    4.34%    passed     98.05%
+  18  I0017   14.19%    passed     98.47%
+  19  I0018    0.98%    passed     95.01%
+  20  I0019   82.82%    passed     19.83%
+  21  I0020    1.32%    passed     88.75%
+  22  I0021   82.82%    passed     15.84%
+  23  I0022   82.82%    passed     14.58%
+  24  I0023   82.82%    passed     15.84%
+  25  I0024   82.82%    passed     23.26%
+  26  I0025   82.82%    passed     14.58%
+  27  I0026   82.82%    passed     16.28%
+  28  I0027   82.82%    passed     15.84%
+  29  I0028   82.82%    passed     15.84%
+  30  I0029   82.82%    passed     14.58%
+  31  I0030   82.82%    passed     19.27%
+  32  I0031   82.82%    passed     14.58%
+  33  I0032   82.82%    passed     19.27%
+  34  I0033   16.21%    passed     88.80%
+  35  I0034    0.98%    passed     82.42%
+  36  I0035   56.90%    passed     23.73%
+  37  I0036    2.88%    passed     89.31%
+  38  I0037   22.89%    passed     52.97%
+  39  I0038    4.92%    passed     76.90%
+  40  I0039    7.29%    passed     80.18%
+  41  I0040   13.67%    passed     80.83%
+  42  I0041   33.39%    passed     61.98%
+  43  I0042    1.46%    passed     92.17%
+  44  I0043   11.00%    passed     91.97%
+  45  I0044    0.98%    passed     93.78%
+  46  I0045    4.46%    passed     98.31%
+  47  I0046   26.14%    passed     84.37%
+  48  I0047    4.46%    passed     93.67%
+  49  I0048    1.65%    passed     90.60%
+  50  I0049   38.25%    passed     32.77%
+WARNING: 14 sequences contain more than 50% gaps/ambiguity
+****  TOTAL   28.59%  0 sequences failed composition chi2 test (p-value<5%; df=3)
+NOTE: I0023 is identical to I0021 but kept for subsequent analysis
+NOTE: I0025 is identical to I0022 but kept for subsequent analysis
+Checking for duplicate sequences: done in 0.0004249 secs
+Identifying sites to remove: done in 0.004265 secs using 366.4% CPU
+NOTE: 4 identical sequences (see below) will be ignored for subsequent analysis
+NOTE: I0027 (identical to I0021) is ignored but added at the end
+NOTE: I0028 (identical to I0021) is ignored but added at the end
+NOTE: I0029 (identical to I0022) is ignored but added at the end
+NOTE: I0031 (identical to I0022) is ignored but added at the end
+Alignment was printed to output_rerun_20260906\validation\candidate_phylogenetics\NEG_NM R11\orthohantavirus_sinnombreense\L\tree.uniqueseq.phy
+
+For your convenience alignment with unique sequences printed to output_rerun_20260906\validation\candidate_phylogenetics\NEG_NM R11\orthohantavirus_sinnombreense\L\tree.uniqueseq.phy
+
+
+Create initial parsimony tree by phylogenetic likelihood library (PLL)... 0.010 seconds
+Perform fast likelihood tree search using GTR+I+G model...
+Estimate model parameters (epsilon = 5.000)
+Perform nearest neighbor interchange...
+Estimate model parameters (epsilon = 1.000)
+1. Initial log-likelihood: -36000.762
+Optimal log-likelihood: -36000.540
+Rate parameters:  A-C: 2.98207  A-G: 20.48269  A-T: 1.76950  C-G: 0.32536  C-T: 35.53379  G-T: 1.00000
+Base frequencies:  A: 0.320  C: 0.154  G: 0.221  T: 0.305
+Proportion of invariable sites: 0.313
+Gamma shape alpha: 0.346
+Parameters optimization took 1 rounds (0.077 sec)
+Time for fast ML tree search: 1.486 seconds
+
+NOTE: ModelFinder requires 49 MB RAM!
+ModelFinder will test up to 968 DNA models (sample size: 6526 epsilon: 0.100) ...
+ No. Model         -LnL         df  AIC          AICc         BIC
+Akaike Information Criterion:           GTR+F+R3
+Corrected Akaike Information Criterion: GTR+F+R3
+Bayesian Information Criterion:         GTR+F+R3
+Best-fit model: GTR+F+R3 chosen according to BIC
+
+All model information printed to output_rerun_20260906\validation\candidate_phylogenetics\NEG_NM R11\orthohantavirus_sinnombreense\L\tree.model.gz
+CPU time for ModelFinder: 86.969 seconds (0h:1m:26s)
+Wall-clock time for ModelFinder: 88.573 seconds (0h:1m:28s)
+Generating 1000 samples for ultrafast bootstrap (seed: 42)...
+
+NOTE: 22 MB RAM (0 GB) is required!
+Estimate model parameters (epsilon = 0.100)
+1. Initial log-likelihood: -35913.343
+2. Current log-likelihood: -35913.106
+Optimal log-likelihood: -35912.970
+Rate parameters:  A-C: 2.97672  A-G: 21.36034  A-T: 1.67969  C-G: 0.35061  C-T: 35.71609  G-T: 1.00000
+Base frequencies:  A: 0.320  C: 0.154  G: 0.221  T: 0.305
+Site proportion and rates:  (0.682,0.039) (0.157,2.096) (0.162,3.988)
+Parameters optimization took 2 rounds (0.254 sec)
+Wrote distance file to... 
+Computing ML distances based on estimated model parameters...
+Calculating distance matrix: done in 0.0101055 secs using 154.6% CPU
+Computing ML distances took 0.010766 sec (of wall-clock time) 0.015625 sec (of CPU time)
+Setting up auxiliary I and S matrices: done in 7.54e-005 secs
+Constructing RapidNJ tree: done in 0.0001758 secs
+Computing RapidNJ tree took 0.000305 sec (of wall-clock time) 0.000000 sec (of CPU time)
+Log-likelihood of RapidNJ tree: -36024.696
+--------------------------------------------------------------------
+|             INITIALIZING CANDIDATE TREE SET                      |
+--------------------------------------------------------------------
+Generating 98 parsimony trees... 0.861 second
+Computing log-likelihood of 98 initial trees ... 1.384 seconds
+Current best score: -35912.970
+
+Do NNI search on 20 best initial trees
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 1: -35912.846
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 2: -35906.253
+UPDATE BEST LOG-LIKELIHOOD: -35906.249
+Iteration 10 / LogL: -35906.249 / Time: 0h:1m:34s
+UPDATE BEST LOG-LIKELIHOOD: -35906.249
+Iteration 20 / LogL: -35912.574 / Time: 0h:1m:38s
+Finish initializing candidate tree set (6)
+Current best tree score: -35906.249 / CPU time: 9.172
+Number of iterations: 20
+--------------------------------------------------------------------
+|               OPTIMIZING CANDIDATE TREE SET                      |
+--------------------------------------------------------------------
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 24: -35904.655
+UPDATE BEST LOG-LIKELIHOOD: -35904.652
+Iteration 30 / LogL: -35904.924 / Time: 0h:1m:42s (0h:0m:43s left)
+UPDATE BEST LOG-LIKELIHOOD: -35904.652
+Iteration 40 / LogL: -35904.652 / Time: 0h:1m:45s (0h:0m:37s left)
+BETTER TREE FOUND at iteration 46: -35904.652
+Iteration 50 / LogL: -35904.653 / Time: 0h:1m:49s (0h:0m:40s left)
+Log-likelihood cutoff on original alignment: -35952.262
+UPDATE BEST LOG-LIKELIHOOD: -35904.652
+UPDATE BEST LOG-LIKELIHOOD: -35904.652
+Iteration 60 / LogL: -35904.652 / Time: 0h:1m:53s (0h:0m:36s left)
+Iteration 70 / LogL: -35905.008 / Time: 0h:1m:56s (0h:0m:31s left)
+UPDATE BEST LOG-LIKELIHOOD: -35904.651
+Iteration 80 / LogL: -35904.840 / Time: 0h:2m:0s (0h:0m:26s left)
+Iteration 90 / LogL: -35904.652 / Time: 0h:2m:4s (0h:0m:22s left)
+Iteration 100 / LogL: -35919.467 / Time: 0h:2m:8s (0h:0m:18s left)
+Log-likelihood cutoff on original alignment: -35952.262
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.997
+UPDATE BEST LOG-LIKELIHOOD: -35904.651
+Iteration 110 / LogL: -35910.168 / Time: 0h:2m:12s (0h:0m:36s left)
+Iteration 120 / LogL: -35904.925 / Time: 0h:2m:15s (0h:0m:31s left)
+Iteration 130 / LogL: -35904.841 / Time: 0h:2m:19s (0h:0m:27s left)
+Iteration 140 / LogL: -35904.674 / Time: 0h:2m:23s (0h:0m:23s left)
+TREE SEARCH COMPLETED AFTER 147 ITERATIONS / Time: 0h:2m:25s
+
+--------------------------------------------------------------------
+|                    FINALIZING TREE SEARCH                        |
+--------------------------------------------------------------------
+Performs final model parameters optimization
+Estimate model parameters (epsilon = 0.010)
+1. Initial log-likelihood: -35904.651
+2. Current log-likelihood: -35904.574
+3. Current log-likelihood: -35904.465
+4. Current log-likelihood: -35904.367
+5. Current log-likelihood: -35904.280
+6. Current log-likelihood: -35904.193
+7. Current log-likelihood: -35904.113
+8. Current log-likelihood: -35904.038
+9. Current log-likelihood: -35903.962
+10. Current log-likelihood: -35903.894
+11. Current log-likelihood: -35903.825
+12. Current log-likelihood: -35903.759
+13. Current log-likelihood: -35903.697
+14. Current log-likelihood: -35903.638
+15. Current log-likelihood: -35903.579
+16. Current log-likelihood: -35903.524
+17. Current log-likelihood: -35903.469
+18. Current log-likelihood: -35903.422
+19. Current log-likelihood: -35903.375
+20. Current log-likelihood: -35903.325
+21. Current log-likelihood: -35903.282
+22. Current log-likelihood: -35903.241
+23. Current log-likelihood: -35903.198
+24. Current log-likelihood: -35903.153
+25. Current log-likelihood: -35903.115
+26. Current log-likelihood: -35903.077
+27. Current log-likelihood: -35903.035
+28. Current log-likelihood: -35902.999
+29. Current log-likelihood: -35902.964
+30. Current log-likelihood: -35902.929
+31. Current log-likelihood: -35902.894
+32. Current log-likelihood: -35902.860
+33. Current log-likelihood: -35902.826
+34. Current log-likelihood: -35902.794
+35. Current log-likelihood: -35902.763
+36. Current log-likelihood: -35902.733
+37. Current log-likelihood: -35902.704
+38. Current log-likelihood: -35902.676
+39. Current log-likelihood: -35902.649
+40. Current log-likelihood: -35902.622
+41. Current log-likelihood: -35902.596
+42. Current log-likelihood: -35902.571
+43. Current log-likelihood: -35902.546
+44. Current log-likelihood: -35902.523
+45. Current log-likelihood: -35902.499
+46. Current log-likelihood: -35902.477
+47. Current log-likelihood: -35902.455
+48. Current log-likelihood: -35902.433
+49. Current log-likelihood: -35902.412
+50. Current log-likelihood: -35902.392
+51. Current log-likelihood: -35902.372
+52. Current log-likelihood: -35902.353
+53. Current log-likelihood: -35902.334
+54. Current log-likelihood: -35902.315
+55. Current log-likelihood: -35902.297
+56. Current log-likelihood: -35902.280
+57. Current log-likelihood: -35902.262
+58. Current log-likelihood: -35902.246
+59. Current log-likelihood: -35902.229
+60. Current log-likelihood: -35902.213
+61. Current log-likelihood: -35902.198
+62. Current log-likelihood: -35902.182
+63. Current log-likelihood: -35902.167
+64. Current log-likelihood: -35902.153
+65. Current log-likelihood: -35902.138
+66. Current log-likelihood: -35902.124
+67. Current log-likelihood: -35902.110
+68. Current log-likelihood: -35902.097
+69. Current log-likelihood: -35902.084
+70. Current log-likelihood: -35902.072
+71. Current log-likelihood: -35902.061
+72. Current log-likelihood: -35902.050
+73. Current log-likelihood: -35902.039
+74. Current log-likelihood: -35902.028
+75. Current log-likelihood: -35902.018
+76. Current log-likelihood: -35902.007
+77. Current log-likelihood: -35901.997
+Optimal log-likelihood: -35901.988
+Rate parameters:  A-C: 2.96001  A-G: 21.05843  A-T: 1.59690  C-G: 0.33226  C-T: 35.85807  G-T: 1.00000
+Base frequencies:  A: 0.320  C: 0.154  G: 0.221  T: 0.305
+Site proportion and rates:  (0.676,0.032) (0.208,2.203) (0.117,4.463)
+Parameters optimization took 77 rounds (7.726 sec)
+BEST SCORE FOUND : -35901.988
+Creating bootstrap support values...
+Split supports printed to NEXUS file output_rerun_20260906\validation\candidate_phylogenetics\NEG_NM R11\orthohantavirus_sinnombreense\L\tree.splits.nex
+Total tree length: 2.011
+
+Total number of iterations: 147
+CPU time used for tree search: 56.438 sec (0h:0m:56s)
+Wall-clock time used for tree search: 56.872 sec (0h:0m:56s)
+Total CPU time used: 151.688 sec (0h:2m:31s)
+Total wall-clock time used: 153.809 sec (0h:2m:33s)
+
+Computing bootstrap consensus tree...
+Reading input file output_rerun_20260906\validation\candidate_phylogenetics\NEG_NM R11\orthohantavirus_sinnombreense\L\tree.splits.nex...
+46 taxa and 197 splits.
+Consensus tree written to output_rerun_20260906\validation\candidate_phylogenetics\NEG_NM R11\orthohantavirus_sinnombreense\L\tree.contree
+Reading input trees file output_rerun_20260906\validation\candidate_phylogenetics\NEG_NM R11\orthohantavirus_sinnombreense\L\tree.contree
+Log-likelihood of consensus tree: -35902.031
+
+Analysis results written to: 
+  IQ-TREE report:                output_rerun_20260906\validation\candidate_phylogenetics\NEG_NM R11\orthohantavirus_sinnombreense\L\tree.iqtree
+  Maximum-likelihood tree:       output_rerun_20260906\validation\candidate_phylogenetics\NEG_NM R11\orthohantavirus_sinnombreense\L\tree.treefile
+  Likelihood distances:          output_rerun_20260906\validation\candidate_phylogenetics\NEG_NM R11\orthohantavirus_sinnombreense\L\tree.mldist
+
+Ultrafast bootstrap approximation results written to:
+  Split support values:          output_rerun_20260906\validation\candidate_phylogenetics\NEG_NM R11\orthohantavirus_sinnombreense\L\tree.splits.nex
+  Consensus tree:                output_rerun_20260906\validation\candidate_phylogenetics\NEG_NM R11\orthohantavirus_sinnombreense\L\tree.contree
+  Screen log file:               output_rerun_20260906\validation\candidate_phylogenetics\NEG_NM R11\orthohantavirus_sinnombreense\L\tree.log
+
+Date and Time: Mon Sep 07 10:50:31 2026

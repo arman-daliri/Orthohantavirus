@@ -1,0 +1,52 @@
+#nexus
+
+BEGIN Taxa;
+DIMENSIONS ntax=9;
+TAXLABELS
+[1] 'I0000'
+[2] 'I0001'
+[3] 'I0002'
+[4] 'I0003'
+[5] 'I0004'
+[6] 'I0005'
+[7] 'I0006'
+[8] 'I0007'
+[9] 'I0008'
+;
+END; [Taxa]
+
+BEGIN Splits;
+DIMENSIONS ntax=9 nsplits=28;
+FORMAT labels=no weights=yes confidences=no intervals=no;
+MATRIX
+	100	 2,
+	100	 3,
+	100	 6,
+	67	 3 6,
+	100	 2 3 6,
+	100	 7,
+	89	 2 3 6 7,
+	100	 5,
+	40	 1 4 8 9,
+	100	 8,
+	100	 9,
+	100	 8 9,
+	100	 1 4,
+	100	 4,
+	100	 1,
+	13	 2 3,
+	21	 2 6,
+	3	 5 7,
+	4	 7 8 9,
+	50	 1 4 5,
+	2	 2 3 5 6,
+	9	 5 8 9,
+	2	 1 4 5 7,
+	1	 5 7 8 9,
+	0	 1 4 7,
+	0	 4 8 9,
+	0	 1 8 9,
+	0	 4 5,
+;
+END; [Splits]
+
