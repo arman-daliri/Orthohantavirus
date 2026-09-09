@@ -176,6 +176,16 @@ This step needs Python 3.11 or newer (it uses `datetime.UTC`) plus `pandas` and 
 not need `pyarrow` — outputs are plain CSV, not Parquet — and it does not need alignment or
 phylogenetics packages, which load only if Stage 2 runs (see below).
 
+**A fresh checkout does not ship the reference snapshot.** `ortho_reference_isolates.json`,
+`ortho_reference_genomic.json`, `ortho_reference_cds.json`, and
+`ortho_reference_snapshot_manifest.json` are git-ignored (see `.gitignore`) rather than committed
+— the raw package they're derived from is itself gitignored (Step 1), so committing a derived
+snapshot without the source it was built from would be misleading provenance, and the files
+regenerate deterministically from `all_hanta/` in ~16 seconds. Run Step 2 above before any
+command below that reads `--output`/`--reference-input` (every `phylogeny.py` and `rpi_core.py`
+invocation, and `Algorithm.py`'s default `--reference-input`) — each raises `FileNotFoundError`
+naming the missing file if you skip this.
+
 ## Pipeline stages
 
 The pipeline is three scripts. Stage 1 must run first against the raw NCBI package: it writes a
@@ -198,15 +208,17 @@ The pipeline applies three different completeness filters over the same referenc
 depending on what the caller needs — these are deliberately different pools, not one pool reused
 everywhere:
 
-- **Coding-complete (206 set)**: isolates where `has_complete_triplet` is true (all three segments
-  coding-complete). Used by Stage 2 (`phylogeny.py`) for tree building.
+- **Coding-complete (223 set)**: isolates where `has_complete_triplet` is true (all three segments
+  coding-complete). Used by Stage 2 (`phylogeny.py`) for tree building. (`ortho_ml_sequence_table.csv`
+  applies two further filters — not lab-derived, not vaccine-strain, plus a genomic-sequence
+  presence check — narrowing this to 206 rows; see [Isolate grouping](#isolate-grouping).)
 - **Terminally-complete (272 set)**: isolates where all three segments are both full-length AND
   carry genuine 5'/3' termini (`terminally_complete_isolates` in `rpi_core.py`) — the broader
   search/calibration pool. This is `usable_pool`, and it remains what `rpi_core.py`'s own
   validation/discrimination panel uses directly.
 - **Strict merged set**: `strict_merged_pool` in `rpi_core.py` — the intersection of the
   terminally-complete set AND the coding-complete/`has_complete_triplet` set, expected to be
-  smaller than 206 since packaging/reassortment signal lives in the termini that a
+  smaller than 223 since packaging/reassortment signal lives in the termini that a
   coding-complete-but-trimmed deposit lacks. This is what actually feeds `Algorithm.py`'s GA
   search (`build_pool`), **not** `usable_pool` — the GA search pool and the validation panel's
   pool are two different, deliberately-diverging call sites as of this pipeline split, even
