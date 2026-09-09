@@ -30,7 +30,7 @@ python rpi_core.py run --seed 20260829   # override the discrimination panel's s
 python rpi_core.py calibrate             # rebuild data/rpi_calibration.json directly
 python rpi_core.py calibrate --stability # branch the calibration across seeds x windows
 python rpi_core.py validate --json output/validation/validation_report.json
-python rpi_core.py score --reference-input . --candidate id:s.fasta,m.fasta,l.fasta
+python rpi_core.py score --reference-input output --output output/score --candidate id:s.fasta,m.fasta,l.fasta
 python -m unittest rpi_core              # full suite, 326 tests
 ```
 
@@ -106,7 +106,7 @@ over public NCBI data.
 **How to run:**
 
 ```bash
-python Algorithm.py --reference-input . --output output/ga_search
+python Algorithm.py --reference-input output --output output/ga_search
 python Algorithm.py --generations 300 --plateau 10000 --output output/ga_search_long
 python Algorithm.py --with-phylogeny --output output/ga_search   # gate4-confirm the winners too (needs mafft/iqtree)
 python Algorithm.py --dump-scored --output output/ga_search      # also dump every scored triplet, not just the winners
@@ -156,7 +156,7 @@ your checkout has a problem.
 ## Step 2 — Run
 
 ```bash
-python3 all_hanta.py --input . --output output
+python3 prepare_dataset.py --input . --output output
 ```
 
 | Argument | Default | Purpose |
@@ -178,14 +178,39 @@ phylogenetics packages, which load only if Stage 2 runs (see below).
 
 ## Pipeline stages
 
-The pipeline is three independent scripts. You can run each one at any time after the raw NCBI
-package exists. No stage requires another stage to have already run:
+The pipeline is three scripts. Stage 1 must run first against the raw NCBI package: it writes a
+reference snapshot (`ortho_reference_isolates.json`, `ortho_reference_genomic.json`,
+`ortho_reference_cds.json`) into `--output`. Stages 2 and 3 no longer read the raw
+`all_hanta/ncbi_dataset/data` package directly — they load that snapshot (`--reference-input`/
+`--output` pointing at Stage 1's output directory) via `prepare_dataset.py`'s
+`load_reference_data`, and raise `FileNotFoundError` if it is missing. Stages 2 and 3 can each be
+re-run any number of times, in either order, once Stage 1 has produced the snapshot:
 
 | Stage | Script | Needs | Produces |
 |---|---|---|---|
-| 1 | `all_hanta.py` | `pandas`/`numpy` only | The core tables above, including `ortho_ml_sequence_table.csv` |
+| 1 | `prepare_dataset.py` | `pandas`/`numpy` only | The core tables above, including `ortho_ml_sequence_table.csv`, plus the reference snapshot Stages 2 and 3 read |
 | 2 | `phylogeny.py` | `mafft`/`iqtree` on PATH, Biopython, `dendropy` | `ortho_reassortment_table.csv`, `phylogenetics/<species>/<segment>/`, `phylogenetics_phylogroup/<phylogroup>/<segment>/` |
 | 3 | `rpi_core.py score` | `mafft`/`iqtree` on PATH, Biopython, `dendropy` | Score a new, not-yet-published candidate genome against the 5-gate framework |
+
+### Completeness definitions (which isolates each stage/tool uses)
+
+The pipeline applies three different completeness filters over the same reference isolate set,
+depending on what the caller needs — these are deliberately different pools, not one pool reused
+everywhere:
+
+- **Coding-complete (206 set)**: isolates where `has_complete_triplet` is true (all three segments
+  coding-complete). Used by Stage 2 (`phylogeny.py`) for tree building.
+- **Terminally-complete (272 set)**: isolates where all three segments are both full-length AND
+  carry genuine 5'/3' termini (`terminally_complete_isolates` in `rpi_core.py`) — the broader
+  search/calibration pool. This is `usable_pool`, and it remains what `rpi_core.py`'s own
+  validation/discrimination panel uses directly.
+- **Strict merged set**: `strict_merged_pool` in `rpi_core.py` — the intersection of the
+  terminally-complete set AND the coding-complete/`has_complete_triplet` set, expected to be
+  smaller than 206 since packaging/reassortment signal lives in the termini that a
+  coding-complete-but-trimmed deposit lacks. This is what actually feeds `Algorithm.py`'s GA
+  search (`build_pool`), **not** `usable_pool` — the GA search pool and the validation panel's
+  pool are two different, deliberately-diverging call sites as of this pipeline split, even
+  though both are derived from the same underlying reference isolate set.
 
 `ortho_risk_table.csv` (Stage 1) is always phylo-blind: it never changes based on whether Stage 2
 ran. To combine the two, join `ortho_reassortment_table.csv` on `isolate_key`. The two scripts do
@@ -206,14 +231,13 @@ this exact reduction rather than reimplementing it.
 ### Stage 2: `phylogeny.py` (MAFFT + IQ-TREE reassortment analysis)
 
 ```bash
-python3 phylogeny.py --input . --output output
+python3 phylogeny.py --output output
 ```
 
 | Argument | Default | Purpose |
 |---|---|---|
-| `--input` | `.` | Package root containing `all_hanta/ncbi_dataset/data` |
-| `--output` | `<input>/output` | Output directory |
-| `--allow-checksum-mismatch` | **off** — the pipeline aborts on a failed integrity check | Pass this flag to make the pipeline continue anyway; it still records the mismatch in `ortho_summary.json` |
+| `--output` | `output` | Stage 1's output directory — contains the reference snapshot this stage reads, and is where it writes its own results |
+| `--allow-checksum-mismatch` | **off** | Accepted for CLI compatibility with Stage 1; Stage 2 reads Stage 1's already-verified reference snapshot and does not re-check `md5sum.txt` itself — the integrity gate is Stage 1's (`prepare_dataset.py`) |
 | `--cluster-threshold` | `0.02` | Cosine k-mer distance for within-species single-linkage clustering |
 | `--min-species-size` | `8` | Minimum assessable isolates before divergence diagnostics (and `divergence_candidate` tagging) are computed |
 | `--verbose` | off | Debug logging |
