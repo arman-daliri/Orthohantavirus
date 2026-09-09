@@ -5,14 +5,12 @@ read directly from a `tree.treefile` already committed under `output/phylogeneti
 (Stage 2's own MAFFT+IQ-TREE output) or is that same file pruned to a local neighborhood
 for legibility -- never rebuilt, realigned, or reinferred.
 
-The one piece of real computation this module does is reconstructing the synthetic tip
-label -> isolate_key mapping (`I0000`, `I0001`, ... -> `isolate_key`) that
-`phylogeny._analyze_group` assigned when it built the committed trees, since that mapping
-is not itself persisted to disk. This is done by calling phylogeny.py's own
-`collect_phylo_candidates` / `group_candidates` (deterministic, sorted by isolate_key --
-see `group_candidates`'s own docstring) with the same inputs and defaults Stage 2's
-committed run used. This re-derives a label ASSIGNMENT, not a tree -- no mafft/iqtree
-subprocess runs anywhere in this module.
+This module never reconstructs which tree group a segment belongs to: tree paths are
+read straight off `ortho_reassortment_table.csv`'s `s_tree_path`/`m_tree_path`/
+`l_tree_path` columns, and each committed tree's synthetic tip names (`I0000`, `I0001`,
+...) are relabeled back to `isolate_key` using the `labels.json` file `phylogeny.py`
+persists alongside each tree group's S/M/L segment directories. No mafft/iqtree
+subprocess runs anywhere in this module, and no grouping logic is re-derived.
 
 BEFORE panel: the 8 `supported_reassortment_candidate` isolates from
 `output/ortho_reassortment_table.csv` (prepare_dataset.py's own genome-wide phylogenetic
@@ -42,10 +40,9 @@ import json
 import logging
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import prepare_dataset as prep
-import phylogeny as ph
 
 SEGMENTS = ("S", "M", "L")
 SLOT_COLOR = {"S": "#1b6ca8", "M": "#2e8b57", "L": "#c1440e"}
@@ -53,82 +50,41 @@ DEFAULT_MIN_TIPS = 8
 
 
 # ============================================================================
-# Ingest + label-map reconstruction (re-derives phylogeny.py's own deterministic
-# grouping; never rebuilds a tree)
+# Ingest + tip relabeling (reads phylogeny.py's persisted labels.json; never
+# reconstructs group membership, never rebuilds a tree)
 # ============================================================================
 
-def load_ingest(
-    input_dir: str = ".", cluster_threshold: float = 0.02, min_species_size: int = 8,
-) -> Tuple[List["prep.IsolateRecord"], Dict[str, "prep.SegmentDivergenceProfile"],
-          Dict[str, List[Tuple[str, str]]], "prep.InputPaths"]:
-    """Mirrors phylogeny.run_phylogeny's ingest chain through cds_index -- the same
-    ~15-line duplication the three-stage split spec already accepts (§3.2), here for a
-    fourth reason: figures need the same isolate population Stage 2 scored, not a
-    filtered output table.
+def load_ingest(output_dir: str = "output") -> List["prep.IsolateRecord"]:
+    """Isolate metadata only (species/country/host, for the AFTER panel's parent-metadata
+    table) -- loaded from Stage 1's reference snapshot, never all_hanta/ncbi_dataset/
+    directly. Grouping/divergence/cds_index are not needed here: phylogeny.py now
+    persists tip-label -> isolate_key maps as labels.json per tree group, and tree paths
+    are read straight off ortho_reassortment_table.csv, so this module never reconstructs
+    group membership itself (see docs/superpowers/specs/2026-09-09-stage1-reference-
+    snapshot-design.md's amendment).
     """
-    paths = prep.resolve_inputs(Path(input_dir))
-    data_records = list(prep.iter_jsonl(paths.data_report))
-    annotation_index = prep.build_annotation_index(prep.iter_jsonl(paths.annotation_report))
-    biosample_index = prep.build_biosample_index(prep.iter_jsonl(paths.biosample_report))
-    genomic_index = prep.parse_fasta(paths.genomic_fasta)
-    protein_index = prep.parse_fasta(paths.protein_fasta)
-
-    accessions = []
-    for record in data_records:
-        transformed, _qc_row = prep.transform_one_record(
-            record, annotation_index, biosample_index, genomic_index, protein_index)
-        if transformed is not None:
-            accessions.append(transformed)
-
-    isolates = prep.build_isolate_records(accessions)
-    prep.assign_kmer_clusters(isolates, cluster_threshold)
-    divergence = prep.compute_segment_divergence(isolates, min_species_size=min_species_size)
-    divergence_by_key = {d.isolate_key: d for d in divergence}
-    cds_index = ph.parse_cds_fasta(paths.cds_fasta)
-    return isolates, divergence_by_key, cds_index, paths
+    return prep.load_reference_data(Path(output_dir)).isolates
 
 
-def group_for_scope(
-    isolates: Sequence["prep.IsolateRecord"], divergence_by_key: Dict[str, Any],
-    cds_index: Dict[str, Any], scope: str, phylo_min_taxa: int = 4,
-) -> Dict[str, List["ph.PhyloCandidate"]]:
-    """by_group exactly as phylogeny._run_phylogenetics_scope built it: same candidate
-    collection, same min-taxa filter, members sorted by isolate_key (group_candidates'
-    own ordering guarantee -- this is what makes label reconstruction deterministic)."""
-    candidates, _ = ph.collect_phylo_candidates(isolates, divergence_by_key, cds_index, scope)
-    by_group, _ = ph.group_candidates(candidates, phylo_min_taxa, scope)
-    return by_group
-
-
-def label_map_for_members(members: Sequence["ph.PhyloCandidate"]) -> Dict[str, "ph.PhyloCandidate"]:
-    """The exact label assignment phylogeny._analyze_group makes: I0000, I0001, ... in
-    the members' given order. Members must already be in the same order _analyze_group
-    received them (group_candidates' sorted-by-isolate_key output) for this to line up
-    with a committed tree.treefile."""
-    labels = [f"I{i:04d}" for i in range(len(members))]
-    return dict(zip(labels, members))
-
-
-def find_group_for_isolate(
-    by_group: Dict[str, List["ph.PhyloCandidate"]], isolate_key: str,
-) -> Tuple[Optional[str], Optional[List["ph.PhyloCandidate"]]]:
-    for group_key, members in by_group.items():
-        if any(m.isolate.isolate_key == isolate_key for m in members):
-            return group_key, members
-    return None, None
-
-
-def load_tree_relabeled(group_dir_root: Path, group_key: str, segment: str,
-                        label_map: Dict[str, "ph.PhyloCandidate"]) -> "Bio.Phylo.BaseTree.Tree":
+def load_tree_relabeled(tree_path: Path) -> "Bio.Phylo.BaseTree.Tree":
+    """Loads a committed tree.treefile and relabels its synthetic tip names (I0000, ...)
+    back to isolate_key, using the labels.json phylogeny.py wrote alongside the group's
+    S/M/L segment directories (tree_path.parent is the segment dir, tree_path.parent.parent
+    is the group dir labels.json lives in).
+    """
     from Bio import Phylo
-    path = group_dir_root / prep.normalize_attr_name(group_key) / segment / "tree.treefile"
-    if not path.exists():
-        raise FileNotFoundError(f"committed tree not found: {path}")
-    tree = Phylo.read(str(path), "newick")
+    if not tree_path.exists():
+        raise FileNotFoundError(f"committed tree not found: {tree_path}")
+    labels_path = tree_path.parent.parent / "labels.json"
+    if not labels_path.exists():
+        raise FileNotFoundError(f"labels.json not found next to {tree_path} "
+                                f"(expected at {labels_path})")
+    label_to_isolate_key = json.loads(labels_path.read_text(encoding="utf-8"))
+    tree = Phylo.read(str(tree_path), "newick")
     for tip in tree.get_terminals():
-        candidate = label_map.get(tip.name)
-        if candidate is not None:
-            tip.name = candidate.isolate.isolate_key
+        isolate_key = label_to_isolate_key.get(tip.name)
+        if isolate_key is not None:
+            tip.name = isolate_key
     return tree
 
 
@@ -243,7 +199,32 @@ def supported_reassortment_rows(reassortment_table: Path) -> List[Dict[str, str]
     return sorted(by_isolate.values(), key=lambda r: r["isolate_key"])
 
 
-def render_before_figures(output_dir: Path, input_dir: str = ".",
+def tree_paths_by_isolate_from_table(reassortment_table: Path) -> Dict[str, Dict[str, str]]:
+    """isolate_key -> {segment: tree_path}, for every analyzed isolate regardless of its
+    reassortment_call -- a GA winner need not be a supported_reassortment_candidate to
+    have a committed tree. Species-scope preferred over phylogroup-scope per isolate,
+    same precedence supported_reassortment_rows uses, and only rows with at least one
+    non-empty tree path are kept (phylo_status='species_below_min_taxa'/'failed' rows
+    have none).
+    """
+    with reassortment_table.open(encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+
+    by_isolate: Dict[str, Dict[str, str]] = {}
+    scope_used: Dict[str, str] = {}
+    for row in rows:
+        paths = {seg: row.get(f"{seg.lower()}_tree_path") or "" for seg in SEGMENTS}
+        if not any(paths.values()):
+            continue
+        key = row["isolate_key"]
+        scope = row["analysis_scope"]
+        if key not in by_isolate or (scope_used[key] == "phylogroup" and scope == "species"):
+            by_isolate[key] = paths
+            scope_used[key] = scope
+    return by_isolate
+
+
+def render_before_figures(output_dir: Path, data_dir: str = "output",
                           reassortment_table: Optional[Path] = None,
                           min_tips: int = DEFAULT_MIN_TIPS) -> List[Path]:
     import matplotlib
@@ -251,36 +232,25 @@ def render_before_figures(output_dir: Path, input_dir: str = ".",
     import matplotlib.pyplot as plt
     from matplotlib.patches import ConnectionPatch
 
-    isolates, divergence_by_key, cds_index, paths = load_ingest(input_dir)
-    by_group = {
-        "species": group_for_scope(isolates, divergence_by_key, cds_index, "species"),
-        "phylogroup": group_for_scope(isolates, divergence_by_key, cds_index, "phylogroup"),
-    }
-    group_dir_root = {
-        "species": paths.output_dir / "phylogenetics",
-        "phylogroup": paths.output_dir / "phylogenetics_phylogroup",
-    }
-
-    table_path = reassortment_table or (paths.output_dir / "ortho_reassortment_table.csv")
+    stage_dir = Path(data_dir)
+    table_path = reassortment_table or (stage_dir / "ortho_reassortment_table.csv")
     rows = supported_reassortment_rows(table_path)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     written: List[Path] = []
     for row in rows:
         isolate_key = row["isolate_key"]
-        scope = row["analysis_scope"]
         discordant = row.get("discordant_segment") or ""
         fig, axes = plt.subplots(1, 3, figsize=(13, 5))
         tip_pos: Dict[str, Tuple[float, float]] = {}
         for ax, segment in zip(axes, SEGMENTS):
-            group_key, members = find_group_for_isolate(by_group[scope], isolate_key)
-            if group_key is None:
+            tree_path_str = row.get(f"{segment.lower()}_tree_path") or ""
+            if not tree_path_str:
                 ax.set_axis_off()
-                ax.text(0.5, 0.5, f"{segment}: not in a\n{scope}-scope tree",
+                ax.text(0.5, 0.5, f"{segment}: not in a committed tree",
                         ha="center", va="center", wrap=True, transform=ax.transAxes)
                 continue
-            label_map = label_map_for_members(members)
-            tree = load_tree_relabeled(group_dir_root[scope], group_key, segment, label_map)
+            tree = load_tree_relabeled(stage_dir / tree_path_str)
             clade = local_neighborhood(tree, isolate_key, min_tips=min_tips)
             color = "#d4380d" if segment == discordant else "#1b6ca8"
             positions = draw_cladogram(ax, clade, highlight_name=isolate_key, highlight_color=color)
@@ -303,10 +273,11 @@ def render_before_figures(output_dir: Path, input_dir: str = ".",
         fig.suptitle(f"{isolate_key}  ({row['species_name']}) -- IQ-TREE-supported "
                     f"topology conflict, discordant segment: {discordant or 'n/a'}",
                     fontsize=10)
+        row_scope = row["analysis_scope"]
         fig.text(0.5, 0.01,
                  "Real, unmodified S/M/L sequences from a single deposited isolate; "
                  "trees pruned to a local neighborhood for legibility (full tree in "
-                 f"output/phylogenetics{'_phylogroup' if scope == 'phylogroup' else ''}/).",
+                 f"output/phylogenetics{'_phylogroup' if row_scope == 'phylogroup' else ''}/).",
                  ha="center", fontsize=7, color="#555555")
         fig.tight_layout(rect=(0, 0.03, 1, 1))
         out_path = output_dir / f"{prep.normalize_attr_name(isolate_key)}.png"
@@ -328,7 +299,7 @@ def parent_metadata(isolate_key: str, by_key: Dict[str, "prep.IsolateRecord"]) -
             "country": isolate.country, "host": isolate.host_name}
 
 
-def render_after_figures(ga_search_json: Path, output_dir: Path, input_dir: str = ".",
+def render_after_figures(ga_search_json: Path, output_dir: Path, data_dir: str = "output",
                          min_tips: int = DEFAULT_MIN_TIPS) -> Tuple[List[Path], Path]:
     import matplotlib
     matplotlib.use("Agg")
@@ -337,16 +308,10 @@ def render_after_figures(ga_search_json: Path, output_dir: Path, input_dir: str 
     payload = json.loads(ga_search_json.read_text(encoding="utf-8"))
     winners = payload["winners"]
 
-    isolates, divergence_by_key, cds_index, paths = load_ingest(input_dir)
+    stage_dir = Path(data_dir)
+    isolates = load_ingest(data_dir)
     by_key = {i.isolate_key: i for i in isolates}
-    by_group = {
-        "species": group_for_scope(isolates, divergence_by_key, cds_index, "species"),
-        "phylogroup": group_for_scope(isolates, divergence_by_key, cds_index, "phylogroup"),
-    }
-    group_dir_root = {
-        "species": paths.output_dir / "phylogenetics",
-        "phylogroup": paths.output_dir / "phylogenetics_phylogroup",
-    }
+    tree_paths_by_isolate = tree_paths_by_isolate_from_table(stage_dir / "ortho_reassortment_table.csv")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     written: List[Path] = []
@@ -357,19 +322,13 @@ def render_after_figures(ga_search_json: Path, output_dir: Path, input_dir: str 
         candidate_id = f"ga-winner-{idx:02d}"
         fig, axes = plt.subplots(1, 3, figsize=(13, 5))
         for ax, segment, donor_key in zip(axes, SEGMENTS, triplet):
-            group_key = members = scope_used = None
-            for scope in ("species", "phylogroup"):
-                group_key, members = find_group_for_isolate(by_group[scope], donor_key)
-                if group_key is not None:
-                    scope_used = scope
-                    break
-            if group_key is None:
+            tree_path_str = tree_paths_by_isolate.get(donor_key, {}).get(segment, "")
+            if not tree_path_str:
                 ax.set_axis_off()
                 ax.text(0.5, 0.5, f"{segment} donor:\nnot in a committed tree",
                         ha="center", va="center", wrap=True, transform=ax.transAxes)
                 continue
-            label_map = label_map_for_members(members)
-            tree = load_tree_relabeled(group_dir_root[scope_used], group_key, segment, label_map)
+            tree = load_tree_relabeled(stage_dir / tree_path_str)
             clade = local_neighborhood(tree, donor_key, min_tips=min_tips)
             draw_cladogram(ax, clade, highlight_name=donor_key, highlight_color=SLOT_COLOR[segment])
             ax.set_title(f"{segment} donor", color=SLOT_COLOR[segment], fontweight="bold")
@@ -410,12 +369,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     before = sub.add_parser("before")
-    before.add_argument("--input", default=".")
+    before.add_argument("--input", default="output",
+                        help="Stage 1/2 output directory (reference snapshot + "
+                             "ortho_reassortment_table.csv + phylogenetics*/)")
     before.add_argument("--output", default="output/figures/before")
     before.add_argument("--min-tips", type=int, default=DEFAULT_MIN_TIPS)
 
     after = sub.add_parser("after")
-    after.add_argument("--input", default=".")
+    after.add_argument("--input", default="output",
+                        help="Stage 1/2 output directory (reference snapshot + "
+                             "ortho_reassortment_table.csv + phylogenetics*/)")
     after.add_argument("--ga-search-json", required=True)
     after.add_argument("--output", default="output/figures/after")
     after.add_argument("--min-tips", type=int, default=DEFAULT_MIN_TIPS)
@@ -441,50 +404,40 @@ if __name__ == "__main__":
 # Tests
 # ============================================================================
 
-class LabelMapReconstructionTest(unittest.TestCase):
-    """The one piece of real computation this module does: reconstructing which
-    synthetic tip label a committed tree assigned to which isolate. Wrong here means
-    every highlighted tip in every figure is silently the wrong isolate."""
+class LoadTreeRelabeledTest(unittest.TestCase):
+    """load_tree_relabeled must relabel a committed tree's synthetic tip names using
+    labels.json persisted one directory up from the segment dir (tree_path.parent.parent).
+    Wrong here means every highlighted tip in every figure is silently the wrong isolate."""
 
-    def _candidate(self, isolate_key):
-        from types import SimpleNamespace as NS
-        isolate = NS(isolate_key=isolate_key)
-        return ph.PhyloCandidate(isolate=isolate, tags=["complete_triplet"], sequences={})
+    def test_relabels_tips_from_sibling_labels_json(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            group_dir = Path(tmp) / "some_group"
+            segment_dir = group_dir / "S"
+            segment_dir.mkdir(parents=True)
+            (segment_dir / "tree.treefile").write_text(
+                "((I0000:0.1,I0001:0.1):0.1,I0002:0.1);", encoding="utf-8")
+            (group_dir / "labels.json").write_text(
+                json.dumps({"I0000": "iso_a", "I0001": "iso_b", "I0002": "iso_c"}),
+                encoding="utf-8")
+            tree = load_tree_relabeled(segment_dir / "tree.treefile")
+            names = {t.name for t in tree.get_terminals()}
+            self.assertEqual(names, {"iso_a", "iso_b", "iso_c"})
 
-    def test_labels_assigned_in_member_order(self):
-        members = [self._candidate(k) for k in ("iso_a", "iso_b", "iso_c")]
-        label_map = label_map_for_members(members)
-        self.assertEqual(label_map["I0000"].isolate.isolate_key, "iso_a")
-        self.assertEqual(label_map["I0001"].isolate.isolate_key, "iso_b")
-        self.assertEqual(label_map["I0002"].isolate.isolate_key, "iso_c")
+    def test_missing_tree_raises_file_not_found(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(FileNotFoundError):
+                load_tree_relabeled(Path(tmp) / "group" / "S" / "tree.treefile")
 
-    def test_matches_group_candidates_own_sort_order(self):
-        """Guard the guard: group_candidates's docstring guarantees members sorted by
-        isolate_key ("so re-runs assign identical tip labels"). label_map_for_members
-        must consume that same order -- pin it against group_candidates itself, using
-        real IsolateRecord-shaped candidates (it reads .species_name internally)."""
-        from types import SimpleNamespace as NS
-        unsorted = ["iso_c", "iso_a", "iso_b"]
-        candidates = [ph.PhyloCandidate(isolate=NS(isolate_key=k, species_name="sp"),
-                                        tags=["complete_triplet"], sequences={})
-                     for k in unsorted]
-        accepted, _ = ph.group_candidates(candidates, min_taxa=1, scope="species")
-        label_map = label_map_for_members(accepted["sp"])
-        self.assertEqual([label_map[f"I{i:04d}"].isolate.isolate_key for i in range(3)],
-                         ["iso_a", "iso_b", "iso_c"])
-
-    def test_find_group_for_isolate_locates_the_right_group(self):
-        members_x = [self._candidate("a"), self._candidate("b")]
-        members_y = [self._candidate("c")]
-        by_group = {"group_x": members_x, "group_y": members_y}
-        key, members = find_group_for_isolate(by_group, "c")
-        self.assertEqual(key, "group_y")
-        self.assertIs(members, members_y)
-
-    def test_find_group_for_isolate_absent_returns_none(self):
-        key, members = find_group_for_isolate({"g": [self._candidate("a")]}, "nope")
-        self.assertIsNone(key)
-        self.assertIsNone(members)
+    def test_missing_labels_json_raises_file_not_found(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            segment_dir = Path(tmp) / "some_group" / "S"
+            segment_dir.mkdir(parents=True)
+            (segment_dir / "tree.treefile").write_text("(I0000:0.1,I0001:0.1);", encoding="utf-8")
+            with self.assertRaises(FileNotFoundError):
+                load_tree_relabeled(segment_dir / "tree.treefile")
 
 
 class LocalNeighborhoodTest(unittest.TestCase):
@@ -554,18 +507,43 @@ class RowSelectionTest(unittest.TestCase):
         self.assertEqual(result[0]["analysis_scope"], "species")
 
 
+class TreePathsByIsolateFromTableTest(unittest.TestCase):
+    def test_species_scope_preferred_and_rows_without_any_tree_path_dropped(self):
+        import tempfile
+        rows = [
+            {"isolate_key": "iso1", "analysis_scope": "phylogroup",
+             "s_tree_path": "phylogenetics_phylogroup/g/S/tree.treefile",
+             "m_tree_path": "", "l_tree_path": ""},
+            {"isolate_key": "iso1", "analysis_scope": "species",
+             "s_tree_path": "phylogenetics/g/S/tree.treefile",
+             "m_tree_path": "phylogenetics/g/M/tree.treefile", "l_tree_path": ""},
+            {"isolate_key": "iso2", "analysis_scope": "species",
+             "s_tree_path": "", "m_tree_path": "", "l_tree_path": ""},
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "ortho_reassortment_table.csv"
+            with path.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
+                writer.writeheader()
+                writer.writerows(rows)
+            result = tree_paths_by_isolate_from_table(path)
+        self.assertEqual(set(result), {"iso1"})
+        self.assertEqual(result["iso1"]["S"], "phylogenetics/g/S/tree.treefile")
+        self.assertEqual(result["iso1"]["M"], "phylogenetics/g/M/tree.treefile")
+
+
 class RenderBeforeFiguresIntegrationTest(unittest.TestCase):
-    """Smoke test against the real committed all_hanta/ package and output/ -- confirms
-    the whole chain (ingest -> grouping -> label reconstruction -> tree load -> prune ->
-    draw) actually produces a non-empty figure for a real supported_reassortment_candidate
-    isolate, not just that each piece works in isolation."""
+    """Smoke test against the real committed reference snapshot and phylogenetics output
+    under output/ -- confirms the whole chain (read CSV tree paths -> relabel from
+    labels.json -> prune -> draw) actually produces a non-empty figure for a real
+    supported_reassortment_candidate isolate, not just that each piece works in isolation."""
 
     def test_renders_at_least_one_real_figure(self):
-        if not Path("all_hanta/ncbi_dataset/data").exists():
-            self.skipTest("all_hanta/ package not present in this environment")
+        if not Path("output/ortho_reference_isolates.json").exists():
+            self.skipTest("output/ reference snapshot not present -- run prepare_dataset.py first")
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
-            written = render_before_figures(Path(tmp), input_dir=".", min_tips=6)
+            written = render_before_figures(Path(tmp), data_dir="output", min_tips=6)
             self.assertGreaterEqual(len(written), 1)
             for path in written:
                 self.assertTrue(path.exists())
