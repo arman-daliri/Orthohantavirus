@@ -2,15 +2,16 @@
 """Orthohantavirus reassortment phylogenetics stage (MAFFT + IQ-TREE).
 
 Stage 2 of the three-stage pipeline documented in README.md's "Pipeline stages" section.
-Analyzes the reference isolate set ingested from an NCBI Datasets Orthohantavirus package
-for real, tree-based reassortment evidence -- the rigorous replacement for the k-mer
-divergence diagnostics prepare_dataset.py (Stage 1) still emits as informational-only columns.
+Analyzes the reference isolate set from Stage 1's snapshot for real, tree-based
+reassortment evidence -- the rigorous replacement for the k-mer divergence diagnostics
+prepare_dataset.py (Stage 1) still emits as informational-only columns.
 
-Independent of prepare_dataset.py's output files: re-derives isolates, the genomic/protein FASTA
-index, and the CDS index from --input itself, the same way prepare_dataset.py's own run_pipeline
-did before this code was split out (docs/superpowers/specs/2026-08-13-three-stage-pipeline-
-split-design.md has the split rationale and the exact symbol inventory this file was
-extracted from). Reuses prepare_dataset.py's ingest primitives via `import prepare_dataset as prep`.
+Reads ONLY output/ortho_reference_isolates.json and output/ortho_reference_cds.json (via
+prep.load_reference_data) -- never all_hanta/ncbi_dataset/ directly. Stage 1 is the sole
+reader of the raw NCBI package; this stage re-applies its own k-mer clustering and
+divergence diagnostics (assign_kmer_clusters / compute_segment_divergence) to the loaded
+isolates, since those need this stage's own --cluster-threshold / --min-species-size
+values, which can differ from Stage 1's defaults.
 """
 
 from __future__ import annotations
@@ -703,6 +704,8 @@ def _analyze_group(
     group_dir = group_dir_root / prep.normalize_attr_name(group_key)
     labels = [f"I{i:04d}" for i in range(len(members))]
     label_map: Dict[str, PhyloCandidate] = dict(zip(labels, members))
+    prep.safe_write_json(group_dir / "labels.json",
+                         {label: candidate.isolate.isolate_key for label, candidate in label_map.items()})
 
     outgroup_label = _resolve_outgroup_label(label_map, args.phylo_outgroup) if args.phylo_outgroup else None
     if args.phylo_outgroup and outgroup_label is None:
@@ -921,35 +924,10 @@ def phylo_call_by_isolate(phylo_rows: Sequence[Dict[str, Any]]) -> Dict[str, str
     return best
 
 
-def run_phylogeny(paths: "prep.InputPaths", args: argparse.Namespace) -> None:
-    """Mirrors prepare_dataset.py's run_pipeline() ingest chain exactly through
-    compute_segment_divergence (needed for divergence_by_key, which
-    collect_phylo_candidates uses to tag divergence_candidate isolates) -- see spec
-    section 3.2 for why this ~duplication is a deliberate choice, not an oversight.
-    """
-    logging.info("Verifying package integrity against NCBI md5sum.txt")
-    checksums = prep.verify_inputs(paths)
-    prep.report_checksums(checksums, allow_mismatch=args.allow_checksum_mismatch)
-
-    logging.info("Loading reports")
-    data_records = list(prep.iter_jsonl(paths.data_report))
-    annotation_index = prep.build_annotation_index(prep.iter_jsonl(paths.annotation_report))
-    biosample_index = prep.build_biosample_index(prep.iter_jsonl(paths.biosample_report))
-
-    logging.info("Parsing FASTA")
-    genomic_index = prep.parse_fasta(paths.genomic_fasta)
-    protein_index = prep.parse_fasta(paths.protein_fasta)
-
-    logging.info("Transforming accession records")
-    accessions = []
-    for record in data_records:
-        transformed, _qc_row = prep.transform_one_record(
-            record, annotation_index, biosample_index, genomic_index, protein_index)
-        if transformed is not None:
-            accessions.append(transformed)
-
-    logging.info("Reconstructing isolates")
-    isolates = prep.build_isolate_records(accessions)
+def run_phylogeny(output_dir: Path, args: argparse.Namespace) -> None:
+    logging.info("Loading Stage 1 reference snapshot from %s", output_dir)
+    reference = prep.load_reference_data(output_dir)
+    isolates = reference.isolates
     logging.info("  %s isolates, %s complete triplets",
                  len(isolates), sum(1 for i in isolates if i.has_complete_triplet))
 
@@ -957,13 +935,12 @@ def run_phylogeny(paths: "prep.InputPaths", args: argparse.Namespace) -> None:
     divergence = prep.compute_segment_divergence(isolates, min_species_size=args.min_species_size)
     divergence_by_key = {d.isolate_key: d for d in divergence}
 
-    logging.info("Loading CDS")
-    cds_index = prep.parse_cds_fasta(paths.cds_fasta)
+    cds_index = reference.cds_index
     logging.info("  cds: %s accessions with at least one CDS", len(cds_index))
 
     logging.info("Running phylogenetics stage")
-    phylo_rows = run_phylogenetics_stage(isolates, divergence_by_key, cds_index, paths.output_dir, args)
-    prep.safe_write_csv(paths.output_dir / "ortho_reassortment_table.csv", phylo_rows)
+    phylo_rows = run_phylogenetics_stage(isolates, divergence_by_key, cds_index, output_dir, args)
+    prep.safe_write_csv(output_dir / "ortho_reassortment_table.csv", phylo_rows)
     logging.info("Done. %s candidate rows written to ortho_reassortment_table.csv", len(phylo_rows))
 
 
@@ -972,9 +949,9 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         description="Orthohantavirus phylogenetics stage: MAFFT + IQ-TREE reassortment analysis "
                     "over the reference isolate set (Stage 2 of the three-stage pipeline)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--input", default=".",
-                        help="Package root containing all_hanta/ncbi_dataset/data")
-    parser.add_argument("--output", help="Output directory; defaults to <input>/output")
+    parser.add_argument("--output", default="output",
+                        help="Stage 1's output directory (contains the reference snapshot "
+                             "this stage reads, and where it writes its own results)")
     parser.add_argument("--allow-checksum-mismatch", action="store_true",
                         help="Continue even if inputs do not match NCBI's md5sum.txt")
     parser.add_argument("--cluster-threshold", type=float, default=0.02,
@@ -1007,12 +984,12 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
-    paths = prep.resolve_inputs(Path(args.input), output=Path(args.output) if args.output else None)
-    prep.configure_logging(paths.output_dir / "ortho_phylogeny.log", verbose=args.verbose)
+    output_dir = Path(args.output)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    prep.configure_logging(output_dir / "ortho_phylogeny.log", verbose=args.verbose)
     logging.info("Orthohantavirus phylogenetics stage (Stage 2)")
-    logging.info("Package: %s", paths.data_dir)
-    logging.info("Output : %s", paths.output_dir)
-    run_phylogeny(paths, args)
+    logging.info("Output: %s", output_dir)
+    run_phylogeny(output_dir, args)
     return 0
 
 
@@ -1031,6 +1008,7 @@ if __name__ == "__main__":
 # the end-to-end test, since neither binary is installed in this environment -- skipped
 # automatically if Bio.Phylo/dendropy aren't importable.
 
+import json
 import random
 import sys
 import tempfile
@@ -1474,6 +1452,31 @@ with open(f"{prefix}.treefile", "w") as f:
         self.assertIn("not a member of group Orthohantavirus dobravaense", messages)
         # hantanense's tree DOES contain it -- no such message for that group.
         self.assertNotIn("not a member of group Orthohantavirus hantanense", messages)
+
+
+@unittest.skipUnless(_HAVE_PHYLO_DEPS, "biopython/dendropy not installed")
+class GroupLabelsPersistedTest(PhylogeneticsScopeEndToEndTest):
+    """_analyze_group must persist label -> isolate_key so figures.py never has to
+    reconstruct group membership to relabel a committed tree.
+
+    Reuses PhylogeneticsScopeEndToEndTest's fake mafft/iqtree fixture (its setUp) rather
+    than inventing a second fixture mechanism.
+    """
+
+    def test_labels_json_matches_label_assignment(self):
+        by_group, _ = group_candidates(self.candidates, self._args("species").phylo_min_taxa, "species")
+        group_key, members = sorted(by_group.items())[0]
+        group_dir_root = self.output_dir / "phylogenetics"
+
+        _analyze_group(group_key, "species", members, group_dir_root, self.output_dir,
+                        self._args("species"), str(self.mafft_bin), str(self.iqtree_bin))
+
+        group_dir = group_dir_root / prep.normalize_attr_name(group_key)
+        labels_path = group_dir / "labels.json"
+        self.assertTrue(labels_path.exists())
+        written = json.loads(labels_path.read_text(encoding="utf-8"))
+        expected = {f"I{i:04d}": m.isolate.isolate_key for i, m in enumerate(members)}
+        self.assertEqual(written, expected)
 
 
 class PhyloCallByIsolateTest(unittest.TestCase):
