@@ -122,6 +122,14 @@ scored (not just the winners), one row per triplet, with the same RPI fields
 Gate 1 fields) plus `fitness` and the `S`/`M`/`L` donor isolate keys. Purely additive:
 scoring, selection, and every existing output are unchanged by `--dump-scored`.
 
+**Runtime.** On the 16,028-record package (strict merged pool: 94 isolates), default settings
+(`--population 150 --generations 100 --plateau 20`) typically plateau-stop at generation ~21
+because the fitness landscape is flat after the first good triplet is found. Measured: ~11 min
+with `--dump-scored` (scoring 1,734 unique triplets). The `--generations 300 --plateau 10000`
+long run (forces the full 300 generations) takes ~25 min. Gate4 winner confirmation
+(`--with-phylogeny`) adds hours — each winner's comparator trees use the same mafft+iqtree stack
+as Stage 2.
+
 ---
 
 ## Step 0 — Download the data
@@ -169,7 +177,7 @@ python3 prepare_dataset.py --input . --output output
 | `--min-species-size` | `8` | Minimum assessable isolates before divergence diagnostics are computed |
 | `--verbose` | off | Debug logging |
 
-The transform is GIL-bound and runs serially. A full run takes about 16 seconds on the
+The transform is GIL-bound and runs serially. A full run takes about 26 seconds on the
 16,028-record package.
 
 This step needs Python 3.11 or newer (it uses `datetime.UTC`) plus `pandas` and `numpy`. It does
@@ -216,13 +224,14 @@ everywhere:
   carry genuine 5'/3' termini (`terminally_complete_isolates` in `rpi_core.py`) — the broader
   search/calibration pool. This is `usable_pool`, and it remains what `rpi_core.py`'s own
   validation/discrimination panel uses directly.
-- **Strict merged set**: `strict_merged_pool` in `rpi_core.py` — the intersection of the
-  terminally-complete set AND the coding-complete/`has_complete_triplet` set, expected to be
-  smaller than 223 since packaging/reassortment signal lives in the termini that a
-  coding-complete-but-trimmed deposit lacks. This is what actually feeds `Algorithm.py`'s GA
-  search (`build_pool`), **not** `usable_pool` — the GA search pool and the validation panel's
-  pool are two different, deliberately-diverging call sites as of this pipeline split, even
-  though both are derived from the same underlying reference isolate set.
+- **Strict merged set (94 set)**: `strict_merged_pool` in `rpi_core.py` — the intersection of the
+  terminally-complete set AND the coding-complete/`has_complete_triplet` set (94 wild, classified
+  isolates on this package after reserved-key removal). Smaller than either parent set because
+  packaging/reassortment signal lives in the termini that a coding-complete-but-trimmed deposit
+  lacks. This is what actually feeds `Algorithm.py`'s GA search (`build_pool`), **not**
+  `usable_pool` — the GA search pool and the validation panel's pool are two different,
+  deliberately-diverging call sites as of this pipeline split, even though both are derived from
+  the same underlying reference isolate set.
 
 `ortho_risk_table.csv` (Stage 1) is always phylo-blind: it never changes based on whether Stage 2
 ran. To combine the two, join `ortho_reassortment_table.csv` on `isolate_key`. The two scripts do
@@ -301,6 +310,20 @@ scales with the number of candidate isolates per species and with CDS length (L 
 slowest to align, about 6.4 kb). A species with a handful of taxa finishes in seconds. A species
 with hundreds of qualifying isolates (PUUV, TULV, HTNV, SEOV in this package) can take much
 longer. There is no built-in subsampling — the pipeline analyzes every qualifying isolate.
+
+On the 16,028-record package with default settings, measured wall-clock (2026-09-06 serial
+baseline, 2026-09-10 with `--phylo-workers 4`):
+
+| Scope | Serial | `--phylo-workers 4` | Bottleneck |
+|---|---|---|---|
+| species | ~201 min | ~98 min | puumalaense (425 taxa, ~98 min alone) |
+| phylogroup | ~359 min | ~212 min | arvicolinae_borne (755 taxa, ~212 min alone) |
+| **both (default)** | **~560 min (~9.3 hr)** | **~310 min (~5.2 hr)** | |
+
+The speedup ceiling is set by the largest group in each scope: once its four workers are all
+occupied by large groups, the giant simply runs to completion at its own pace. Workers > 4 buy
+nothing on this dataset (species scope has exactly 4 groups that individually exceed 28 min;
+phylogroup scope has exactly 4 groups total).
 
 ---
 
