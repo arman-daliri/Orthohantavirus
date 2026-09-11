@@ -127,8 +127,11 @@ scoring, selection, and every existing output are unchanged by `--dump-scored`.
 because the fitness landscape is flat after the first good triplet is found. Measured: ~11 min
 with `--dump-scored` (scoring 1,734 unique triplets). The `--generations 300 --plateau 10000`
 long run (forces the full 300 generations) takes ~25 min. Gate4 winner confirmation
-(`--with-phylogeny`) adds hours — each winner's comparator trees use the same mafft+iqtree stack
-as Stage 2.
+(`--with-phylogeny`) adds ~328 min (~5.5 hr) for the 10-winner gate4 phase on Windows (same
+mafft+iqtree stack as Stage 2), bringing the total `--with-phylogeny` run to ~339 min (~5.7 hr).
+Measured gate4 verdicts (94-isolate pool, 10 winners): 7 `no_conflict`,
+3 `weak_signal_low_bootstrap_support`. The `candidate_phylogenetics/` folder under `--output`
+holds the per-winner alignment and tree files produced by this step.
 
 ---
 
