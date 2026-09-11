@@ -3149,13 +3149,11 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
     # ThreadPoolExecutor added 15,991 futures of overhead for no parallelism.
     logging.info("Transforming accession records")
     accessions: List[AccessionRecord] = []
-    qc_rows: List[Dict[str, Any]] = []
     for record in data_records:
-        transformed, qc_row = transform_one_record(
+        transformed, _ = transform_one_record(
             record, annotation_index, biosample_index, genomic_index, protein_index)
         if transformed is not None:
             accessions.append(transformed)
-        qc_rows.append(qc_row)
     logging.info("  %s transformed, %s failed", len(accessions), len(data_records) - len(accessions))
 
     curation_issues = audit_reservoir_curation(accessions)
@@ -3173,42 +3171,13 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
     logging.info("Clustering by k-mer distance (threshold %.3f)", args.cluster_threshold)
     assign_kmer_clusters(isolates, args.cluster_threshold)
 
-    logging.info("Computing per-segment divergence diagnostics")
-    divergence = compute_segment_divergence(isolates, min_species_size=args.min_species_size)
-    divergence_by_key = {d.isolate_key: d for d in divergence}
-    assessable = sum(1 for d in divergence if d.assessable)
-    incongruent = sum(1 for i in isolates if i.taxonomic_incongruence)
-    logging.info("  %s assessable, %s with taxonomic incongruence", assessable, incongruent)
-    logging.warning(
-        "Reassortment is NOT called by this pipeline. The k-mer classifier that used to do "
-        "so failed validation against the literature (it ranked ANDV above PUUV, the exact "
-        "inverse of reported frequencies) because the metric tracks within-species "
-        "diversity and sample size, not tree topology. Assessable isolates are marked "
-        "'requires_phylogenetic_confirmation'; confirm candidates with MAFFT + IQ-TREE.")
-
-    logging.info("Building ML tables")
-    ml_rows, scaling = build_ml_tables(accessions, isolates, divergence_by_key, args.max_features)
-
     out = paths.output_dir
 
     logging.info("Writing outputs")
     output_digests: Dict[str, str] = {}
 
-    def write_csv(name: str, rows: Sequence[Dict[str, Any]]) -> None:
-        output_digests[name] = safe_write_csv(out / name, rows)
-
     def write_json(name: str, payload: Any) -> None:
         output_digests[name] = safe_write_json(out / name, payload)
-
-    write_csv("ortho_accession_table.csv", build_accession_rows(accessions))
-    write_csv("ortho_species_table.csv", build_species_rows(accessions, isolates))
-    write_csv("ortho_isolate_table.csv", build_isolate_rows(isolates, divergence_by_key))
-    write_csv("ortho_host_table.csv", build_host_rows(accessions, isolates))
-    write_csv("ortho_ml_feature_matrix.csv", ml_rows)
-    write_csv("ortho_ml_sequence_table.csv", build_ml_sequence_rows(isolates, genomic_index))
-    write_csv("ortho_suppressed.csv", build_suppressed_rows(accessions, isolates))
-    write_csv("ortho_qc_report.csv", qc_rows)
-    write_json("ortho_feature_scaling.json", scaling)
 
     logging.info("Loading CDS index")
     cds_index = parse_cds_fasta(paths.cds_fasta)
@@ -3236,33 +3205,10 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
         },
     })
 
-    summary = summarize(accessions, isolates, divergence, qc_rows, checksums,
-                        curation_issues, paths, args.cluster_threshold,
-                        args.min_species_size, data_records,
-                        genomic_index=genomic_index, cds_index=cds_index,
-                        output_digests=output_digests)
-    write_json("ortho_summary.json", summary)
-
-    # ortho_risk_table.csv is always phylo-blind now -- Stage 2 (phylogeny.py) is a separate
-    # script/run; combine its ortho_reassortment_table.csv on isolate_key if you need both
-    # (see README's Outputs table). This is byte-identical to the pre-split behavior when
-    # --phylogenetics wasn't passed, which was already the common case.
-    write_csv("ortho_risk_table.csv", build_risk_rows(isolates, divergence_by_key))
-
-    # Written once, here, after every output this file (Stage 1) produces -- including the
-    # risk table above -- is already on disk, so it always covers exactly what's present
-    # in `out` from THIS script's run. It does not cover ortho_reassortment_table.csv --
-    # that's Stage 2's (phylogeny.py) output, written independently by a separate run and
-    # never touching this manifest. Run `sha256sum -c ortho_output_checksums.txt` from the
-    # output directory to confirm nothing was truncated or altered afterward (by an
-    # interrupted write, a bad copy, git-lfs mishandling, etc).
-    write_output_checksums(out / "ortho_output_checksums.txt", output_digests)
-
+    species_names = {a.species_name for a in accessions if a.species_name}
     logging.info("Done. %s accessions -> %s species -> %s isolates (%s complete triplets)",
-                 summary["counts"]["accession_records"],
-                 summary["counts"]["canonical_species"],
-                 summary["counts"]["isolates"],
-                 summary["counts"]["complete_triplets"])
+                 len(accessions), len(species_names), len(isolates),
+                 sum(1 for i in isolates if i.has_complete_triplet))
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -3277,11 +3223,6 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
                              "(the mismatch is still recorded in ortho_summary.json)")
     parser.add_argument("--cluster-threshold", type=float, default=0.02,
                         help="Cosine k-mer distance for single-linkage clustering within a species")
-    parser.add_argument("--max-features", type=int, default=200,
-                        help="Number of top-variance k-mer features in the ML matrix")
-    parser.add_argument("--min-species-size", type=int, default=8,
-                        help="Minimum assessable isolates in a species before reassortment "
-                             "is called at all")
     # --concordance-tolerance / --discordance-threshold were removed along with the
     # withdrawn reassortment classifier; no threshold made its ranking agree with the
     # literature, so exposing one invited false confidence.
