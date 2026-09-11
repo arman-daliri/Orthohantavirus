@@ -18,7 +18,7 @@ tools/_download_meta.json
 # Stage 1's reference snapshot -- derived from all_hanta/ (also gitignored, see Step 1 in
 # the README), so committing it without its source would be misleading provenance. It
 # regenerates deterministically in ~16 seconds; run prepare_dataset.py before Stages 2/3.
-output/ortho_reference_isolates.json
-output/ortho_reference_genomic.json
-output/ortho_reference_cds.json
-output/ortho_reference_snapshot_manifest.json
+output/phylo_rpi_ga_isolates.json
+output/phylo_rpi_ga_genomic.json
+output/phylo_rpi_ga_cds.json
+output/phylo_rpi_ga_snapshot_manifest.json

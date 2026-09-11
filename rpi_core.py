@@ -3581,7 +3581,7 @@ class KmerIdentityAndNearestSpeciesGoldenMasterTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        if not (Path("output") / "ortho_reference_isolates.json").exists():
+        if not (Path("output") / "phylo_rpi_ga_isolates.json").exists():
             raise unittest.SkipTest("output/ reference snapshot not present -- run prepare_dataset.py first")
         reference = prep.load_reference_data(Path("output"))
         precomputed = _build_precomputed(reference)
@@ -4190,7 +4190,7 @@ class LoadReferenceDataIntegrationTest(unittest.TestCase):
 
     def test_loads_real_package_when_present(self):
         root = Path(__file__).parent / "output"
-        if not (root / "ortho_reference_isolates.json").exists():
+        if not (root / "phylo_rpi_ga_isolates.json").exists():
             self.skipTest("output/ reference snapshot not present -- run prepare_dataset.py first")
         data = prep.load_reference_data(root)
         self.assertGreater(len(data.isolates), 1000)
@@ -4272,7 +4272,7 @@ class EndToEndRealDataTest(unittest.TestCase):
 
     def setUp(self):
         root = Path(__file__).parent / "output"
-        if not (root / "ortho_reference_isolates.json").exists():
+        if not (root / "phylo_rpi_ga_isolates.json").exists():
             self.skipTest("output/ reference snapshot not present -- run prepare_dataset.py first")
         self.reference = prep.load_reference_data(root)
 
@@ -5407,7 +5407,7 @@ class SpeciesConsensusCdsWindowGoldenMasterTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        if not (Path("output") / "ortho_reference_isolates.json").exists():
+        if not (Path("output") / "phylo_rpi_ga_isolates.json").exists():
             raise unittest.SkipTest("output/ reference snapshot not present -- run prepare_dataset.py first")
         cls.reference = prep.load_reference_data(Path("output"))
 
@@ -6633,28 +6633,10 @@ def _segment_is_full_length(reference: "prep.ReferenceData",
     return bool(sequence) and low <= len(sequence) <= high
 
 
-def terminally_complete_isolates(
-        reference: "prep.ReferenceData") -> List["prep.IsolateRecord"]:
-    """Wild, classified isolates whose S, M and L are all full-length AND terminal.
-
-    Returned in `isolate_key` order so the pool is deterministic regardless of the order
-    `load_reference_data` happens to yield -- the same class of set-ordering
-    nondeterminism that WS0 fixed in gate1_check.
-    """
-    pool = []
-    for isolate in reference.isolates:
-        if not _is_wild(isolate):
-            continue
-        if isolate.species_name == UNCLASSIFIED_SPECIES_LABEL or not isolate.species_name:
-            continue
-        if not all(_segment_is_full_length(reference, isolate, s) for s in SEGMENTS):
-            continue
-        if not all(has_terminal_panhandle(
-                genomic_sequence(reference, segment_accession(isolate, s)))
-                for s in SEGMENTS):
-            continue
-        pool.append(isolate)
-    return sorted(pool, key=lambda i: i.isolate_key)
+# terminally_complete_isolates is defined in prepare_dataset.py (single source of truth)
+# and imported here so callers that patch "rpi_core.terminally_complete_isolates" keep
+# working unchanged.
+terminally_complete_isolates = prep.terminally_complete_isolates
 
 
 # ---------------------------------------------------------------------------
@@ -8148,16 +8130,15 @@ def usable_pool(
         reference: "prep.ReferenceData",
         reserved_keys: Optional[Set[str]] = None) -> List["prep.IsolateRecord"]:
     """Terminally complete, wild isolates, excluding calibration's reserved 42 (binding
-    constraint, PROJECT-STATE.md section 7b). Reuses rpi_calibration.py's own filter
-    (`terminally_complete_isolates`) rather than a separate implementation -- both this
-    module's groups and the calibration panel need the SAME notion of "a real, complete,
-    genuinely-terminal genome" for the same reason (D2/WS3.1's finding that 48%+ of
-    deposits are trimmed of their true termini and would corrupt any panhandle-adjacent
-    computation).
+    constraint, PROJECT-STATE.md section 7b). Uses prep.terminally_complete_isolates --
+    the single source of truth defined in prepare_dataset.py -- so both this module's
+    groups and the calibration panel share the same notion of "a real, complete,
+    genuinely-terminal genome" (D2/WS3.1's finding that 48%+ of deposits are trimmed
+    of their true termini and would corrupt any panhandle-adjacent computation).
     """
     if reserved_keys is None:
         reserved_keys = reserved_calibration_isolate_keys()
-    pool = cal.terminally_complete_isolates(reference)
+    pool = terminally_complete_isolates(reference)
     return [i for i in pool if i.isolate_key not in reserved_keys]
 
 
@@ -8626,7 +8607,7 @@ class CountryContinentTest(unittest.TestCase):
         module's group builders. A new country in a future all_hanta/ update must be
         added to COUNTRY_CONTINENT explicitly (see its own comment on why a KeyError,
         not a permissive default, is the intended failure when one does)."""
-        if not (Path("output") / "ortho_reference_isolates.json").exists():
+        if not (Path("output") / "phylo_rpi_ga_isolates.json").exists():
             self.skipTest("output/ reference snapshot not present -- run prepare_dataset.py first")
         reference = prep.load_reference_data(Path("output"))
         pool = usable_pool(reference)
@@ -8640,7 +8621,7 @@ class ReservedCalibrationIsolateKeysTest(unittest.TestCase):
         self.assertEqual(len(keys), 42)
 
     def test_usable_pool_excludes_every_reserved_key(self):
-        if not (Path("output") / "ortho_reference_isolates.json").exists():
+        if not (Path("output") / "phylo_rpi_ga_isolates.json").exists():
             self.skipTest("output/ reference snapshot not present -- run prepare_dataset.py first")
         reference = prep.load_reference_data(Path("output"))
         reserved = reserved_calibration_isolate_keys()
@@ -9590,7 +9571,7 @@ def _validate_main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     root = Path(args.reference_input)
-    if not (root / "ortho_reference_isolates.json").exists():
+    if not (root / "phylo_rpi_ga_isolates.json").exists():
         print(f"ERROR: {root}/ reference snapshot not found "
               f"(run prepare_dataset.py first).", file=sys.stderr)
         return 2

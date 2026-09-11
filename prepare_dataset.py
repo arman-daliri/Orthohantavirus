@@ -94,6 +94,72 @@ COMPLETE_LENGTH_TOLERANCE = 0.85
 
 KMER_K = 3
 
+# NCBI's species name for deposits with no accepted ICTV assignment. Excluded from
+# terminally_complete_isolates because "non-cognate = across species" requires a known species.
+UNCLASSIFIED_SPECIES_LABEL = "unclassified Orthohantavirus"
+
+# Genus-conserved genomic 5'/3' termini forming the intramolecular panhandle (D2/WS3.1).
+# A deposit missing them is missing its actual termini: GenBank submissions are routinely
+# trimmed and SEGMENT_LENGTH_RANGE does not catch it -- a segment 30 nt short at each end
+# is still inside the ICTV band. Source: rpi_calibration.py WS3.1 measurement.
+HANTAVIRUS_GENOMIC_5P_TAG = "TAGTAGTA"
+HANTAVIRUS_GENOMIC_3P_TAG = "TACTACTA"  # == reverse complement of 5P tag
+
+
+def has_genomic_panhandle_termini(sequence: str) -> bool:
+    """Does this deposit carry both genuine genomic termini, or is it trimmed?
+
+    48% of the wild full-length triplet pool carries NEITHER tag (rpi_calibration.py WS3.1).
+    A truncated deposit's "terminal window" scores noise, not a panhandle.
+    """
+    sequence = sequence.strip().upper()
+    return (sequence.startswith(HANTAVIRUS_GENOMIC_5P_TAG)
+            and sequence.endswith(HANTAVIRUS_GENOMIC_3P_TAG))
+
+
+def terminally_complete_isolates(
+        reference: "ReferenceData") -> List["IsolateRecord"]:
+    """Wild, classified isolates whose S, M, and L are all full-length AND terminal.
+
+    'Terminal' means both HANTAVIRUS_GENOMIC_5P_TAG at the 5' end and
+    HANTAVIRUS_GENOMIC_3P_TAG at the 3' end are present in the deposited sequence.
+    Returned in isolate_key order for deterministic results regardless of insertion order
+    in load_reference_data.
+
+    This is the single source of truth for the terminally-complete predicate. rpi_core.py
+    imports and re-exports this function so its own callers (usable_pool, calibration panel)
+    continue to use the same definition.
+    """
+    pool: List["IsolateRecord"] = []
+    for isolate in reference.isolates:
+        if isolate.is_lab_derived or isolate.is_vaccine_strain:
+            continue
+        if not isolate.species_name or isolate.species_name == UNCLASSIFIED_SPECIES_LABEL:
+            continue
+        qualified = True
+        for seg_letter, accession in (("S", isolate.s_accession),
+                                       ("M", isolate.m_accession),
+                                       ("L", isolate.l_accession)):
+            if not accession:
+                qualified = False
+                break
+            record = (reference.genomic_index.get(accession)
+                      or reference.genomic_index.get(accession.split(".")[0]))
+            if not record or not record.sequence:
+                qualified = False
+                break
+            lo, hi = SEGMENT_LENGTH_RANGE[seg_letter]
+            if not (lo <= len(record.sequence) <= hi):
+                qualified = False
+                break
+            if not has_genomic_panhandle_termini(record.sequence):
+                qualified = False
+                break
+        if qualified:
+            pool.append(isolate)
+    return sorted(pool, key=lambda i: i.isolate_key)
+
+
 # Ranks pulled out of virus.lineage, ordered from broad to narrow. This is the
 # "until there is no bigger group" hierarchy -- it is already present in every record.
 LINEAGE_RANKS = [
@@ -1005,16 +1071,16 @@ def load_reference_data(output_dir: Path) -> ReferenceData:
     (not a silent empty result) if Stage 1 hasn't been run against this output_dir yet --
     a missing snapshot is a setup error, not an empty-dataset condition.
     """
-    isolates_path = output_dir / "ortho_reference_isolates.json"
-    genomic_path = output_dir / "ortho_reference_genomic.json"
-    cds_path = output_dir / "ortho_reference_cds.json"
+    isolates_path = output_dir / "phylo_rpi_ga_isolates.json"
+    genomic_path = output_dir / "phylo_rpi_ga_genomic.json"
+    cds_path = output_dir / "phylo_rpi_ga_cds.json"
     for path in (isolates_path, genomic_path, cds_path):
         if not path.exists():
             raise FileNotFoundError(
                 f"Reference snapshot file missing: {path}. Run prepare_dataset.py "
                 f"(Stage 1) against this output directory first.")
 
-    manifest_path = output_dir / "ortho_reference_snapshot_manifest.json"
+    manifest_path = output_dir / "phylo_rpi_ga_snapshot_manifest.json"
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         snapshot_version = manifest.get("pipeline_version")
@@ -3037,9 +3103,9 @@ def summarize(
             "genomic_accession_count": indexed_record_count(genomic_index),
             "cds_indexed_accession_count": len(cds_index),
             "files": {
-                "ortho_reference_isolates.json": output_digests.get("ortho_reference_isolates.json"),
-                "ortho_reference_genomic.json": output_digests.get("ortho_reference_genomic.json"),
-                "ortho_reference_cds.json": output_digests.get("ortho_reference_cds.json"),
+                "phylo_rpi_ga_isolates.json": output_digests.get("phylo_rpi_ga_isolates.json"),
+                "phylo_rpi_ga_genomic.json": output_digests.get("phylo_rpi_ga_genomic.json"),
+                "phylo_rpi_ga_cds.json": output_digests.get("phylo_rpi_ga_cds.json"),
             },
         },
 
@@ -3184,24 +3250,79 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
     logging.info("  cds: %s accessions with at least one CDS", len(cds_index))
 
     logging.info("Writing reference snapshot")
-    write_json("ortho_reference_isolates.json", [asdict(i) for i in isolates])
+    write_json("phylo_rpi_ga_isolates.json", [asdict(i) for i in isolates])
     # genomic_index dual-keys each record under its versioned accession and its base
     # accession (see parse_fasta); dedupe by identity so the snapshot holds one row per
     # record, not two. load_reference_data reconstructs the dual keying from this flat
     # list on read.
     unique_genomic_records = {id(r): r for r in genomic_index.values()}.values()
-    write_json("ortho_reference_genomic.json", [asdict(r) for r in unique_genomic_records])
-    write_json("ortho_reference_cds.json", cds_index)
+    write_json("phylo_rpi_ga_genomic.json", [asdict(r) for r in unique_genomic_records])
+    write_json("phylo_rpi_ga_cds.json", cds_index)
     # Stamp the snapshot with the pipeline version that wrote it, so a snapshot left over
     # from a code version whose schema/semantics have since changed is detectable rather
     # than silently readable -- see load_reference_data's staleness check.
-    write_json("ortho_reference_snapshot_manifest.json", {
+    write_json("phylo_rpi_ga_snapshot_manifest.json", {
         "pipeline_version": VERSION,
         "generated_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "files": {
-            "ortho_reference_isolates.json": output_digests.get("ortho_reference_isolates.json"),
-            "ortho_reference_genomic.json": output_digests.get("ortho_reference_genomic.json"),
-            "ortho_reference_cds.json": output_digests.get("ortho_reference_cds.json"),
+            "phylo_rpi_ga_isolates.json": output_digests.get("phylo_rpi_ga_isolates.json"),
+            "phylo_rpi_ga_genomic.json": output_digests.get("phylo_rpi_ga_genomic.json"),
+            "phylo_rpi_ga_cds.json": output_digests.get("phylo_rpi_ga_cds.json"),
+        },
+    })
+
+    # ---- GA pool files (consumed by Algorithm.py) --------------------------------
+    # Build an in-memory ReferenceData so terminally_complete_isolates can look up
+    # genomic sequences. cds_index is not needed for the predicate but ReferenceData
+    # requires the field; pass the already-loaded index (cheap reference, not a copy).
+    _pool_ref = ReferenceData(isolates=isolates, genomic_index=genomic_index,
+                              cds_index=cds_index)
+    terminal_pool = terminally_complete_isolates(_pool_ref)
+    # Strict pool: terminal AND coding-complete (has_complete_triplet). Stage 1 does
+    # NOT apply the reserved-calibration exclusion here -- that lives in the rpi-stage
+    # calibration artifact and is applied at GA load time (Algorithm.py), exactly as today.
+    strict_pool = [i for i in terminal_pool if i.has_complete_triplet]
+
+    n_terminal = len(terminal_pool)
+    n_strict = len(strict_pool)
+    n_shared = n_strict  # strict is a subset of terminal, so shared = strict count
+    n_terminal_only = n_terminal - n_strict
+    print(f"GA pools (before reserved-calibration exclusion): "
+          f"terminal={n_terminal}, strict(terminal+coding)={n_strict}, "
+          f"terminal-only={n_terminal_only}")
+    logging.info("GA pools (before reserved-calibration exclusion): "
+                 "terminal=%d, strict(terminal+coding)=%d, terminal-only=%d",
+                 n_terminal, n_strict, n_terminal_only)
+
+    _pool_cols = ("isolate_key", "species_name", "s_accession", "m_accession",
+                  "l_accession", "grouping_tier", "grouping_confidence")
+
+    def _pool_row(i: "IsolateRecord") -> Dict[str, Any]:
+        return {c: getattr(i, c) for c in _pool_cols}
+
+    safe_write_csv(out / "ga_pool_terminal_complete.csv",
+                   [_pool_row(i) for i in terminal_pool])
+    safe_write_csv(out / "ga_pool_strict_both.csv",
+                   [_pool_row(i) for i in strict_pool])
+    safe_write_json(out / "ga_pools_manifest.json", {
+        "pipeline_version": VERSION,
+        "generated_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "note": "reserved-calibration exclusion is NOT applied here; Algorithm.py applies it at load time",
+        "pools": {
+            "terminal_complete": {
+                "file": "ga_pool_terminal_complete.csv",
+                "ruler": "terminally-complete (full-length S/M/L with 5'/3' panhandle tags)",
+                "count": n_terminal,
+            },
+            "strict_both": {
+                "file": "ga_pool_strict_both.csv",
+                "ruler": "terminally-complete AND coding-complete (has_complete_triplet)",
+                "count": n_strict,
+            },
+        },
+        "overlap": {
+            "terminal_only": n_terminal_only,
+            "strict_both_shared": n_shared,
         },
     })
 
@@ -3455,22 +3576,22 @@ class ReferenceSnapshotWriteTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
             isolates_digest = safe_write_json(
-                out / "ortho_reference_isolates.json", [asdict(i) for i in isolates])
+                out / "phylo_rpi_ga_isolates.json", [asdict(i) for i in isolates])
             genomic_digest = safe_write_json(
-                out / "ortho_reference_genomic.json",
+                out / "phylo_rpi_ga_genomic.json",
                 [asdict(r) for r in genomic_index.values()])
-            cds_digest = safe_write_json(out / "ortho_reference_cds.json", cds_index)
+            cds_digest = safe_write_json(out / "phylo_rpi_ga_cds.json", cds_index)
 
-            self.assertTrue((out / "ortho_reference_isolates.json").exists())
-            self.assertTrue((out / "ortho_reference_genomic.json").exists())
-            self.assertTrue((out / "ortho_reference_cds.json").exists())
+            self.assertTrue((out / "phylo_rpi_ga_isolates.json").exists())
+            self.assertTrue((out / "phylo_rpi_ga_genomic.json").exists())
+            self.assertTrue((out / "phylo_rpi_ga_cds.json").exists())
             self.assertEqual(len(isolates_digest), 64)  # sha256 hex digest length
             self.assertEqual(len(genomic_digest), 64)
             self.assertEqual(len(cds_digest), 64)
 
-            loaded_isolates = json.loads((out / "ortho_reference_isolates.json").read_text())
+            loaded_isolates = json.loads((out / "phylo_rpi_ga_isolates.json").read_text())
             self.assertEqual(loaded_isolates[0]["isolate_key"], "iso1")
-            loaded_cds = json.loads((out / "ortho_reference_cds.json").read_text())
+            loaded_cds = json.loads((out / "phylo_rpi_ga_cds.json").read_text())
             self.assertEqual(loaded_cds["S1"], [["nucleocapsid protein", "ACGTACGT"]])
 
     def test_dual_keyed_genomic_index_writes_one_row_per_record(self):
@@ -3486,9 +3607,9 @@ class ReferenceSnapshotWriteTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
             unique_records = {id(r): r for r in genomic_index.values()}.values()
-            safe_write_json(out / "ortho_reference_genomic.json",
+            safe_write_json(out / "phylo_rpi_ga_genomic.json",
                             [asdict(r) for r in unique_records])
-            loaded = json.loads((out / "ortho_reference_genomic.json").read_text())
+            loaded = json.loads((out / "phylo_rpi_ga_genomic.json").read_text())
             self.assertEqual(len(loaded), 1)
 
 
@@ -3544,9 +3665,9 @@ class RunPipelineSnapshotUnfilteredTest(unittest.TestCase):
                  mock.patch("prepare_dataset.transform_one_record", side_effect=transformed):
                 run_pipeline(paths, args)
 
-            written = json.loads((output_dir / "ortho_reference_isolates.json").read_text())
+            written = json.loads((output_dir / "phylo_rpi_ga_isolates.json").read_text())
             manifest = json.loads(
-                (output_dir / "ortho_reference_snapshot_manifest.json").read_text())
+                (output_dir / "phylo_rpi_ga_snapshot_manifest.json").read_text())
 
         by_key = {row["isolate_key"]: row for row in written}
         self.assertIn("iso-complete", by_key)
@@ -3556,7 +3677,7 @@ class RunPipelineSnapshotUnfilteredTest(unittest.TestCase):
 
         # I6: the snapshot must be stamped with the pipeline version that wrote it.
         self.assertEqual(manifest["pipeline_version"], VERSION)
-        self.assertIn("ortho_reference_isolates.json", manifest["files"])
+        self.assertIn("phylo_rpi_ga_isolates.json", manifest["files"])
 
 
 class ReferenceDataRoundTripTest(unittest.TestCase):
@@ -3574,11 +3695,11 @@ class ReferenceDataRoundTripTest(unittest.TestCase):
 
             out = Path(tmp) / "output"
             out.mkdir()
-            safe_write_json(out / "ortho_reference_isolates.json", [])
+            safe_write_json(out / "phylo_rpi_ga_isolates.json", [])
             safe_write_json(
-                out / "ortho_reference_genomic.json",
+                out / "phylo_rpi_ga_genomic.json",
                 [asdict(r) for r in original_index.values()])
-            safe_write_json(out / "ortho_reference_cds.json", {})
+            safe_write_json(out / "phylo_rpi_ga_cds.json", {})
 
             reference = load_reference_data(out)
 
@@ -3590,9 +3711,9 @@ class ReferenceDataRoundTripTest(unittest.TestCase):
     def test_cds_index_round_trips_as_list_of_pairs(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
-            safe_write_json(out / "ortho_reference_isolates.json", [])
-            safe_write_json(out / "ortho_reference_genomic.json", [])
-            safe_write_json(out / "ortho_reference_cds.json",
+            safe_write_json(out / "phylo_rpi_ga_isolates.json", [])
+            safe_write_json(out / "phylo_rpi_ga_genomic.json", [])
+            safe_write_json(out / "phylo_rpi_ga_cds.json",
                             {"PX111111": [("nucleocapsid protein", "ACGT")]})
 
             reference = load_reference_data(out)
@@ -3604,9 +3725,9 @@ class ReferenceDataRoundTripTest(unittest.TestCase):
         isolate = _make_isolate("iso1", "Orthohantavirus x", "S1.1", "M1.1", "L1.1")
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
-            safe_write_json(out / "ortho_reference_isolates.json", [asdict(isolate)])
-            safe_write_json(out / "ortho_reference_genomic.json", [])
-            safe_write_json(out / "ortho_reference_cds.json", {})
+            safe_write_json(out / "phylo_rpi_ga_isolates.json", [asdict(isolate)])
+            safe_write_json(out / "phylo_rpi_ga_genomic.json", [])
+            safe_write_json(out / "phylo_rpi_ga_cds.json", {})
 
             reference = load_reference_data(out)
 
@@ -3619,10 +3740,10 @@ class ReferenceDataRoundTripTest(unittest.TestCase):
         detectable, not silently readable as if it matched the running code."""
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
-            safe_write_json(out / "ortho_reference_isolates.json", [])
-            safe_write_json(out / "ortho_reference_genomic.json", [])
-            safe_write_json(out / "ortho_reference_cds.json", {})
-            safe_write_json(out / "ortho_reference_snapshot_manifest.json",
+            safe_write_json(out / "phylo_rpi_ga_isolates.json", [])
+            safe_write_json(out / "phylo_rpi_ga_genomic.json", [])
+            safe_write_json(out / "phylo_rpi_ga_cds.json", {})
+            safe_write_json(out / "phylo_rpi_ga_snapshot_manifest.json",
                             {"pipeline_version": "0.0.1-stale", "generated_at_utc": "x",
                              "files": {}})
 
@@ -3635,9 +3756,9 @@ class ReferenceDataRoundTripTest(unittest.TestCase):
         a spurious staleness warning -- there is nothing to compare against."""
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
-            safe_write_json(out / "ortho_reference_isolates.json", [])
-            safe_write_json(out / "ortho_reference_genomic.json", [])
-            safe_write_json(out / "ortho_reference_cds.json", {})
+            safe_write_json(out / "phylo_rpi_ga_isolates.json", [])
+            safe_write_json(out / "phylo_rpi_ga_genomic.json", [])
+            safe_write_json(out / "phylo_rpi_ga_cds.json", {})
 
             with self.assertNoLogs(level="WARNING"):
                 load_reference_data(out)
