@@ -1,0 +1,616 @@
+IQ-TREE version 3.1.3 for Windows 64-bit built Jun 19 2026
+Developed by Bui Quang Minh, Thomas Wong, Nhan Ly-Trong, Huaiyan Ren
+Contributed by Lam-Tung Nguyen, Dominik Schrempf, Chris Bielow,
+Olga Chernomor, Michael Woodhams, Diep Thi Hoang, Heiko Schmidt
+
+Host:    ario (AVX2, FMA3, 15 GB RAM)
+Command: C:\git-projects\Orthohantavirus\tools\iqtree-3.1.3-Windows\bin\iqtree3.EXE -s output\ga_search\candidate_phylogenetics\ga-confirm-0\orthohantavirus_andesense_orthohantavirus_seoulense\S\aligned.fasta --seqtype DNA -m MFP -B 1000 -T 1 --seed 42 --prefix output\ga_search\candidate_phylogenetics\ga-confirm-0\orthohantavirus_andesense_orthohantavirus_seoulense\S\tree --quiet --redo
+Seed:    42 (Using SPRNG - Scalable Parallel Random Number Generator)
+Time:    Fri Sep 11 02:34:13 2026
+Kernel:  AVX+FMA - 1 threads (12 CPU cores detected)
+
+HINT: Use -nt option to specify number of threads because your CPU has 12 cores!
+HINT: -nt AUTO will automatically determine the best number of threads to use.
+
+Reading alignment file output\ga_search\candidate_phylogenetics\ga-confirm-0\orthohantavirus_andesense_orthohantavirus_seoulense\S\aligned.fasta ... Fasta format detected
+Reading fasta file: done in 0.005974 secs
+Alignment most likely contains DNA/RNA sequences
+Constructing alignment: done in 0.0044947 secs
+Alignment has 283 sequences with 1574 columns, 739 distinct patterns
+637 parsimony-informative, 264 singleton sites, 673 constant sites
+       Gap/Ambiguity  Composition  p-value
+Analyzing sequences: done in 0.0004061 secs
+   1  I0000   18.23%    passed     35.11%
+   2  I0001   18.04%    passed     86.91%
+   3  I0002   18.04%    passed     87.22%
+   4  I0003   18.04%    passed     94.20%
+   5  I0004   18.23%    passed     27.51%
+   6  I0005   18.23%    passed     27.51%
+   7  I0006   32.15%    passed     94.31%
+   8  I0007   18.23%    passed     27.77%
+   9  I0008   18.23%    passed     25.49%
+  10  I0009   18.23%    passed     23.37%
+  11  I0010   18.23%    passed     27.65%
+  12  I0011   18.23%    passed     25.49%
+  13  I0012   18.23%    passed     34.07%
+  14  I0013   18.23%    passed     34.07%
+  15  I0014   18.23%    passed     36.72%
+  16  I0015   18.23%    passed     26.35%
+  17  I0016   18.23%    passed     36.54%
+  18  I0017   18.23%    passed     36.54%
+  19  I0018   18.23%    passed     36.54%
+  20  I0019   18.23%    passed     54.34%
+  21  I0020   18.23%    passed     40.86%
+  22  I0021   18.23%    passed     27.72%
+  23  I0022   18.23%    passed     24.77%
+  24  I0023   18.23%    passed     42.23%
+  25  I0024   18.23%    passed     42.11%
+  26  I0025   18.23%    passed     38.22%
+  27  I0026   18.23%    passed     54.27%
+  28  I0027   21.66%    passed     64.97%
+  29  I0028   18.23%    passed     53.12%
+  30  I0029   18.23%    passed     54.34%
+  31  I0030   18.23%    passed     49.32%
+  32  I0031   18.23%    passed     48.25%
+  33  I0032   18.23%    passed     49.32%
+  34  I0033   18.23%    passed     43.44%
+  35  I0034   18.23%    passed     35.29%
+  36  I0035   18.23%    passed     31.78%
+  37  I0036   18.23%    passed     35.11%
+  38  I0037   18.23%    passed     44.49%
+  39  I0038   18.23%    passed     39.91%
+  40  I0039   18.23%    passed     39.91%
+  41  I0040   18.23%    passed     39.91%
+  42  I0041   18.23%    passed     39.91%
+  43  I0042   18.23%    passed     39.91%
+  44  I0043   18.23%    passed     39.91%
+  45  I0044   18.23%    passed     39.91%
+  46  I0045   18.23%    passed     39.91%
+  47  I0046   18.23%    passed     39.91%
+  48  I0047   18.23%    passed     39.91%
+  49  I0048   18.23%    passed     39.91%
+  50  I0049   18.23%    passed     39.91%
+  51  I0050   18.23%    passed     39.91%
+  52  I0051   18.23%    passed     39.91%
+  53  I0052   18.23%    passed     39.91%
+  54  I0053   18.23%    passed     39.91%
+  55  I0054   18.23%    passed     39.91%
+  56  I0055   18.23%    passed     39.91%
+  57  I0056   18.23%    passed     39.91%
+  58  I0057   18.23%    passed     39.91%
+  59  I0058   18.23%    passed     39.91%
+  60  I0059   18.23%    passed     39.91%
+  61  I0060   18.23%    passed     39.91%
+  62  I0061   18.23%    passed     39.91%
+  63  I0062   18.23%    passed     38.76%
+  64  I0063   18.23%    passed     39.91%
+  65  I0064   18.23%    passed     39.91%
+  66  I0065   18.23%    passed     28.07%
+  67  I0066   23.06%    passed     41.43%
+  68  I0067   18.23%    passed     35.09%
+  69  I0068   18.23%    passed     40.23%
+  70  I0069   18.23%    passed     40.23%
+  71  I0070   18.23%    passed     27.72%
+  72  I0071   18.23%    passed     44.20%
+  73  I0072   18.23%    passed     15.46%
+  74  I0073   22.49%    passed     96.74%
+  75  I0074   20.84%    passed     96.11%
+  76  I0075   18.04%    passed     91.83%
+  77  I0076   18.04%    passed     92.18%
+  78  I0077   18.04%    passed     91.83%
+  79  I0078   19.00%    passed     93.13%
+  80  I0079   18.04%    passed     91.83%
+  81  I0080   20.90%    passed     95.36%
+  82  I0081   18.04%    passed     91.83%
+  83  I0082   18.04%    passed     91.83%
+  84  I0083   18.11%    passed     92.51%
+  85  I0084   18.04%    passed     77.95%
+  86  I0085   18.04%    passed     88.69%
+  87  I0086   18.04%    passed     89.79%
+  88  I0087   18.04%    passed     89.79%
+  89  I0088   18.04%    passed     91.76%
+  90  I0089   18.04%    passed     85.55%
+  91  I0090   18.04%    passed     90.96%
+  92  I0091   18.04%    passed     89.79%
+  93  I0092   18.04%    passed     91.18%
+  94  I0093   18.04%    passed     89.11%
+  95  I0094   18.04%    passed     90.83%
+  96  I0095   18.04%    passed     92.18%
+  97  I0096   18.04%    passed     92.20%
+  98  I0097   18.04%    passed     92.20%
+  99  I0098   18.04%    passed     91.96%
+ 100  I0099   18.61%    passed     88.80%
+ 101  I0100   18.04%    passed     90.28%
+ 102  I0101   18.04%    passed     85.19%
+ 103  I0102   18.04%    passed     90.39%
+ 104  I0103   18.04%    passed     65.85%
+ 105  I0104   18.04%    passed     82.91%
+ 106  I0105   18.04%    passed     98.30%
+ 107  I0106   18.04%    passed     90.26%
+ 108  I0107   18.61%    passed     94.72%
+ 109  I0108   18.04%    passed     89.57%
+ 110  I0109   18.61%    passed     87.64%
+ 111  I0110   18.04%    passed     86.34%
+ 112  I0111   42.63%    passed     85.32%
+ 113  I0112   42.63%    passed     74.05%
+ 114  I0113   42.63%    passed     83.63%
+ 115  I0114   42.63%    passed     85.32%
+ 116  I0115   42.63%    passed     83.63%
+ 117  I0116   42.63%    passed     83.63%
+ 118  I0117   42.63%    passed     83.63%
+ 119  I0118   42.63%    passed     85.32%
+ 120  I0119   42.63%    passed     87.93%
+ 121  I0120   42.63%    passed     69.45%
+ 122  I0121   42.63%    passed     69.45%
+ 123  I0122   42.63%    passed     69.45%
+ 124  I0123   42.63%    passed     69.45%
+ 125  I0124   42.63%    passed     69.45%
+ 126  I0125   42.63%    passed     82.79%
+ 127  I0126   42.63%    passed     69.45%
+ 128  I0127   42.63%    passed     69.45%
+ 129  I0128   42.63%    passed     85.32%
+ 130  I0129   42.63%    passed     83.63%
+ 131  I0130   42.63%    passed     74.05%
+ 132  I0131   42.63%    passed     85.32%
+ 133  I0132   42.63%    passed     74.05%
+ 134  I0133   42.63%    passed     74.05%
+ 135  I0134   42.63%    passed     85.32%
+ 136  I0135   42.63%    passed     83.63%
+ 137  I0136   42.63%    passed     83.63%
+ 138  I0137   42.63%    passed     83.63%
+ 139  I0138   42.63%    passed     87.45%
+ 140  I0139   18.04%    passed     89.44%
+ 141  I0140   18.04%    passed     86.85%
+ 142  I0141   18.04%    passed     84.94%
+ 143  I0142   18.04%    passed     84.94%
+ 144  I0143   18.04%    passed     84.94%
+ 145  I0144   18.04%    passed     84.94%
+ 146  I0145   18.04%    passed     84.31%
+ 147  I0146   18.04%    passed     88.42%
+ 148  I0147   18.04%    passed     86.49%
+ 149  I0148   18.04%    passed     85.02%
+ 150  I0149   18.04%    passed     87.26%
+ 151  I0150   18.04%    passed     86.49%
+ 152  I0151   18.04%    passed     84.94%
+ 153  I0152   18.04%    passed     84.94%
+ 154  I0153   18.04%    passed     84.94%
+ 155  I0154   18.04%    passed     94.10%
+ 156  I0155   18.04%    passed     92.46%
+ 157  I0156   18.04%    passed     83.87%
+ 158  I0157   18.04%    passed     93.38%
+ 159  I0158   18.04%    passed     87.86%
+ 160  I0159   18.04%    passed     84.94%
+ 161  I0160   18.04%    passed     88.83%
+ 162  I0161   18.04%    passed     89.93%
+ 163  I0162   18.04%    passed     89.93%
+ 164  I0163   18.04%    passed     89.93%
+ 165  I0164   18.04%    passed     85.02%
+ 166  I0165   18.04%    passed     87.26%
+ 167  I0166   18.04%    passed     85.55%
+ 168  I0167   18.04%    passed     86.27%
+ 169  I0168   18.04%    passed     85.76%
+ 170  I0169   18.04%    passed     85.90%
+ 171  I0170   18.04%    passed     85.90%
+ 172  I0171   18.04%    passed     85.76%
+ 173  I0172   18.04%    passed     89.93%
+ 174  I0173   18.04%    passed     87.26%
+ 175  I0174   18.04%    passed     86.88%
+ 176  I0175   18.04%    passed     82.02%
+ 177  I0176   18.04%    passed     86.25%
+ 178  I0177   18.04%    passed     91.98%
+ 179  I0178   18.04%    passed     87.26%
+ 180  I0179   18.04%    passed     90.96%
+ 181  I0180   18.04%    passed     87.86%
+ 182  I0181   18.04%    passed     90.28%
+ 183  I0182   18.04%    passed     87.33%
+ 184  I0183   18.04%    passed     88.79%
+ 185  I0184   18.04%    passed     88.19%
+ 186  I0185   18.04%    passed     87.33%
+ 187  I0186   18.04%    passed     83.63%
+ 188  I0187   18.04%    passed     84.06%
+ 189  I0188   18.04%    passed     86.25%
+ 190  I0189   18.04%    passed     89.93%
+ 191  I0190   18.04%    passed     90.39%
+ 192  I0191   18.04%    passed     86.25%
+ 193  I0192   18.04%    passed     84.94%
+ 194  I0193   18.04%    passed     84.94%
+ 195  I0194   18.04%    passed     85.25%
+ 196  I0195   18.04%    passed     90.58%
+ 197  I0196   18.04%    passed     89.62%
+ 198  I0197   18.04%    passed     83.00%
+ 199  I0198   18.04%    passed     92.20%
+ 200  I0199   18.04%    passed     89.69%
+ 201  I0200   18.04%    passed     85.02%
+ 202  I0201   18.04%    passed     89.80%
+ 203  I0202   18.04%    passed     92.65%
+ 204  I0203   18.04%    passed     92.65%
+ 205  I0204   18.04%    passed     92.65%
+ 206  I0205   18.04%    passed     84.24%
+ 207  I0206   18.04%    passed     94.27%
+ 208  I0207   18.04%    passed     92.66%
+ 209  I0208   20.39%    failed      0.00%
+ 210  I0209   18.04%    passed     91.96%
+ 211  I0210   18.04%    passed     91.96%
+ 212  I0211   18.04%    passed     91.05%
+ 213  I0212   18.04%    passed     90.79%
+ 214  I0213   18.04%    passed     90.35%
+ 215  I0214   18.04%    passed     92.47%
+ 216  I0215   18.04%    passed     92.79%
+ 217  I0216   18.04%    passed     91.83%
+ 218  I0217   18.11%    passed     91.65%
+ 219  I0218   18.11%    passed     92.72%
+ 220  I0219   18.11%    passed     91.52%
+ 221  I0220   18.11%    passed     90.22%
+ 222  I0221   18.11%    passed     90.22%
+ 223  I0222   18.04%    passed     85.50%
+ 224  I0223   18.04%    passed     89.77%
+ 225  I0224   18.04%    passed     87.26%
+ 226  I0225   18.04%    passed     89.69%
+ 227  I0226   18.04%    passed     88.19%
+ 228  I0227   18.04%    passed     92.40%
+ 229  I0228   18.04%    passed     77.55%
+ 230  I0229   18.04%    passed     89.85%
+ 231  I0230   18.04%    passed     89.85%
+ 232  I0231   18.04%    passed     92.23%
+ 233  I0232   18.04%    passed     87.45%
+ 234  I0233   18.04%    passed     88.34%
+ 235  I0234   18.04%    passed     88.34%
+ 236  I0235   18.04%    passed     88.34%
+ 237  I0236   18.23%    passed     87.68%
+ 238  I0237   18.04%    passed     88.34%
+ 239  I0238   18.04%    passed     88.34%
+ 240  I0239   18.04%    passed     92.50%
+ 241  I0240   18.04%    passed     91.09%
+ 242  I0241   18.04%    passed     90.60%
+ 243  I0242   18.04%    passed     92.08%
+ 244  I0243   19.12%    passed     91.52%
+ 245  I0244   18.04%    passed     89.65%
+ 246  I0245   18.04%    passed     90.35%
+ 247  I0246   18.04%    passed     84.83%
+ 248  I0247   18.04%    passed     87.50%
+ 249  I0248   18.04%    passed     87.56%
+ 250  I0249   18.04%    passed     84.20%
+ 251  I0250   18.04%    passed     93.01%
+ 252  I0251   18.04%    passed     89.62%
+ 253  I0252   18.04%    passed     92.47%
+ 254  I0253   18.04%    passed     92.47%
+ 255  I0254   18.04%    passed     89.83%
+ 256  I0255   18.04%    passed     81.06%
+ 257  I0256   18.04%    passed     92.40%
+ 258  I0257   18.04%    passed     89.13%
+ 259  I0258   18.04%    passed     94.25%
+ 260  I0259   18.04%    passed     91.15%
+ 261  I0260   18.30%    passed     94.84%
+ 262  I0261   79.16%    passed     58.29%
+ 263  I0262   79.16%    passed     58.29%
+ 264  I0263   79.16%    passed     58.29%
+ 265  I0264   79.16%    passed     58.29%
+ 266  I0265   79.16%    passed     62.71%
+ 267  I0266   79.16%    passed     58.29%
+ 268  I0267   79.16%    passed     57.44%
+ 269  I0268   18.04%    passed     89.62%
+ 270  I0269   18.04%    passed     88.64%
+ 271  I0270   18.04%    passed     94.57%
+ 272  I0271   18.04%    passed     93.30%
+ 273  I0272   18.04%    passed     89.83%
+ 274  I0273   18.04%    passed     85.90%
+ 275  I0274   18.04%    passed     85.90%
+ 276  I0275   18.04%    passed     85.90%
+ 277  I0276   18.04%    passed     85.90%
+ 278  I0277   18.04%    passed     90.84%
+ 279  I0278   18.04%    passed     90.84%
+ 280  I0279   18.04%    passed     90.18%
+ 281  I0280   18.04%    passed     90.18%
+ 282  I0281   18.04%    passed     83.71%
+ 283  I0282   18.04%    passed     88.26%
+WARNING: 7 sequences contain more than 50% gaps/ambiguity
+****  TOTAL   22.17%  1 sequences failed composition chi2 test (p-value<5%; df=3)
+NOTE: I0036 is identical to I0000 but kept for subsequent analysis
+NOTE: I0005 is identical to I0004 but kept for subsequent analysis
+NOTE: I0011 is identical to I0008 but kept for subsequent analysis
+NOTE: I0013 is identical to I0012 but kept for subsequent analysis
+NOTE: I0017 is identical to I0016 but kept for subsequent analysis
+NOTE: I0029 is identical to I0019 but kept for subsequent analysis
+NOTE: I0039 is identical to I0038 but kept for subsequent analysis
+NOTE: I0069 is identical to I0068 but kept for subsequent analysis
+NOTE: I0077 is identical to I0075 but kept for subsequent analysis
+NOTE: I0087 is identical to I0086 but kept for subsequent analysis
+NOTE: I0097 is identical to I0096 but kept for subsequent analysis
+NOTE: I0114 is identical to I0111 but kept for subsequent analysis
+NOTE: I0130 is identical to I0112 but kept for subsequent analysis
+NOTE: I0115 is identical to I0113 but kept for subsequent analysis
+NOTE: I0121 is identical to I0120 but kept for subsequent analysis
+NOTE: I0151 is identical to I0141 but kept for subsequent analysis
+NOTE: I0143 is identical to I0142 but kept for subsequent analysis
+NOTE: I0150 is identical to I0147 but kept for subsequent analysis
+NOTE: I0162 is identical to I0161 but kept for subsequent analysis
+NOTE: I0171 is identical to I0168 but kept for subsequent analysis
+NOTE: I0170 is identical to I0169 but kept for subsequent analysis
+NOTE: I0178 is identical to I0173 but kept for subsequent analysis
+NOTE: I0188 is identical to I0176 but kept for subsequent analysis
+NOTE: I0185 is identical to I0182 but kept for subsequent analysis
+NOTE: I0203 is identical to I0202 but kept for subsequent analysis
+NOTE: I0210 is identical to I0209 but kept for subsequent analysis
+NOTE: I0252 is identical to I0214 but kept for subsequent analysis
+NOTE: I0221 is identical to I0220 but kept for subsequent analysis
+NOTE: I0230 is identical to I0229 but kept for subsequent analysis
+NOTE: I0234 is identical to I0233 but kept for subsequent analysis
+NOTE: I0262 is identical to I0261 but kept for subsequent analysis
+NOTE: I0274 is identical to I0273 but kept for subsequent analysis
+NOTE: I0278 is identical to I0277 but kept for subsequent analysis
+NOTE: I0280 is identical to I0279 but kept for subsequent analysis
+Checking for duplicate sequences: done in 0.000744 secs
+Identifying sites to remove: done in 0.0023225 secs using 672.8% CPU
+NOTE: 65 identical sequences (see below) will be ignored for subsequent analysis
+NOTE: I0018 (identical to I0016) is ignored but added at the end
+NOTE: I0040 (identical to I0038) is ignored but added at the end
+NOTE: I0041 (identical to I0038) is ignored but added at the end
+NOTE: I0042 (identical to I0038) is ignored but added at the end
+NOTE: I0043 (identical to I0038) is ignored but added at the end
+NOTE: I0044 (identical to I0038) is ignored but added at the end
+NOTE: I0045 (identical to I0038) is ignored but added at the end
+NOTE: I0046 (identical to I0038) is ignored but added at the end
+NOTE: I0047 (identical to I0038) is ignored but added at the end
+NOTE: I0048 (identical to I0038) is ignored but added at the end
+NOTE: I0049 (identical to I0038) is ignored but added at the end
+NOTE: I0050 (identical to I0038) is ignored but added at the end
+NOTE: I0051 (identical to I0038) is ignored but added at the end
+NOTE: I0052 (identical to I0038) is ignored but added at the end
+NOTE: I0053 (identical to I0038) is ignored but added at the end
+NOTE: I0054 (identical to I0038) is ignored but added at the end
+NOTE: I0055 (identical to I0038) is ignored but added at the end
+NOTE: I0056 (identical to I0038) is ignored but added at the end
+NOTE: I0057 (identical to I0038) is ignored but added at the end
+NOTE: I0058 (identical to I0038) is ignored but added at the end
+NOTE: I0059 (identical to I0038) is ignored but added at the end
+NOTE: I0060 (identical to I0038) is ignored but added at the end
+NOTE: I0061 (identical to I0038) is ignored but added at the end
+NOTE: I0063 (identical to I0038) is ignored but added at the end
+NOTE: I0064 (identical to I0038) is ignored but added at the end
+NOTE: I0079 (identical to I0075) is ignored but added at the end
+NOTE: I0081 (identical to I0075) is ignored but added at the end
+NOTE: I0082 (identical to I0075) is ignored but added at the end
+NOTE: I0091 (identical to I0086) is ignored but added at the end
+NOTE: I0198 (identical to I0096) is ignored but added at the end
+NOTE: I0118 (identical to I0111) is ignored but added at the end
+NOTE: I0128 (identical to I0111) is ignored but added at the end
+NOTE: I0131 (identical to I0111) is ignored but added at the end
+NOTE: I0134 (identical to I0111) is ignored but added at the end
+NOTE: I0132 (identical to I0112) is ignored but added at the end
+NOTE: I0133 (identical to I0112) is ignored but added at the end
+NOTE: I0116 (identical to I0113) is ignored but added at the end
+NOTE: I0117 (identical to I0113) is ignored but added at the end
+NOTE: I0129 (identical to I0113) is ignored but added at the end
+NOTE: I0135 (identical to I0113) is ignored but added at the end
+NOTE: I0136 (identical to I0113) is ignored but added at the end
+NOTE: I0137 (identical to I0113) is ignored but added at the end
+NOTE: I0122 (identical to I0120) is ignored but added at the end
+NOTE: I0123 (identical to I0120) is ignored but added at the end
+NOTE: I0124 (identical to I0120) is ignored but added at the end
+NOTE: I0126 (identical to I0120) is ignored but added at the end
+NOTE: I0127 (identical to I0120) is ignored but added at the end
+NOTE: I0144 (identical to I0142) is ignored but added at the end
+NOTE: I0152 (identical to I0142) is ignored but added at the end
+NOTE: I0153 (identical to I0142) is ignored but added at the end
+NOTE: I0159 (identical to I0142) is ignored but added at the end
+NOTE: I0192 (identical to I0142) is ignored but added at the end
+NOTE: I0193 (identical to I0142) is ignored but added at the end
+NOTE: I0163 (identical to I0161) is ignored but added at the end
+NOTE: I0191 (identical to I0176) is ignored but added at the end
+NOTE: I0204 (identical to I0202) is ignored but added at the end
+NOTE: I0253 (identical to I0214) is ignored but added at the end
+NOTE: I0235 (identical to I0233) is ignored but added at the end
+NOTE: I0237 (identical to I0233) is ignored but added at the end
+NOTE: I0238 (identical to I0233) is ignored but added at the end
+NOTE: I0263 (identical to I0261) is ignored but added at the end
+NOTE: I0264 (identical to I0261) is ignored but added at the end
+NOTE: I0266 (identical to I0261) is ignored but added at the end
+NOTE: I0275 (identical to I0273) is ignored but added at the end
+NOTE: I0276 (identical to I0273) is ignored but added at the end
+Alignment was printed to output\ga_search\candidate_phylogenetics\ga-confirm-0\orthohantavirus_andesense_orthohantavirus_seoulense\S\tree.uniqueseq.phy
+
+For your convenience alignment with unique sequences printed to output\ga_search\candidate_phylogenetics\ga-confirm-0\orthohantavirus_andesense_orthohantavirus_seoulense\S\tree.uniqueseq.phy
+
+
+Create initial parsimony tree by phylogenetic likelihood library (PLL)... 0.025 seconds
+Perform fast likelihood tree search using GTR+I+G model...
+Estimate model parameters (epsilon = 5.000)
+Perform nearest neighbor interchange...
+Estimate model parameters (epsilon = 1.000)
+1. Initial log-likelihood: -15744.960
+2. Current log-likelihood: -15742.978
+3. Current log-likelihood: -15741.248
+4. Current log-likelihood: -15739.629
+5. Current log-likelihood: -15738.111
+6. Current log-likelihood: -15736.681
+7. Current log-likelihood: -15735.343
+8. Current log-likelihood: -15734.096
+9. Current log-likelihood: -15732.941
+10. Current log-likelihood: -15731.886
+Optimal log-likelihood: -15730.876
+Rate parameters:  A-C: 1.66585  A-G: 6.81816  A-T: 1.32587  C-G: 0.23494  C-T: 12.53007  G-T: 1.00000
+Base frequencies:  A: 0.312  C: 0.201  G: 0.255  T: 0.231
+Proportion of invariable sites: 0.054
+Gamma shape alpha: 0.334
+Parameters optimization took 10 rounds (1.463 sec)
+Time for fast ML tree search: 3.580 seconds
+
+NOTE: ModelFinder requires 55 MB RAM!
+ModelFinder will test up to 968 DNA models (sample size: 1574 epsilon: 0.100) ...
+ No. Model         -LnL         df  AIC          AICc         BIC
+Akaike Information Criterion:           GTR+F+R3
+Corrected Akaike Information Criterion: GTR+F+R3
+Bayesian Information Criterion:         GTR+R3
+Best-fit model: GTR+R3 chosen according to BIC
+
+All model information printed to output\ga_search\candidate_phylogenetics\ga-confirm-0\orthohantavirus_andesense_orthohantavirus_seoulense\S\tree.model.gz
+CPU time for ModelFinder: 33.578 seconds (0h:0m:33s)
+Wall-clock time for ModelFinder: 34.302 seconds (0h:0m:34s)
+Generating 1000 samples for ultrafast bootstrap (seed: 42)...
+
+NOTE: 18 MB RAM (0 GB) is required!
+Estimate model parameters (epsilon = 0.100)
+1. Initial log-likelihood: -15707.575
+Optimal log-likelihood: -15707.571
+Rate parameters:  A-C: 1.58672  A-G: 6.39586  A-T: 1.23868  C-G: 0.34532  C-T: 11.25332  G-T: 1.00000
+Base frequencies:  A: 0.312  C: 0.201  G: 0.255  T: 0.231
+Site proportion and rates:  (0.660,0.104) (0.138,1.396) (0.202,3.656)
+Parameters optimization took 1 rounds (0.174 sec)
+Wrote distance file to... 
+Computing ML distances based on estimated model parameters...
+Calculating distance matrix: done in 0.154142 secs using 101.4% CPU
+Computing ML distances took 0.154831 sec (of wall-clock time) 0.156250 sec (of CPU time)
+WARNING: Some pairwise ML distances are too long (saturated)
+Setting up auxiliary I and S matrices: done in 0.0012573 secs
+Constructing RapidNJ tree: done in 0.0024263 secs using 1288% CPU
+Computing RapidNJ tree took 0.003758 sec (of wall-clock time) 0.031250 sec (of CPU time)
+Log-likelihood of RapidNJ tree: -16157.465
+--------------------------------------------------------------------
+|             INITIALIZING CANDIDATE TREE SET                      |
+--------------------------------------------------------------------
+Generating 98 parsimony trees... 3.521 second
+Computing log-likelihood of 98 initial trees ... 2.205 seconds
+Current best score: -15707.571
+
+Do NNI search on 20 best initial trees
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 1: -15707.513
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 2: -15702.594
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 4: -15702.071
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 7: -15701.572
+Iteration 10 / LogL: -15702.999 / Time: 0h:0m:48s
+Iteration 20 / LogL: -15703.880 / Time: 0h:0m:54s
+Finish initializing candidate tree set (20)
+Current best tree score: -15701.572 / CPU time: 19.619
+Number of iterations: 20
+--------------------------------------------------------------------
+|               OPTIMIZING CANDIDATE TREE SET                      |
+--------------------------------------------------------------------
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 23: -15700.447
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 24: -15699.803
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 29: -15698.200
+Iteration 30 / LogL: -15723.111 / Time: 0h:1m:4s (0h:1m:43s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 34: -15697.206
+Iteration 40 / LogL: -15701.356 / Time: 0h:1m:13s (0h:1m:33s left)
+Iteration 50 / LogL: -15701.614 / Time: 0h:1m:20s (0h:1m:19s left)
+Log-likelihood cutoff on original alignment: -15749.311
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 51: -15696.728
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 53: -15696.479
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 59: -15696.131
+Iteration 60 / LogL: -15704.860 / Time: 0h:1m:29s (0h:1m:32s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 70: -15695.902
+Iteration 70 / LogL: -15695.902 / Time: 0h:1m:38s (0h:1m:32s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 75: -15695.606
+Iteration 80 / LogL: -15696.394 / Time: 0h:1m:46s (0h:1m:26s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 89: -15692.753
+Iteration 90 / LogL: -15696.442 / Time: 0h:1m:54s (0h:1m:29s left)
+Iteration 100 / LogL: -15694.640 / Time: 0h:2m:1s (0h:1m:18s left)
+Log-likelihood cutoff on original alignment: -15736.401
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.989
+NOTE: UFBoot does not converge, continue at least 100 more iterations
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 106: -15692.420
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 110: -15691.368
+Iteration 110 / LogL: -15691.368 / Time: 0h:2m:11s (0h:1m:28s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 120: -15691.042
+Iteration 120 / LogL: -15691.042 / Time: 0h:2m:19s (0h:1m:28s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 127: -15689.801
+Iteration 130 / LogL: -15717.257 / Time: 0h:2m:28s (0h:1m:25s left)
+Iteration 140 / LogL: -15690.131 / Time: 0h:2m:36s (0h:1m:16s left)
+Iteration 150 / LogL: -15689.863 / Time: 0h:2m:44s (0h:1m:7s left)
+Log-likelihood cutoff on original alignment: -15732.422
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 155: -15689.526
+Iteration 160 / LogL: -15689.746 / Time: 0h:2m:54s (0h:1m:23s left)
+Iteration 170 / LogL: -15691.616 / Time: 0h:3m:2s (0h:1m:14s left)
+Iteration 180 / LogL: -15693.986 / Time: 0h:3m:10s (0h:1m:5s left)
+Iteration 190 / LogL: -15695.361 / Time: 0h:3m:17s (0h:0m:56s left)
+Iteration 200 / LogL: -15694.250 / Time: 0h:3m:26s (0h:0m:47s left)
+Log-likelihood cutoff on original alignment: -15732.422
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.978
+NOTE: UFBoot does not converge, continue at least 100 more iterations
+Iteration 210 / LogL: -15691.167 / Time: 0h:3m:35s (0h:1m:18s left)
+Iteration 220 / LogL: -15690.287 / Time: 0h:3m:44s (0h:1m:9s left)
+Iteration 230 / LogL: -15693.096 / Time: 0h:3m:52s (0h:1m:0s left)
+Iteration 240 / LogL: -15714.636 / Time: 0h:4m:0s (0h:0m:51s left)
+Iteration 250 / LogL: -15692.163 / Time: 0h:4m:8s (0h:0m:43s left)
+Log-likelihood cutoff on original alignment: -15730.352
+Iteration 260 / LogL: -16697.097 / Time: 0h:4m:16s (0h:0m:34s left)
+Iteration 270 / LogL: -15689.621 / Time: 0h:4m:24s (0h:0m:25s left)
+Iteration 280 / LogL: -15696.495 / Time: 0h:4m:31s (0h:0m:16s left)
+Iteration 290 / LogL: -15692.236 / Time: 0h:4m:40s (0h:0m:8s left)
+Iteration 300 / LogL: -15691.371 / Time: 0h:4m:49s (0h:0m:0s left)
+Log-likelihood cutoff on original alignment: -15730.352
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.987
+NOTE: UFBoot does not converge, continue at least 100 more iterations
+Iteration 310 / LogL: -15689.534 / Time: 0h:4m:58s (0h:1m:16s left)
+Iteration 320 / LogL: -15700.709 / Time: 0h:5m:6s (0h:1m:8s left)
+Iteration 330 / LogL: -15689.972 / Time: 0h:5m:16s (0h:0m:59s left)
+Iteration 340 / LogL: -15691.640 / Time: 0h:5m:24s (0h:0m:51s left)
+Iteration 350 / LogL: -15702.085 / Time: 0h:5m:33s (0h:0m:42s left)
+Log-likelihood cutoff on original alignment: -15730.352
+Iteration 360 / LogL: -15697.608 / Time: 0h:5m:42s (0h:0m:34s left)
+Iteration 370 / LogL: -15693.395 / Time: 0h:5m:50s (0h:0m:25s left)
+Iteration 380 / LogL: -15689.841 / Time: 0h:5m:58s (0h:0m:17s left)
+Iteration 390 / LogL: -15690.635 / Time: 0h:6m:7s (0h:0m:8s left)
+Iteration 400 / LogL: -15849.596 / Time: 0h:6m:16s (0h:0m:0s left)
+Log-likelihood cutoff on original alignment: -15730.352
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.994
+TREE SEARCH COMPLETED AFTER 400 ITERATIONS / Time: 0h:6m:16s
+
+--------------------------------------------------------------------
+|                    FINALIZING TREE SEARCH                        |
+--------------------------------------------------------------------
+Performs final model parameters optimization
+Estimate model parameters (epsilon = 0.010)
+1. Initial log-likelihood: -15689.526
+Optimal log-likelihood: -15689.525
+Rate parameters:  A-C: 1.50787  A-G: 6.18994  A-T: 1.17617  C-G: 0.34480  C-T: 10.92569  G-T: 1.00000
+Base frequencies:  A: 0.312  C: 0.201  G: 0.255  T: 0.231
+Site proportion and rates:  (0.670,0.105) (0.130,1.487) (0.200,3.685)
+Parameters optimization took 1 rounds (0.135 sec)
+BEST SCORE FOUND : -15689.525
+Creating bootstrap support values...
+Split supports printed to NEXUS file output\ga_search\candidate_phylogenetics\ga-confirm-0\orthohantavirus_andesense_orthohantavirus_seoulense\S\tree.splits.nex
+Total tree length: 13.631
+
+Total number of iterations: 400
+CPU time used for tree search: 338.609 sec (0h:5m:38s)
+Wall-clock time used for tree search: 341.201 sec (0h:5m:41s)
+Total CPU time used: 374.188 sec (0h:6m:14s)
+Total wall-clock time used: 377.207 sec (0h:6m:17s)
+
+Computing bootstrap consensus tree...
+Reading input file output\ga_search\candidate_phylogenetics\ga-confirm-0\orthohantavirus_andesense_orthohantavirus_seoulense\S\tree.splits.nex...
+218 taxa and 1972 splits.
+Consensus tree written to output\ga_search\candidate_phylogenetics\ga-confirm-0\orthohantavirus_andesense_orthohantavirus_seoulense\S\tree.contree
+Reading input trees file output\ga_search\candidate_phylogenetics\ga-confirm-0\orthohantavirus_andesense_orthohantavirus_seoulense\S\tree.contree
+Log-likelihood of consensus tree: -15695.798
+
+Analysis results written to: 
+  IQ-TREE report:                output\ga_search\candidate_phylogenetics\ga-confirm-0\orthohantavirus_andesense_orthohantavirus_seoulense\S\tree.iqtree
+  Maximum-likelihood tree:       output\ga_search\candidate_phylogenetics\ga-confirm-0\orthohantavirus_andesense_orthohantavirus_seoulense\S\tree.treefile
+  Likelihood distances:          output\ga_search\candidate_phylogenetics\ga-confirm-0\orthohantavirus_andesense_orthohantavirus_seoulense\S\tree.mldist
+
+Ultrafast bootstrap approximation results written to:
+  Split support values:          output\ga_search\candidate_phylogenetics\ga-confirm-0\orthohantavirus_andesense_orthohantavirus_seoulense\S\tree.splits.nex
+  Consensus tree:                output\ga_search\candidate_phylogenetics\ga-confirm-0\orthohantavirus_andesense_orthohantavirus_seoulense\S\tree.contree
+  Screen log file:               output\ga_search\candidate_phylogenetics\ga-confirm-0\orthohantavirus_andesense_orthohantavirus_seoulense\S\tree.log
+
+Date and Time: Fri Sep 11 02:40:30 2026

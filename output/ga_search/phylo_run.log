@@ -1,0 +1,6 @@
+completeness overlap: in both 94, only coding-complete 91, only terminally-complete 178, strict merged set 94
+wrote 1734 scored triplet(s) to output\ga_search\all_scored_seed_20260904.jsonl and output\ga_search\all_scored_seed_20260904.csv
+generations: 21 (plateau stop: True)
+best fitness: first 0.4717 -> final 0.4717
+winners written: 10; confirmation: attempted: per-winner gate4 fields recorded (errors included, if any)
+wrote output\ga_search\seed_20260904.json
