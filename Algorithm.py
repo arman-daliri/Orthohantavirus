@@ -52,16 +52,13 @@ def isolate_key_of(isolate: Any) -> str:
 
 
 def completeness_overlap(reference: Any, reserved_keys: set) -> Dict[str, int]:
-    """Set-arithmetic comparison between the two completeness rulers, as seen at
-    build_pool's call site: coding_complete (has_complete_triplet) vs terminal_complete
-    (rc.usable_pool's terminally-complete-and-not-reserved filter). Both rulers are
-    evaluated over the SAME universe -- rc.wild_classified_pool (wild, classified,
-    not-reserved) -- so only_coding/only_terminal report genuine ruler disagreement,
-    not isolates that were never eligible for either pool (non-wild, unclassified, or
-    reserved-for-calibration). Reported so every run states which isolates each ruler
-    agreed vs disagreed on, and how many survive the GA's stricter intersection
-    (strict_merged_pool -- terminal_complete here is built from usable_pool, i.e. AFTER
-    reserved-key removal, matching what build_pool actually consumes)."""
+    """Set-arithmetic comparison between the two completeness rulers: coding_complete
+    (has_complete_triplet) vs terminal_complete (rc.usable_pool's terminally-complete-
+    and-not-reserved filter). Both rulers are evaluated over the SAME universe --
+    rc.wild_classified_pool (wild, classified, not-reserved) -- so only_coding/
+    only_terminal report genuine ruler disagreement, not isolates that were never
+    eligible for either pool (non-wild, unclassified, or reserved-for-calibration).
+    Reported once per run in the ga_pool_comparison.json payload."""
     eligible = rc.wild_classified_pool(reference, reserved_keys)
     coding_complete = {isolate_key_of(i) for i in eligible if i.has_complete_triplet}
     terminal_complete = {isolate_key_of(i) for i in rc.usable_pool(reference, reserved_keys)}
@@ -69,27 +66,6 @@ def completeness_overlap(reference: Any, reserved_keys: set) -> Dict[str, int]:
     only_coding = coding_complete - terminal_complete
     only_terminal = terminal_complete - coding_complete
     return {"both": len(both), "only_coding": len(only_coding), "only_terminal": len(only_terminal)}
-
-
-def build_pool(reference: Any, reserved_keys: set) -> List[str]:
-    """The GA search pool: rc.strict_merged_pool, the intersection of BOTH completeness
-    rulers (terminally-complete AND coding-complete). This is stricter than the
-    validation/discrimination panel's rc.usable_pool (terminal-completeness only) --
-    deliberately so, per the Task 13 ruling: the GA fitness function's search pool
-    tightens to this stricter intersection while validation stays comparable with
-    already-computed runs. Prints the coding-complete / terminally-complete / merged
-    overlap counts (over the shared wild-classified-not-reserved universe -- see
-    completeness_overlap) so the two rulers' relationship is visible on every run.
-    """
-    overlap = completeness_overlap(reference, reserved_keys)
-    print(f"completeness overlap: in both {overlap['both']}, only coding-complete "
-          f"{overlap['only_coding']}, only terminally-complete {overlap['only_terminal']}, "
-          f"strict merged set {overlap['both']}")
-    pool_records = rc.strict_merged_pool(reference, reserved_keys)
-    pool = sorted([isolate_key_of(i) for i in pool_records])
-    if not pool:
-        raise SystemExit("search pool is empty after filters -- nothing to sample from")
-    return pool
 
 
 def default_candidate_factory(reference: Any) -> Callable[[str, Dict[str, Any]], Any]:
@@ -322,15 +298,21 @@ def load_pool_from_file(pool_file: Path, reserved_keys: set) -> List[str]:
     """Read isolate_keys from a Stage-1 pool CSV and apply reserved-calibration exclusion.
 
     The pool CSV is the contract -- the GA consumes it rather than recomputing the ruler.
-    Reserved-key removal is applied here, matching the semantics of today's
-    build_pool / usable_pool (which also exclude reserved keys at call time).
+    Reserved-key removal is applied here, matching the semantics of usable_pool
+    (which also excludes reserved keys at call time).
     Raises FileNotFoundError if the pool file is missing (Stage 1 must run first).
     """
     if not pool_file.exists():
         raise FileNotFoundError(
             f"GA pool file missing: {pool_file}. Run prepare_dataset.py (Stage 1) first.")
     with pool_file.open(newline="", encoding="utf-8") as fh:
-        all_keys = [row["isolate_key"] for row in csv.DictReader(fh)]
+        reader = csv.DictReader(fh)
+        rows = list(reader)
+    if rows and "isolate_key" not in rows[0]:
+        raise KeyError(
+            f"pool CSV {pool_file} lacks 'isolate_key' column; "
+            f"found columns: {list(rows[0].keys())}")
+    all_keys = [row["isolate_key"] for row in rows]
     pool = sorted(k for k in all_keys if k not in reserved_keys)
     if not pool:
         raise SystemExit(f"pool {pool_file.name} is empty after reserved-key exclusion")
@@ -338,10 +320,11 @@ def load_pool_from_file(pool_file: Path, reserved_keys: set) -> List[str]:
 
 
 def _run_one_pool(pool_name: str, pool: List[str], reference: Any, precomputed: Any,
-                  pool_out_dir: Path, args: Any, reserved: set) -> Dict[str, Any]:
+                  pool_out_dir: Path, args: Any, reserved: set,
+                  overlap: Dict[str, int]) -> Dict[str, Any]:
     """Run the full GA search for one pool and write per-pool artifacts.
     Returns a comparison-summary dict. All GA hyperparameters are taken from args;
-    the pool is the only variable across calls.
+    the pool is the only variable across calls. overlap is pre-computed once by main().
     """
     import time
     pool_out_dir.mkdir(parents=True, exist_ok=True)
@@ -370,7 +353,6 @@ def _run_one_pool(pool_name: str, pool: List[str], reference: Any, precomputed: 
             break
     confirmation = confirm_winners(oracle, winners, pool_out_dir, args.with_phylogeny)
 
-    overlap = completeness_overlap(reference, reserved)
     payload = {"config": vars(args), "pool_name": pool_name,
                "calibration_reserved_excluded": len(reserved),
                "pool_ruler": pool_name, "pool_size": len(pool),
@@ -429,6 +411,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     precomputed = rc._build_precomputed(reference)
     reserved = load_reserved_isolate_keys()
     out_root = Path(args.output)
+    overlap = completeness_overlap(reference, reserved)
 
     comparison_rows: List[Dict[str, Any]] = []
     for pool_name, pool_file_name in _POOL_SPECS:
@@ -436,7 +419,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         pool = load_pool_from_file(pool_file, reserved)
         pool_out_dir = out_root / pool_name
         summary = _run_one_pool(pool_name, pool, reference, precomputed,
-                                pool_out_dir, args, reserved)
+                                pool_out_dir, args, reserved, overlap)
         comparison_rows.append(summary)
 
     # Combined comparison
@@ -454,9 +437,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     comparison_path.write_text(json.dumps(comparison, indent=2, default=str), encoding="utf-8")
     print("\n=== GA pool comparison ===")
     for row in comparison_rows:
+        best_str = f"{row['best_fitness']:.4f}" if row['best_fitness'] is not None else "N/A"
         print(f"  {row['pool_name']}: pool={row['pool_size']}, "
               f"gens={row['generations_run']} (plateau={row['stopped_on_plateau']}), "
-              f"best={row['best_fitness']:.4f}, "
+              f"best={best_str}, "
               f"errors={row['scoring_error_count']}, wall={row['wall_seconds']}s")
     print(f"wrote {comparison_path}")
     return 0

@@ -115,25 +115,31 @@ python Algorithm.py --dump-scored --output output/ga_search      # also dump eve
 python -m unittest Algorithm                                     # full suite
 ```
 
-**Output.** `seed_<N>.json` holds the run config, the fitness log, and the top `--top`
-winners (default 10) with their full RPI row and gate4 confirmation status if
-`--with-phylogeny` was passed. `--dump-scored` additionally writes
-`all_scored_seed_<N>.jsonl` and `.csv` — every unique triplet the search actually
-scored (not just the winners), one row per triplet, with the same RPI fields
-(`rpi_generation`, `rpi_m_pack`, `rpi_m_pol`, `rpi_e_total`, `rpi_k_stratum`, `verdict`,
-Gate 1 fields) plus `fitness` and the `S`/`M`/`L` donor isolate keys. Purely additive:
-scoring, selection, and every existing output are unchanged by `--dump-scored`.
+**Output.** The search runs both pool specs sequentially, writing per-pool subdirectories under
+`--output`:
+
+- `<output>/terminal_complete/seed_<N>.json` and `<output>/strict_both/seed_<N>.json` — per-pool run
+  config, fitness log, and the top `--top` winners (default 10) with their full RPI row and gate4
+  confirmation status if `--with-phylogeny` was passed.
+- `<output>/terminal_complete/all_scored_seed_<N>.{jsonl,csv}` and the corresponding
+  `strict_both/` files — written only with `--dump-scored`: every unique triplet the search scored,
+  one row per triplet, with the same RPI fields (`rpi_generation`, `rpi_m_pack`, `rpi_m_pol`,
+  `rpi_e_total`, `rpi_k_stratum`, `verdict`, Gate 1 fields) plus `fitness` and the `S`/`M`/`L`
+  donor isolate keys. Purely additive — scoring, selection, and every existing output are unchanged.
+- `<output>/ga_pool_comparison.json` — side-by-side summary of both pool runs: pool sizes, generation
+  counts, plateau-stop flags, best fitness, scoring-error counts, and wall-clock times.
 
 **Runtime.** On the 16,028-record package, default settings
 (`--population 150 --generations 100 --plateau 20`) typically plateau-stop at generation ~21
-because the fitness landscape is flat after the first good triplet is found. Measured: ~11 min
-with `--dump-scored` (scoring 1,734 unique triplets). The `--generations 300 --plateau 10000`
-long run (forces the full 300 generations) takes ~25 min. Gate4 winner confirmation
-(`--with-phylogeny`) adds ~328 min (~5.5 hr) for the 10-winner gate4 phase on Windows (same
-mafft+iqtree stack as Stage 2), bringing the total `--with-phylogeny` run to ~339 min (~5.7 hr).
-Measured gate4 verdicts (94-isolate pool, 10 winners): 7 `no_conflict`,
-3 `weak_signal_low_bootstrap_support`. The `candidate_phylogenetics/` folder under `--output`
-holds the per-winner alignment and tree files produced by this step.
+because the fitness landscape is flat after the first good triplet is found. Measured (with
+`--dump-scored`, both pools): ~7 min per pool, ~14 min total. The `--generations 300 --plateau
+10000` long run (forces the full 300 generations) takes ~25 min per pool. Gate4 winner
+confirmation (`--with-phylogeny`) adds ~328 min (~5.5 hr) for the 10-winner gate4 phase on
+Windows (same mafft+iqtree stack as Stage 2), bringing the total `--with-phylogeny` run to
+~339 min (~5.7 hr) per pool. Measured gate4 verdicts (10 winners, strict-both pool, earlier
+package run): 7 `no_conflict`, 3 `weak_signal_low_bootstrap_support`. The
+`candidate_phylogenetics/` folder under the pool's output dir holds the per-winner alignment
+and tree files produced by this step.
 
 ---
 
@@ -703,13 +709,12 @@ Every field is always present, even for a not-yet-analyzed or failed row, so the
 ## Known limitations
 
 - **No reassortment calls by default.** See [Reassortment](#reassortment) above; run Stage 2 for
-  the real MAFFT + IQ-TREE analysis. Even then, Stage 2 only covers the three named candidate
-  groups with full S+M+L CDS available — not every isolate — and species below
-  `--phylo-min-taxa` are reported but not analyzed. *(The exact candidate-universe size on the
-  current 16,028-record package hasn't been re-measured with a real Stage 2 run since the most
-  recent NCBI re-download; the prior package's figure was 1,464 of 15,991 accessions' worth of
-  isolates. Treat that ratio as indicative, not as this package's exact current count, until
-  Stage 2 is re-run.)*
+  the real MAFFT + IQ-TREE analysis. Even then, Stage 2 only covers isolates with full S+M+L
+  CDS available in a species with at least `--phylo-min-taxa` candidate isolates — not every
+  isolate. On the current 16,028-record package with default `--phylo-min-taxa 4`, Stage 2
+  identifies **1,470 candidate isolates (species scope)** across 14 analyzable species; 8,082
+  are excluded before grouping (6,413 missing CDS for one or more segments, 1,503 unclassified,
+  166 lab/vaccine-excluded). `phylogroup` scope identifies a separate count across phylogroups.
 - **Stage 2's calls are a single ML tree search per segment, bootstrap-gated, not a formal
   incongruence test** (for example, no SH-test or AU-test on constrained topologies). A
   `supported_reassortment_candidate` call means the rank pattern and bootstrap support are
