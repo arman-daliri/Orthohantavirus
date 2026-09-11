@@ -94,6 +94,72 @@ COMPLETE_LENGTH_TOLERANCE = 0.85
 
 KMER_K = 3
 
+# NCBI's species name for deposits with no accepted ICTV assignment. Excluded from
+# terminally_complete_isolates because "non-cognate = across species" requires a known species.
+UNCLASSIFIED_SPECIES_LABEL = "unclassified Orthohantavirus"
+
+# Genus-conserved genomic 5'/3' termini forming the intramolecular panhandle (D2/WS3.1).
+# A deposit missing them is missing its actual termini: GenBank submissions are routinely
+# trimmed and SEGMENT_LENGTH_RANGE does not catch it -- a segment 30 nt short at each end
+# is still inside the ICTV band. Source: rpi_calibration.py WS3.1 measurement.
+HANTAVIRUS_GENOMIC_5P_TAG = "TAGTAGTA"
+HANTAVIRUS_GENOMIC_3P_TAG = "TACTACTA"  # == reverse complement of 5P tag
+
+
+def has_genomic_panhandle_termini(sequence: str) -> bool:
+    """Does this deposit carry both genuine genomic termini, or is it trimmed?
+
+    48% of the wild full-length triplet pool carries NEITHER tag (rpi_calibration.py WS3.1).
+    A truncated deposit's "terminal window" scores noise, not a panhandle.
+    """
+    sequence = sequence.strip().upper()
+    return (sequence.startswith(HANTAVIRUS_GENOMIC_5P_TAG)
+            and sequence.endswith(HANTAVIRUS_GENOMIC_3P_TAG))
+
+
+def terminally_complete_isolates(
+        reference: "ReferenceData") -> List["IsolateRecord"]:
+    """Wild, classified isolates whose S, M, and L are all full-length AND terminal.
+
+    'Terminal' means both HANTAVIRUS_GENOMIC_5P_TAG at the 5' end and
+    HANTAVIRUS_GENOMIC_3P_TAG at the 3' end are present in the deposited sequence.
+    Returned in isolate_key order for deterministic results regardless of insertion order
+    in load_reference_data.
+
+    This is the single source of truth for the terminally-complete predicate. rpi_core.py
+    imports and re-exports this function so its own callers (usable_pool, calibration panel)
+    continue to use the same definition.
+    """
+    pool: List["IsolateRecord"] = []
+    for isolate in reference.isolates:
+        if isolate.is_lab_derived or isolate.is_vaccine_strain:
+            continue
+        if not isolate.species_name or isolate.species_name == UNCLASSIFIED_SPECIES_LABEL:
+            continue
+        qualified = True
+        for seg_letter, accession in (("S", isolate.s_accession),
+                                       ("M", isolate.m_accession),
+                                       ("L", isolate.l_accession)):
+            if not accession:
+                qualified = False
+                break
+            record = (reference.genomic_index.get(accession)
+                      or reference.genomic_index.get(accession.split(".")[0]))
+            if not record or not record.sequence:
+                qualified = False
+                break
+            lo, hi = SEGMENT_LENGTH_RANGE[seg_letter]
+            if not (lo <= len(record.sequence) <= hi):
+                qualified = False
+                break
+            if not has_genomic_panhandle_termini(record.sequence):
+                qualified = False
+                break
+        if qualified:
+            pool.append(isolate)
+    return sorted(pool, key=lambda i: i.isolate_key)
+
+
 # Ranks pulled out of virus.lineage, ordered from broad to narrow. This is the
 # "until there is no bigger group" hierarchy -- it is already present in every record.
 LINEAGE_RANKS = [
@@ -891,9 +957,8 @@ def safe_write_csv(path: Path, rows: Sequence[Dict[str, Any]]) -> str:
 
     lineterminator="\\n" is pinned explicitly: pandas' to_csv() otherwise defaults to
     os.linesep, so the exact same rows produce LF line endings on Linux and CRLF on
-    Windows -- identical content, different bytes, different sha256. That silently
-    broke the whole point of ortho_output_checksums.txt (verifying output integrity
-    across machines) and made a plain content-identical rerun look like a diff.
+    Windows -- identical content, different bytes, different sha256. That made a plain
+    content-identical rerun look like a diff across platforms.
     """
     frame = pd.DataFrame(list(rows)) if rows else pd.DataFrame()
     data = frame.to_csv(index=False, lineterminator="\n").encode("utf-8")
@@ -910,10 +975,7 @@ def safe_write_json(path: Path, payload: Any) -> str:
 
 
 def write_output_checksums(path: Path, digests: Dict[str, str]) -> None:
-    """Write a sha256sum(1)-compatible manifest so output integrity can be checked later.
-
-    Verify with: sha256sum -c ortho_output_checksums.txt (run from the output directory).
-    """
+    """Write a sha256sum(1)-compatible manifest so output integrity can be checked later."""
     lines = [f"{digest}  {name}\n" for name, digest in sorted(digests.items())]
     _atomic_write_bytes(path, "".join(lines).encode("utf-8"))
 
@@ -952,6 +1014,91 @@ def parse_fasta(path: Optional[Path]) -> Dict[str, FastaRecord]:
         if base:
             index.setdefault(base, record)
     return index
+
+
+def parse_cds_fasta(path: Optional[Path]) -> Dict[str, List[Tuple[str, str]]]:
+    """Index cds.fna by NUCLEOTIDE accession -- not protein accession.
+
+    Unlike protein.faa (keyed by protein accessionVersion), cds.fna's defline carries the
+    parent nucleotide accession plus a coordinate suffix (e.g. 'PX492530.1:1-430'),
+    because a CDS is a coordinate range on its parent nucleotide record. A single
+    nucleotide accession can carry more than one CDS -- 134 in this package, mostly
+    ambisense S segments encoding both N and NSs on overlapping reading frames, plus a
+    few M segments annotated with separate G1/G2 CDS alongside a combined precursor
+    entry. parse_fasta's setdefault-first-wins index would silently keep whichever CDS
+    happened to be read first and drop the other, so this keeps every distinct
+    (product, sequence) pair per accession and leaves selection to select_primary_cds
+    (phylogeny.py).
+    """
+    index: DefaultDict[str, List[Tuple[str, str]]] = defaultdict(list)
+    seen: set = set()
+    for desc, seq in _iter_fasta_records(path):
+        if not desc:
+            continue
+        tokens = desc.split(None, 1)
+        acc = tokens[0].split(":")[0]
+        base = accession_base(acc)
+        product = tokens[1].split("[")[0].strip() if len(tokens) > 1 else ""
+        seq = seq.upper()
+        if not seq or not base:
+            continue
+        dedupe_key = (base, product, seq)
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        index[base].append((product, seq))
+    return dict(index)
+
+
+@dataclass
+class ReferenceData:
+    """Everything a downstream stage needs, reconstructed from Stage 1's snapshot --
+    never from a raw all_hanta/ read. isolates is the full, UNFILTERED set; Stage 2's
+    206-coding-complete and Stage 3's 272-terminally-complete/strict-merged filters are
+    applied by their own callers, not here.
+    """
+    isolates: List[IsolateRecord]
+    genomic_index: Dict[str, FastaRecord]
+    cds_index: Dict[str, List[Tuple[str, str]]]
+
+
+def load_reference_data(output_dir: Path) -> ReferenceData:
+    """Reads the 3 snapshot files Stage 1's run_pipeline writes. Raises FileNotFoundError
+    (not a silent empty result) if Stage 1 hasn't been run against this output_dir yet --
+    a missing snapshot is a setup error, not an empty-dataset condition.
+    """
+    isolates_path = output_dir / "phylo_rpi_ga_isolates.json"
+    genomic_path = output_dir / "phylo_rpi_ga_genomic.json"
+    cds_path = output_dir / "phylo_rpi_ga_cds.json"
+    for path in (isolates_path, genomic_path, cds_path):
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Reference snapshot file missing: {path}. Run prepare_dataset.py "
+                f"(Stage 1) against this output directory first.")
+
+    manifest_path = output_dir / "phylo_rpi_ga_snapshot_manifest.json"
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        snapshot_version = manifest.get("pipeline_version")
+        if snapshot_version and snapshot_version != VERSION:
+            logging.warning(
+                "Reference snapshot at %s was written by prepare_dataset.py %s; this "
+                "checkout is %s. If the snapshot's schema or semantics changed between "
+                "versions, re-run Stage 1 (prepare_dataset.py) against this output "
+                "directory before trusting downstream results.",
+                output_dir, snapshot_version, VERSION)
+
+    isolates = [IsolateRecord(**row) for row in json.loads(isolates_path.read_text(encoding="utf-8"))]
+    genomic_index: Dict[str, FastaRecord] = {}
+    for row in json.loads(genomic_path.read_text(encoding="utf-8")):
+        record = FastaRecord(**row)
+        genomic_index.setdefault(record.accession, record)
+        if record.accession_base and record.accession_base != record.accession:
+            genomic_index.setdefault(record.accession_base, record)
+    raw_cds = json.loads(cds_path.read_text(encoding="utf-8"))
+    cds_index = {k: [tuple(pair) for pair in v] for k, v in raw_cds.items()}
+
+    return ReferenceData(isolates=isolates, genomic_index=genomic_index, cds_index=cds_index)
 
 
 # --------------------------------------------------------------------------------------
@@ -1081,8 +1228,7 @@ def report_checksums(results: Sequence[ChecksumResult], allow_mismatch: bool) ->
         raise SystemExit(
             f"\nAborting: {len(failures)} input file(s) do not match NCBI's published checksums.\n"
             "Results computed from these bytes would not be reproducible on another platform.\n"
-            "Re-run with --allow-checksum-mismatch to proceed anyway (the mismatch is recorded "
-            "in ortho_summary.json)."
+            "Re-run with --allow-checksum-mismatch to proceed anyway."
         )
     logging.warning("Continuing despite %s checksum failure(s) because --allow-checksum-mismatch was set.",
                     len(failures))
@@ -1879,7 +2025,7 @@ def flag_cross_species_labels(isolates: Sequence[IsolateRecord]) -> None:
 # What follows is an alignment-free k-mer (Mash-style) proxy. It is good enough to rank
 # neighbours and triage reassortment candidates, and it is NOT a PED value. Every column
 # it produces is named kmer_* rather than ped_* so the distinction survives into the
-# output, and ortho_summary.json restates the limitation.
+# output.
 
 
 def kmer_profile(sequence: str, k: int = KMER_K) -> Dict[str, int]:
@@ -2426,9 +2572,8 @@ def build_risk_rows(
     isolates: Sequence[IsolateRecord],
     divergence: Dict[str, SegmentDivergenceProfile],
 ) -> List[Dict[str, Any]]:
-    """ortho_risk_table.csv is always phylo-blind now (Stage 2's phylogenetics analysis is a
-    separate script/run; combine on isolate_key -- see README's Outputs table). This is
-    byte-identical to the pre-split phylogenetics-free run's output.
+    """Build surveillance risk rows. Not called from run_pipeline() since Stage 1 no longer
+    writes ortho_risk_table.csv (removed in commit 6b21bb4); retained as a utility.
     """
     rows = []
     for isolate in isolates:
@@ -2560,9 +2705,8 @@ def build_ml_tables(
     Four deliberate changes from the previous implementation:
 
     - Features are emitted RAW. The previous version z-scored every column across the
-      whole dataset before writing, which leaks test-fold statistics into training. The
-      per-column mean/std are written to ortho_feature_scaling.json instead, so scaling
-      can be fitted inside the caller's cross-validation fold.
+      whole dataset before writing, which leaks test-fold statistics into training. Scaling
+      must be fitted inside the caller's cross-validation fold.
     - Feature selection is unsupervised (top-variance k-mers). The previous selector
       scored features as abs(between)/variance against label indices produced by sorting
       taxids alphabetically, which imposes an arbitrary ordinal scale on unordered
@@ -2879,7 +3023,13 @@ def summarize(
     cluster_threshold: float,
     min_species_size: int,
     data_records: Sequence[Dict[str, Any]] = (),
+    genomic_index: Optional[Dict[str, "FastaRecord"]] = None,
+    cds_index: Optional[Dict[str, List[Tuple[str, str]]]] = None,
+    output_digests: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
+    genomic_index = genomic_index or {}
+    cds_index = cds_index or {}
+    output_digests = output_digests or {}
     catalog: Dict[str, Any] = {}
     if paths.dataset_catalog.exists():
         catalog = json.loads(paths.dataset_catalog.read_text(encoding="utf-8"))
@@ -2939,6 +3089,17 @@ def summarize(
             "human_derived_records": sum(1 for a in accessions if a.host_taxid == "9606"),
             "lab_host_records": sum(1 for a in accessions if a.is_lab_host),
             "vaccine_strain_records": sum(1 for a in accessions if a.is_vaccine_strain),
+        },
+
+        "reference_snapshot": {
+            "isolate_count": len(isolates),
+            "genomic_accession_count": indexed_record_count(genomic_index),
+            "cds_indexed_accession_count": len(cds_index),
+            "files": {
+                "phylo_rpi_ga_isolates.json": output_digests.get("phylo_rpi_ga_isolates.json"),
+                "phylo_rpi_ga_genomic.json": output_digests.get("phylo_rpi_ga_genomic.json"),
+                "phylo_rpi_ga_cds.json": output_digests.get("phylo_rpi_ga_cds.json"),
+            },
         },
 
         "segment_counts": dict(Counter(a.segment or "unresolved" for a in accessions)),
@@ -3047,13 +3208,11 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
     # ThreadPoolExecutor added 15,991 futures of overhead for no parallelism.
     logging.info("Transforming accession records")
     accessions: List[AccessionRecord] = []
-    qc_rows: List[Dict[str, Any]] = []
     for record in data_records:
-        transformed, qc_row = transform_one_record(
+        transformed, _ = transform_one_record(
             record, annotation_index, biosample_index, genomic_index, protein_index)
         if transformed is not None:
             accessions.append(transformed)
-        qc_rows.append(qc_row)
     logging.info("  %s transformed, %s failed", len(accessions), len(data_records) - len(accessions))
 
     curation_issues = audit_reservoir_curation(accessions)
@@ -3071,68 +3230,99 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
     logging.info("Clustering by k-mer distance (threshold %.3f)", args.cluster_threshold)
     assign_kmer_clusters(isolates, args.cluster_threshold)
 
-    logging.info("Computing per-segment divergence diagnostics")
-    divergence = compute_segment_divergence(isolates, min_species_size=args.min_species_size)
-    divergence_by_key = {d.isolate_key: d for d in divergence}
-    assessable = sum(1 for d in divergence if d.assessable)
-    incongruent = sum(1 for i in isolates if i.taxonomic_incongruence)
-    logging.info("  %s assessable, %s with taxonomic incongruence", assessable, incongruent)
-    logging.warning(
-        "Reassortment is NOT called by this pipeline. The k-mer classifier that used to do "
-        "so failed validation against the literature (it ranked ANDV above PUUV, the exact "
-        "inverse of reported frequencies) because the metric tracks within-species "
-        "diversity and sample size, not tree topology. Assessable isolates are marked "
-        "'requires_phylogenetic_confirmation'; confirm candidates with MAFFT + IQ-TREE.")
-
-    logging.info("Building ML tables")
-    ml_rows, scaling = build_ml_tables(accessions, isolates, divergence_by_key, args.max_features)
-
     out = paths.output_dir
 
     logging.info("Writing outputs")
     output_digests: Dict[str, str] = {}
 
-    def write_csv(name: str, rows: Sequence[Dict[str, Any]]) -> None:
-        output_digests[name] = safe_write_csv(out / name, rows)
-
     def write_json(name: str, payload: Any) -> None:
         output_digests[name] = safe_write_json(out / name, payload)
 
-    write_csv("ortho_accession_table.csv", build_accession_rows(accessions))
-    write_csv("ortho_species_table.csv", build_species_rows(accessions, isolates))
-    write_csv("ortho_isolate_table.csv", build_isolate_rows(isolates, divergence_by_key))
-    write_csv("ortho_host_table.csv", build_host_rows(accessions, isolates))
-    write_csv("ortho_ml_feature_matrix.csv", ml_rows)
-    write_csv("ortho_ml_sequence_table.csv", build_ml_sequence_rows(isolates, genomic_index))
-    write_csv("ortho_suppressed.csv", build_suppressed_rows(accessions, isolates))
-    write_csv("ortho_qc_report.csv", qc_rows)
-    write_json("ortho_feature_scaling.json", scaling)
+    logging.info("Loading CDS index")
+    cds_index = parse_cds_fasta(paths.cds_fasta)
+    logging.info("  cds: %s accessions with at least one CDS", len(cds_index))
 
-    summary = summarize(accessions, isolates, divergence, qc_rows, checksums,
-                        curation_issues, paths, args.cluster_threshold,
-                        args.min_species_size, data_records)
-    write_json("ortho_summary.json", summary)
+    logging.info("Writing reference snapshot")
+    write_json("phylo_rpi_ga_isolates.json", [asdict(i) for i in isolates])
+    # genomic_index dual-keys each record under its versioned accession and its base
+    # accession (see parse_fasta); dedupe by identity so the snapshot holds one row per
+    # record, not two. load_reference_data reconstructs the dual keying from this flat
+    # list on read.
+    unique_genomic_records = {id(r): r for r in genomic_index.values()}.values()
+    write_json("phylo_rpi_ga_genomic.json", [asdict(r) for r in unique_genomic_records])
+    write_json("phylo_rpi_ga_cds.json", cds_index)
+    # Stamp the snapshot with the pipeline version that wrote it, so a snapshot left over
+    # from a code version whose schema/semantics have since changed is detectable rather
+    # than silently readable -- see load_reference_data's staleness check.
+    write_json("phylo_rpi_ga_snapshot_manifest.json", {
+        "pipeline_version": VERSION,
+        "generated_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "files": {
+            "phylo_rpi_ga_isolates.json": output_digests.get("phylo_rpi_ga_isolates.json"),
+            "phylo_rpi_ga_genomic.json": output_digests.get("phylo_rpi_ga_genomic.json"),
+            "phylo_rpi_ga_cds.json": output_digests.get("phylo_rpi_ga_cds.json"),
+        },
+    })
 
-    # ortho_risk_table.csv is always phylo-blind now -- Stage 2 (phylogeny.py) is a separate
-    # script/run; combine its ortho_reassortment_table.csv on isolate_key if you need both
-    # (see README's Outputs table). This is byte-identical to the pre-split behavior when
-    # --phylogenetics wasn't passed, which was already the common case.
-    write_csv("ortho_risk_table.csv", build_risk_rows(isolates, divergence_by_key))
+    # ---- GA pool files (consumed by Algorithm.py) --------------------------------
+    # Build an in-memory ReferenceData so terminally_complete_isolates can look up
+    # genomic sequences. cds_index is not needed for the predicate but ReferenceData
+    # requires the field; pass the already-loaded index (cheap reference, not a copy).
+    _pool_ref = ReferenceData(isolates=isolates, genomic_index=genomic_index,
+                              cds_index=cds_index)
+    terminal_pool = terminally_complete_isolates(_pool_ref)
+    # Strict pool: terminal AND coding-complete (has_complete_triplet). Stage 1 does
+    # NOT apply the reserved-calibration exclusion here -- that lives in the rpi-stage
+    # calibration artifact and is applied at GA load time (Algorithm.py), exactly as today.
+    strict_pool = [i for i in terminal_pool if i.has_complete_triplet]
 
-    # Written once, here, after every output this file (Stage 1) produces -- including the
-    # risk table above -- is already on disk, so it always covers exactly what's present
-    # in `out` from THIS script's run. It does not cover ortho_reassortment_table.csv --
-    # that's Stage 2's (phylogeny.py) output, written independently by a separate run and
-    # never touching this manifest. Run `sha256sum -c ortho_output_checksums.txt` from the
-    # output directory to confirm nothing was truncated or altered afterward (by an
-    # interrupted write, a bad copy, git-lfs mishandling, etc).
-    write_output_checksums(out / "ortho_output_checksums.txt", output_digests)
+    n_terminal = len(terminal_pool)
+    n_strict = len(strict_pool)
+    n_shared = n_strict  # strict is a subset of terminal, so shared = strict count
+    n_terminal_only = n_terminal - n_strict
+    print(f"GA pools (before reserved-calibration exclusion): "
+          f"terminal={n_terminal}, strict(terminal+coding)={n_strict}, "
+          f"terminal-only={n_terminal_only}")
+    logging.info("GA pools (before reserved-calibration exclusion): "
+                 "terminal=%d, strict(terminal+coding)=%d, terminal-only=%d",
+                 n_terminal, n_strict, n_terminal_only)
 
+    _pool_cols = ("isolate_key", "species_name", "s_accession", "m_accession",
+                  "l_accession", "grouping_tier", "grouping_confidence")
+
+    def _pool_row(i: "IsolateRecord") -> Dict[str, Any]:
+        return {c: getattr(i, c) for c in _pool_cols}
+
+    safe_write_csv(out / "ga_pool_terminal_complete.csv",
+                   [_pool_row(i) for i in terminal_pool])
+    safe_write_csv(out / "ga_pool_strict_both.csv",
+                   [_pool_row(i) for i in strict_pool])
+    safe_write_json(out / "ga_pools_manifest.json", {
+        "pipeline_version": VERSION,
+        "generated_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "note": "reserved-calibration exclusion is NOT applied here; Algorithm.py applies it at load time",
+        "pools": {
+            "terminal_complete": {
+                "file": "ga_pool_terminal_complete.csv",
+                "ruler": "terminally-complete (full-length S/M/L with 5'/3' panhandle tags)",
+                "count": n_terminal,
+            },
+            "strict_both": {
+                "file": "ga_pool_strict_both.csv",
+                "ruler": "terminally-complete AND coding-complete (has_complete_triplet)",
+                "count": n_strict,
+            },
+        },
+        "overlap": {
+            "terminal_only": n_terminal_only,
+            "strict_both_shared": n_shared,
+        },
+    })
+
+    species_names = {a.species_name for a in accessions if a.species_name}
     logging.info("Done. %s accessions -> %s species -> %s isolates (%s complete triplets)",
-                 summary["counts"]["accession_records"],
-                 summary["counts"]["canonical_species"],
-                 summary["counts"]["isolates"],
-                 summary["counts"]["complete_triplets"])
+                 len(accessions), len(species_names), len(isolates),
+                 sum(1 for i in isolates if i.has_complete_triplet))
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
@@ -3144,14 +3334,9 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--output", help="Output directory; defaults to <input>/output")
     parser.add_argument("--allow-checksum-mismatch", action="store_true",
                         help="Continue even if inputs do not match NCBI's md5sum.txt "
-                             "(the mismatch is still recorded in ortho_summary.json)")
+                             "(the mismatch is still logged)")
     parser.add_argument("--cluster-threshold", type=float, default=0.02,
                         help="Cosine k-mer distance for single-linkage clustering within a species")
-    parser.add_argument("--max-features", type=int, default=200,
-                        help="Number of top-variance k-mer features in the ML matrix")
-    parser.add_argument("--min-species-size", type=int, default=8,
-                        help="Minimum assessable isolates in a species before reassortment "
-                             "is called at all")
     # --concordance-tolerance / --discordance-threshold were removed along with the
     # withdrawn reassortment classifier; no threshold made its ranking agree with the
     # literature, so exposing one invited false confidence.
@@ -3178,7 +3363,7 @@ if __name__ == "__main__":
 # Tests
 # ============================================================================
 #
-# Merged from test_all_hanta.py. Run with: python3 -m unittest all_hanta -v
+# Merged from test_all_hanta.py. Run with: python3 -m unittest prepare_dataset -v
 #
 # Three test classes, all fake-free (no faked Bio.Phylo/mafft/iqtree -- that lives in
 # phylogeny.py's own tests now):
@@ -3348,11 +3533,10 @@ class SurveillancePriorityReassortmentTermTest(unittest.TestCase):
 
 class SafeWriteCsvLineEndingTest(unittest.TestCase):
     """pandas' to_csv() defaults its line terminator to os.linesep -- LF on Linux, CRLF
-    on Windows -- for content-identical rows. That silently broke the whole point of
-    ortho_output_checksums.txt (verifying output integrity across machines): a rerun on
-    a different OS with byte-for-byte identical data produced a different sha256, which
-    read as a data conflict when it was really just an unpinned line terminator.
-    safe_write_csv must always emit LF, regardless of the platform it runs on.
+    on Windows -- for content-identical rows. A rerun on a different OS with byte-for-byte
+    identical data produces a different sha256, which reads as a data conflict when it is
+    really just an unpinned line terminator. safe_write_csv must always emit LF, regardless
+    of the platform it runs on.
     """
 
     def test_output_never_contains_crlf(self):
@@ -3368,5 +3552,207 @@ class SafeWriteCsvLineEndingTest(unittest.TestCase):
             safe_write_csv(path, [{"a": "1"}, {"a": "2"}])
             data = path.read_bytes()
         self.assertEqual(data, b"a\n1\n2\n")
+
+
+class ReferenceSnapshotWriteTest(unittest.TestCase):
+    """run_pipeline must write the 3 reference snapshot files, unfiltered."""
+
+    def test_writes_three_snapshot_files_with_expected_shapes(self):
+        isolates = [_make_isolate("iso1", "Orthohantavirus x", "S1.1", "M1.1", "L1.1")]
+        genomic_index = {
+            "S1.1": FastaRecord(accession="S1.1", accession_base="S1", header="S1.1 h",
+                                sequence="ACGT", length=4),
+        }
+        cds_index = {"S1": [("nucleocapsid protein", "ACGTACGT")]}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            isolates_digest = safe_write_json(
+                out / "phylo_rpi_ga_isolates.json", [asdict(i) for i in isolates])
+            genomic_digest = safe_write_json(
+                out / "phylo_rpi_ga_genomic.json",
+                [asdict(r) for r in genomic_index.values()])
+            cds_digest = safe_write_json(out / "phylo_rpi_ga_cds.json", cds_index)
+
+            self.assertTrue((out / "phylo_rpi_ga_isolates.json").exists())
+            self.assertTrue((out / "phylo_rpi_ga_genomic.json").exists())
+            self.assertTrue((out / "phylo_rpi_ga_cds.json").exists())
+            self.assertEqual(len(isolates_digest), 64)  # sha256 hex digest length
+            self.assertEqual(len(genomic_digest), 64)
+            self.assertEqual(len(cds_digest), 64)
+
+            loaded_isolates = json.loads((out / "phylo_rpi_ga_isolates.json").read_text())
+            self.assertEqual(loaded_isolates[0]["isolate_key"], "iso1")
+            loaded_cds = json.loads((out / "phylo_rpi_ga_cds.json").read_text())
+            self.assertEqual(loaded_cds["S1"], [["nucleocapsid protein", "ACGTACGT"]])
+
+    def test_dual_keyed_genomic_index_writes_one_row_per_record(self):
+        """Regression for I1/I2: genomic_index dual-keys each record under its versioned
+        accession and its base accession (parse_fasta's own behavior). The count in
+        summarize()'s reference_snapshot block, and the JSON file itself, must both
+        reflect the number of distinct records, not the number of dict keys."""
+        record = FastaRecord(accession="S1.1", accession_base="S1", header="S1.1 h",
+                              sequence="ACGT", length=4)
+        genomic_index = {"S1.1": record, "S1": record}  # same object, two keys
+        self.assertEqual(indexed_record_count(genomic_index), 1)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            unique_records = {id(r): r for r in genomic_index.values()}.values()
+            safe_write_json(out / "phylo_rpi_ga_genomic.json",
+                            [asdict(r) for r in unique_records])
+            loaded = json.loads((out / "phylo_rpi_ga_genomic.json").read_text())
+            self.assertEqual(len(loaded), 1)
+
+
+class RunPipelineSnapshotUnfilteredTest(unittest.TestCase):
+    """Regression for I5: asserts the Stage-1-stays-filter-free invariant against
+    run_pipeline's ACTUAL WRITTEN FILE, not a re-typed intermediate value. Mocks only
+    the raw-ingestion boundary (transform_one_record, plus the file-reading calls that
+    feed it) so this doesn't need a full synthetic NCBI dataset directory -- but
+    build_isolate_records and run_pipeline's own write_json calls run for real, which is
+    exactly the code path where an accidental completeness filter could leak in before
+    the snapshot hits disk.
+    """
+
+    def test_incomplete_isolate_survives_to_the_written_snapshot(self):
+        from unittest import mock
+
+        complete_accs = []
+        for seg, acc in (("S", "S1"), ("M", "M1"), ("L", "L1")):
+            record = _make_accession(acc, "Orthohantavirus x", "Testland", "2020")
+            record.segment = seg
+            record.group_key = "iso-complete"
+            complete_accs.append(record)
+
+        incomplete_acc = _make_accession("S2", "Orthohantavirus x", "Testland", "2020")
+        incomplete_acc.segment = "S"
+        incomplete_acc.group_key = "iso-incomplete"
+
+        all_accs = complete_accs + [incomplete_acc]
+        dummy_data_records = [{} for _ in all_accs]
+        qc_row = {"transform_ok": True}
+        transformed = [(acc, dict(qc_row)) for acc in all_accs]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output_dir = root / "output"
+            output_dir.mkdir()
+            dummy = root / "dummy.jsonl"
+            paths = InputPaths(
+                root=root, package_dir=root, data_dir=root,
+                data_report=dummy, annotation_report=dummy, biosample_report=dummy,
+                dataset_catalog=dummy, md5sum_file=None,
+                genomic_fasta=None, protein_fasta=None, cds_fasta=None,
+                output_dir=output_dir, log_file=output_dir / "ortho_pipeline.log")
+            args = parse_args(["--input", str(root)])
+
+            def fake_iter_jsonl(path):
+                return iter(dummy_data_records) if path == paths.data_report else iter([])
+
+            with mock.patch("prepare_dataset.verify_inputs", return_value=[]), \
+                 mock.patch("prepare_dataset.iter_jsonl", side_effect=fake_iter_jsonl), \
+                 mock.patch("prepare_dataset.parse_fasta", return_value={}), \
+                 mock.patch("prepare_dataset.parse_cds_fasta", return_value={}), \
+                 mock.patch("prepare_dataset.transform_one_record", side_effect=transformed):
+                run_pipeline(paths, args)
+
+            written = json.loads((output_dir / "phylo_rpi_ga_isolates.json").read_text())
+            manifest = json.loads(
+                (output_dir / "phylo_rpi_ga_snapshot_manifest.json").read_text())
+
+        by_key = {row["isolate_key"]: row for row in written}
+        self.assertIn("iso-complete", by_key)
+        self.assertIn("iso-incomplete", by_key)
+        self.assertTrue(by_key["iso-complete"]["has_complete_triplet"])
+        self.assertFalse(by_key["iso-incomplete"]["has_complete_triplet"])
+
+        # I6: the snapshot must be stamped with the pipeline version that wrote it.
+        self.assertEqual(manifest["pipeline_version"], VERSION)
+        self.assertIn("phylo_rpi_ga_isolates.json", manifest["files"])
+
+
+class ReferenceDataRoundTripTest(unittest.TestCase):
+    """load_reference_data must reconstruct exactly what run_pipeline wrote --
+    key-for-key on genomic_index, not just matching counts."""
+
+    def test_genomic_index_keying_matches_parse_fasta_exactly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fasta_path = Path(tmp) / "genomic.fna"
+            fasta_path.write_text(
+                ">PX111111.1 Orthohantavirus x segment S\nACGTACGTACGT\n"
+                ">PX222222.1 Orthohantavirus x segment M\nTTTTGGGGCCCC\n",
+                encoding="utf-8")
+            original_index = parse_fasta(fasta_path)
+
+            out = Path(tmp) / "output"
+            out.mkdir()
+            safe_write_json(out / "phylo_rpi_ga_isolates.json", [])
+            safe_write_json(
+                out / "phylo_rpi_ga_genomic.json",
+                [asdict(r) for r in original_index.values()])
+            safe_write_json(out / "phylo_rpi_ga_cds.json", {})
+
+            reference = load_reference_data(out)
+
+            self.assertEqual(set(reference.genomic_index.keys()), set(original_index.keys()))
+            for key, original_record in original_index.items():
+                self.assertEqual(reference.genomic_index[key].sequence, original_record.sequence)
+                self.assertEqual(reference.genomic_index[key].accession, original_record.accession)
+
+    def test_cds_index_round_trips_as_list_of_pairs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            safe_write_json(out / "phylo_rpi_ga_isolates.json", [])
+            safe_write_json(out / "phylo_rpi_ga_genomic.json", [])
+            safe_write_json(out / "phylo_rpi_ga_cds.json",
+                            {"PX111111": [("nucleocapsid protein", "ACGT")]})
+
+            reference = load_reference_data(out)
+
+            self.assertEqual(reference.cds_index["PX111111"], [("nucleocapsid protein", "ACGT")])
+            self.assertIsInstance(reference.cds_index["PX111111"][0], tuple)
+
+    def test_isolates_reconstruct_as_isolate_record_instances(self):
+        isolate = _make_isolate("iso1", "Orthohantavirus x", "S1.1", "M1.1", "L1.1")
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            safe_write_json(out / "phylo_rpi_ga_isolates.json", [asdict(isolate)])
+            safe_write_json(out / "phylo_rpi_ga_genomic.json", [])
+            safe_write_json(out / "phylo_rpi_ga_cds.json", {})
+
+            reference = load_reference_data(out)
+
+            self.assertEqual(len(reference.isolates), 1)
+            self.assertIsInstance(reference.isolates[0], IsolateRecord)
+            self.assertEqual(reference.isolates[0].isolate_key, "iso1")
+
+    def test_warns_on_stale_snapshot_manifest_version(self):
+        """Regression for I6: a snapshot written by a different pipeline_version must be
+        detectable, not silently readable as if it matched the running code."""
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            safe_write_json(out / "phylo_rpi_ga_isolates.json", [])
+            safe_write_json(out / "phylo_rpi_ga_genomic.json", [])
+            safe_write_json(out / "phylo_rpi_ga_cds.json", {})
+            safe_write_json(out / "phylo_rpi_ga_snapshot_manifest.json",
+                            {"pipeline_version": "0.0.1-stale", "generated_at_utc": "x",
+                             "files": {}})
+
+            with self.assertLogs(level="WARNING") as captured:
+                load_reference_data(out)
+            self.assertTrue(any("0.0.1-stale" in msg for msg in captured.output))
+
+    def test_no_warning_when_manifest_absent(self):
+        """A snapshot written before this fix (no manifest file) must still load without
+        a spurious staleness warning -- there is nothing to compare against."""
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            safe_write_json(out / "phylo_rpi_ga_isolates.json", [])
+            safe_write_json(out / "phylo_rpi_ga_genomic.json", [])
+            safe_write_json(out / "phylo_rpi_ga_cds.json", {})
+
+            with self.assertNoLogs(level="WARNING"):
+                load_reference_data(out)
 
 

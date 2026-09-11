@@ -1,0 +1,328 @@
+# Stage 1 reference snapshot: decoupling downstream pipelines from all_hanta/
+
+Date: 2026-09-09
+
+## Problem
+
+`all_hanta.py` (Stage 1 ingest) was renamed to `01-prepare_dataset.py`. That
+name is not importable (`import 01-prepare_dataset` is a syntax error — leading
+digit, hyphen), so every downstream file's `import all_hanta as ah` is
+currently broken:
+
+- `phylogeny.py` (Stage 2) does `import all_hanta as ah` and independently
+  re-derives isolates, the genomic/protein FASTA index, and the CDS index
+  straight from `--input` (the raw `all_hanta/ncbi_dataset/` package), by
+  design, to stay "independent of all_hanta.py's output files."
+- `rpi_core.py` (Stage 3)'s `load_reference_data(root)` does the same
+  re-derivation via `ah.resolve_inputs`/`ah.iter_jsonl`/`ah.parse_fasta`/
+  `ah.transform_one_record`/`ah.build_isolate_records`, plus
+  `ph.parse_cds_fasta` (borrowed from phylogeny.py) for the CDS index.
+- `Algorithm.py` calls `rpi_core.load_reference_data(Path("all_hanta"))`.
+- `figures.py` does `import all_hanta as ah` and its smoke test checks for
+  `all_hanta/ncbi_dataset/data`.
+
+Three files independently re-parsing the same ~15 MB raw NCBI package is both
+the proximate cause of the broken import and the underlying defect: Stage 1
+is supposed to be the single accurate ingest, and Stages 2/3 are supposed to
+consume its output, not repeat its work.
+
+## Goal
+
+`prepare_dataset.py` (renamed from `01-prepare_dataset.py`) becomes the
+**only** file that reads `all_hanta/ncbi_dataset/data`. It ingests once and
+writes a reference snapshot; every downstream pipeline eats that snapshot.
+Pure code (dataclasses, constants, stateless functions) is still shared by
+import — only *raw file access* is restricted to Stage 1.
+
+## Non-goals
+
+- No change to the raw data folder: `all_hanta/` keeps its name and location.
+  It is NCBI's data package, not code.
+- No change to the two-ruler design (206 coding-complete for Stage 2, 272
+  terminally-complete pool / strict-merged set for Stage 3) — this spec only
+  changes *how the underlying isolate/sequence data reaches each stage*, not
+  which isolates each stage selects.
+- No change to `rpi_core.py`'s legitimate reuse of `phylogeny.py`'s pure code
+  (`PhyloCandidate`, `select_primary_cds`, `resolve_binary`, `_analyze_group`).
+
+## Design
+
+### 1. Rename: `01-prepare_dataset.py` → `prepare_dataset.py`
+
+Fixes the broken import at the root. No behavior change.
+
+### 2. Import + alias rename: `ah` → `prep`
+
+Every file currently doing `import all_hanta as ah` switches to:
+
+```python
+import prepare_dataset as prep
+```
+
+and every `ah.<symbol>` call site in that file is renamed to `prep.<symbol>`.
+This is a mechanical rename across `phylogeny.py`, `rpi_core.py`, and
+`figures.py` (and any other file with the import) — not a partial fix.
+
+**Alias choice:** `prep`, not `pd` (collides with `import pandas as pd`,
+which `prepare_dataset.py` itself uses) and not `ah` (still tied to the old
+module name).
+
+**Safety steps for the rename** (mechanical, but real files are large —
+`rpi_core.py` alone has ~150 `ah.*` call sites):
+
+1. Before touching anything: `grep -rn "\bprep\b" --include="*.py" .` — confirm
+   `prep` is not already bound to something else in these files. If it is,
+   stop and report the collision instead of shadowing it.
+2. Rename with word-boundary substitution only (e.g. `sed 's/\bah\./prep./g'`
+   per file) — never a blind replace of the letters "ah", which appear inside
+   unrelated identifiers and prose.
+3. Update comments/docstrings that name the *module* `all_hanta.py` (e.g.
+   "Reuses all_hanta.py's ingest primitives") to say `prepare_dataset.py`.
+   Do **not** touch text that means the *data folder* `all_hanta/` — that
+   name doesn't change (see Non-goals).
+4. After editing, `grep -rn "\bah\.\|import all_hanta" --include="*.py" .`
+   must return nothing, then run the full test suite.
+
+### 3. Raw-data access rule
+
+- `all_hanta/` (the folder) keeps its name; nothing here renames it.
+- `prepare_dataset.py` is the only file allowed to read
+  `all_hanta/ncbi_dataset/data`. That is its job (ingesting raw data).
+- Downstream files never open that folder again. Per-file disposition:
+
+  | File | Change |
+  |---|---|
+  | `phylogeny.py` | Delete its raw re-derivation (`resolve_inputs`, `iter_jsonl`, `parse_fasta`, `transform_one_record`, `build_isolate_records`, `assign_kmer_clusters`, `compute_segment_divergence`). Load the Stage 1 snapshot instead. |
+  | `rpi_core.py` | Rewrite `load_reference_data(Path("all_hanta"))` → `load_reference_data(Path("output"))`, reading the 3 JSON snapshot files. Drop `ph.parse_cds_fasta`. |
+  | `Algorithm.py` | `--reference-input` default `"all_hanta"` → `"output"`; the one `Path("all_hanta")` call site becomes `Path("output")`. |
+  | `figures.py` | **Correction, discovered while writing the implementation plan:** `figures.py:60-88`'s `load_ingest()` is not pure-code-only — it independently re-derives isolates from raw `all_hanta/` the same way `phylogeny.py` used to (`resolve_inputs`/`iter_jsonl`/`parse_fasta`/`transform_one_record`/`build_isolate_records`/`assign_kmer_clusters`/`compute_segment_divergence`/`ph.parse_cds_fasta`), because it needs the exact same isolate population Stage 2 scored. Treat it like `phylogeny.py`: rewrite `load_ingest()` to load the snapshot instead. Its smoke test's existence-check also moves from `all_hanta/ncbi_dataset/data` to `output/ortho_reference_isolates.json`. |
+
+- `README.md`'s download commands (`datasets download ... --filename
+  all_hanta.zip`, `unzip -d all_hanta`) are untouched — that's just where the
+  raw data lives, not a code path this spec changes.
+
+### 4. Snapshot artifacts (Stage 1 output, format: JSON)
+
+Three new files, written with the existing `safe_write_json` (atomic write,
+sha256 returned for the checksum manifest) — no new I/O helper needed:
+
+- **`output/ortho_reference_isolates.json`** — JSON array, one object per
+  `IsolateRecord`, every field, for **every** isolate (not filtered to 206 or
+  272 — filtering is a downstream concern, not Stage 1's).
+- **`output/ortho_reference_genomic.json`** — JSON array, one object per
+  genomic accession: `{accession, accession_base, header, sequence, length}`
+  (the `FastaRecord` fields), for every accession in the genomic FASTA index,
+  not just complete-triplet isolates.
+- **`output/ortho_reference_cds.json`** — JSON object keyed by base
+  accession → list of `[product, sequence]` pairs, the same shape as today's
+  in-memory `cds_index` (built today by `phylogeny.py`'s `parse_cds_fasta`,
+  moved into Stage 1's own ingest run).
+
+`parse_cds_fasta` (the function itself, not just its call site) moves from
+`phylogeny.py` to `prepare_dataset.py`: only Stage 1 reads `cds.fna` after
+this change, and Stage 1 must not import from Stage 2 to get it.
+
+All three are added to `ortho_output_checksums.txt` like every other Stage 1
+output.
+
+**Why JSON, not pickle or parquet:** pickle is unreadable to a reviewer,
+couples the artifact to the exact dataclass shape that wrote it (a field
+rename breaks loading silently, no clear error), and is a code-execution
+vector on load — wrong for a repo whose outputs are judged by whether a
+reviewer would accept them. Parquet adds a new dependency (pyarrow) for no
+benefit at this row count (thousands, not millions) and nothing else in the
+repo uses it. JSON reuses `safe_write_json`'s existing atomic-write + sha256
+path unchanged, so provenance is uniform across every Stage 1 output, not a
+special case for this one.
+
+### 5. Stage 1 stays filter-free
+
+`prepare_dataset.py` writes the full, unfiltered isolate/genomic/CDS data. It
+does not know about "206 coding-complete" or "272 terminally-complete" — those
+are downstream concepts:
+
+- Stage 2 (`phylogeny.py`) keeps computing and printing its own 206-count
+  from `isolate.has_complete_triplet`, now read off the loaded snapshot
+  instead of a live re-derivation.
+- Stage 3 (`rpi_core.py`) keeps `terminally_complete_isolates(reference)`
+  unchanged (it already operates purely on `reference.isolates` +
+  `reference.genomic_index`, which the snapshot now supplies). The strict
+  merged set for the fitness function becomes:
+
+  ```python
+  merged = [i for i in terminally_complete_isolates(reference)
+            if i.has_complete_triplet]
+  ```
+
+  computed once, in `rpi_core.py`, at the same call site that currently loads
+  the reference data.
+
+### 6. Overlap reporting
+
+The same `rpi_core.py` call site prints the one-line overlap using set
+arithmetic on `isolate_key`:
+
+```python
+coding_complete = {i.isolate_key for i in reference.isolates if i.has_complete_triplet}
+terminal_complete = {i.isolate_key for i in terminally_complete_isolates(reference)}
+# "in both: N, only 206: N, only 272: N"
+```
+
+No new data is needed for this — it's a Stage 3-only change. The three
+completeness definitions (coding-complete / terminally-complete / strict
+merged) get documented in `README.md`.
+
+### 7. Provenance
+
+`ortho_summary.json` (already written by Stage 1) gets a new
+`reference_snapshot` block: isolate count, genomic-accession count,
+cds-indexed-accession count, and the three new files' sha256s — chained to
+the same `verify_inputs` md5sum digests every other Stage 1 output already
+carries. The 206/272/merged counts themselves are NOT recorded here (Stage 1
+doesn't compute them); they're printed and logged by Stage 2 and Stage 3
+respectively.
+
+### 8. Interface after this change
+
+`load_reference_data` (the snapshot reader) lives in `prepare_dataset.py`
+itself, not `rpi_core.py` — Stage 1 owns both the write and the read side of
+the format it defines, and all three consumers (`phylogeny.py`, `rpi_core.py`,
+`figures.py`) need it, not just Stage 3:
+
+```python
+# Stage 1 (prepare_dataset.py) -- unchanged ingest, +3 new writes:
+write_json("ortho_reference_isolates.json", [asdict(i) for i in isolates])
+write_json("ortho_reference_genomic.json", [asdict(r) for r in genomic_index.values()])
+write_json("ortho_reference_cds.json", cds_index)  # already {accession: [(product, seq), ...]}
+
+# Also in prepare_dataset.py -- the shared reader:
+@dataclass
+class ReferenceData:
+    isolates: List["IsolateRecord"]
+    genomic_index: Dict[str, "FastaRecord"]
+    cds_index: Dict[str, List[Tuple[str, str]]]
+
+def load_reference_data(output_dir: Path) -> ReferenceData:
+    isolates = [IsolateRecord(**row) for row in load_json(output_dir / "ortho_reference_isolates.json")]
+    genomic_index = {r["accession"]: FastaRecord(**r)
+                      for r in load_json(output_dir / "ortho_reference_genomic.json")}
+    cds_index = {k: [tuple(pair) for pair in v]
+                 for k, v in load_json(output_dir / "ortho_reference_cds.json").items()}
+    return ReferenceData(isolates=isolates, genomic_index=genomic_index, cds_index=cds_index)
+
+# Stage 2 (phylogeny.py) / Stage 3 (rpi_core.py, Algorithm.py) / figures.py:
+reference = prep.load_reference_data(Path(output_dir))
+```
+
+`rpi_core.py`'s existing `ReferenceData` dataclass and `load_reference_data`
+function are removed in favor of `prep`'s; call sites become
+`prep.load_reference_data(...)` and `prep.ReferenceData`. No file after Stage
+1 calls `resolve_inputs`, `iter_jsonl`, `parse_fasta`, `transform_one_record`,
+or `build_isolate_records` against a raw path again.
+
+## Implementation-plan assertion
+
+`ortho_reference_genomic.json`'s keying must match `parse_fasta`'s current
+in-memory keying exactly: keyed by accession, first token of the FASTA
+header, setdefault-first-wins on duplicate keys. The reload path
+(`{r["accession"]: prep.FastaRecord(**r) for r in ...}`) reproduces this only
+if the write path preserves the same first-wins order and does not
+accidentally key by `accession_base` or last-wins. The implementation plan
+must include a test asserting `load_reference_data(...).genomic_index` is
+key-for-key identical (same keys, same `.sequence` values) to today's
+`parse_fasta(...)` output on the same input package — not just "roughly the
+same size."
+
+## Amendment: phylogeny.py persists tip labels; figures.py stops reconstructing groups
+
+Adopted after further review, spec is FINAL as of this amendment.
+
+`figures.py`'s `load_ingest()` (see the correction above) was re-deriving isolates
+*and* re-running `phylogeny.collect_phylo_candidates`/`group_candidates` just to
+reconstruct the synthetic tip-label (`I0000`, `I0001`, ...) → `isolate_key` mapping
+`phylogeny._analyze_group` assigned when it built the committed trees — that mapping
+is otherwise not persisted to disk. Reconstructing it requires calling
+`_analyze_group`'s grouping logic with the *same* `--cluster-threshold` /
+`--min-species-size` Stage 2's committed run used; any drift between the values
+`figures.py` assumes and the values Stage 2 was actually run with silently
+mislabels tree tips.
+
+Fix: `phylogeny.py`'s `_analyze_group` writes `labels.json` (a flat
+`{label: isolate_key}` JSON object) into each group's directory
+(`group_dir / "labels.json"`, a sibling of the `S/`, `M/`, `L/` segment
+subdirectories it already writes) at the point the label map is constructed, right
+after `label_map: Dict[str, PhyloCandidate] = dict(zip(labels, members))`. One file
+per group, shared across all three segments (the label assignment is
+segment-independent).
+
+`figures.py` then reads this file directly instead of reconstructing it:
+
+- `ortho_reassortment_table.csv` already carries `s_tree_path`/`m_tree_path`/
+  `l_tree_path` per isolate per row (written by `_analyze_group`'s `out_row.update(...)`)
+  — `figures.py` looks up an isolate's tree path directly from its CSV row instead of
+  rebuilding `by_group`/`group_key`/`members` to find it.
+- `load_tree_relabeled` takes a tree path directly, reads `labels.json` from
+  `tree_path.parent.parent / "labels.json"`, and relabels tips from that dict — no
+  `PhyloCandidate` objects involved.
+- `group_for_scope`, `label_map_for_members`, and `find_group_for_isolate` are deleted
+  entirely — nothing in `figures.py` reconstructs groups anymore.
+- `load_ingest()` shrinks to just `prep.load_reference_data(output_dir).isolates` — the
+  only thing `figures.py` still needs from the snapshot is isolate metadata
+  (species/country/host) for the AFTER panel's parent-metadata table. `divergence_by_key`
+  and `cds_index` are no longer needed by `figures.py` at all (they existed only to feed
+  the now-deleted `collect_phylo_candidates` call).
+
+This removes the last piece of parameter-drift risk in `figures.py` and reduces it to
+what its own module docstring already claims: drawing figures from Stage 2's committed
+outputs, never re-deriving anything Stage 2 computed.
+
+## Existing call sites needing disposition (inventory, not exhaustive editing here)
+
+`grep -rn "all_hanta" --include="*.py" .` currently returns ~70 hits outside
+`prepare_dataset.py`, spanning `phylogeny.py`, `rpi_core.py`, `Algorithm.py`,
+`figures.py`. Each falls into one of three buckets — the implementation plan
+must classify and handle every one, not just the illustrative examples above:
+
+1. **Module import / `ah.*` call site** → rule 2 (rename to `prep`).
+2. **Raw data path in a downstream file** (e.g. `Path("all_hanta")` default
+   args, `load_reference_data(Path("all_hanta"))` call sites, test fixtures
+   that build `Path(__file__).parent / "all_hanta"`) → rule 3 (replace with
+   `Path("output")` / snapshot-file fixtures).
+3. **Prose referencing `all_hanta.py` the module, or `all_hanta/` the data
+   folder, in a comment/docstring** → reword the module references only
+   (rule 2c); leave data-folder references alone.
+
+Test fixtures in `rpi_core.py` (`test_all_hanta.py`-pattern classes around
+lines 4209-4302, 5431-5436, 6315-6318, 8611-8626, 9013-9144, 9704) that
+currently skip unless `all_hanta/` exists on disk need converting to build or
+load a small snapshot fixture instead, so they no longer depend on the raw
+package being present in the checkout.
+
+## Acceptance criteria
+
+```
+grep -rn "\bah\.\|import all_hanta" --include="*.py" .   # must be empty
+grep -rn '"all_hanta"' --include="*.py" .                # must be empty except
+                                                          # inside prepare_dataset.py
+```
+
+The second check is on the string literal `"all_hanta"`, not just
+`Path("all_hanta")` — that also catches default-argument strings like
+`Algorithm.py`'s `--reference-input` default `"all_hanta"`, which wouldn't
+match a `Path(...)`-only grep.
+
+Full test suite green. `python prepare_dataset.py` (Stage 1) still produces
+every existing output plus the 3 new snapshot files; `phylogeny.py` and
+`rpi_core.py`/`Algorithm.py` run against `output/` only, with no filesystem
+access to `all_hanta/ncbi_dataset/` from those files.
+
+## Open questions for the implementation plan
+
+- Exact ordering: rename+alias-fix (rules 1-2) can land as a mechanical,
+  behavior-preserving commit before the snapshot/raw-access work (rules 3-6),
+  which changes actual data flow. Recommend splitting into two plan phases
+  for reviewability, each with its own test run.
+- `IsolateRecord`/`FastaRecord` field renames in the future would silently
+  break `prep.IsolateRecord(**row)` reconstruction from old snapshots — not
+  a concern for this change, but worth a one-line note in
+  `prepare_dataset.py` near the dataclass definitions once this lands.

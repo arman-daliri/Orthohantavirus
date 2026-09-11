@@ -14,3 +14,11 @@ tools/dist/
 tools/mafft-win/
 tools/iqtree-3.1.3-Windows/
 tools/_download_meta.json
+
+# Stage 1's reference snapshot -- derived from all_hanta/ (also gitignored, see Step 1 in
+# the README), so committing it without its source would be misleading provenance. It
+# regenerates deterministically in ~16 seconds; run prepare_dataset.py before Stages 2/3.
+output/phylo_rpi_ga_isolates.json
+output/phylo_rpi_ga_genomic.json
+output/phylo_rpi_ga_cds.json
+output/phylo_rpi_ga_snapshot_manifest.json

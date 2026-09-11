@@ -51,20 +51,21 @@ def isolate_key_of(isolate: Any) -> str:
     return _field(isolate, "isolate_key", "isolatekey")
 
 
-def build_pool(reference: Any, reserved_keys: set) -> List[str]:
-    """Use the canonical usable_pool from rpi_core rather than a reimplementation.
-
-    usable_pool's docstring explicitly forbids a second implementation: it filters on
-    terminally_complete_isolates (all three segments full-length AND both panhandle tags)
-    to protect panhandle-adjacent computation like M_pack. The old build_pool only
-    checked has_complete_triplet and omitted terminal-completeness, contaminating 51% of
-    what it searched and missing 65% of the real pool.
-    """
-    pool_records = rc.usable_pool(reference, reserved_keys)
-    pool = sorted([isolate_key_of(i) for i in pool_records])
-    if not pool:
-        raise SystemExit("search pool is empty after filters -- nothing to sample from")
-    return pool
+def completeness_overlap(reference: Any, reserved_keys: set) -> Dict[str, int]:
+    """Set-arithmetic comparison between the two completeness rulers: coding_complete
+    (has_complete_triplet) vs terminal_complete (rc.usable_pool's terminally-complete-
+    and-not-reserved filter). Both rulers are evaluated over the SAME universe --
+    rc.wild_classified_pool (wild, classified, not-reserved) -- so only_coding/
+    only_terminal report genuine ruler disagreement, not isolates that were never
+    eligible for either pool (non-wild, unclassified, or reserved-for-calibration).
+    Reported once per run in the ga_pool_comparison.json payload."""
+    eligible = rc.wild_classified_pool(reference, reserved_keys)
+    coding_complete = {isolate_key_of(i) for i in eligible if i.has_complete_triplet}
+    terminal_complete = {isolate_key_of(i) for i in rc.usable_pool(reference, reserved_keys)}
+    both = coding_complete & terminal_complete
+    only_coding = coding_complete - terminal_complete
+    only_terminal = terminal_complete - coding_complete
+    return {"both": len(both), "only_coding": len(only_coding), "only_terminal": len(only_terminal)}
 
 
 def default_candidate_factory(reference: Any) -> Callable[[str, Dict[str, Any]], Any]:
@@ -285,9 +286,109 @@ def dump_scored_table(oracle: "Oracle", output_dir: Path, seed: int) -> Tuple[Pa
     return jsonl_path, csv_path, len(records)
 
 
+# Fixed declaration order -- the pool file is the contract the GA consumes.
+# The reserved-calibration exclusion is applied at load time (same semantics as today).
+_POOL_SPECS: List[Tuple[str, str]] = [
+    ("terminal_complete", "ga_pool_terminal_complete.csv"),
+    ("strict_both", "ga_pool_strict_both.csv"),
+]
+
+
+def load_pool_from_file(pool_file: Path, reserved_keys: set) -> List[str]:
+    """Read isolate_keys from a Stage-1 pool CSV and apply reserved-calibration exclusion.
+
+    The pool CSV is the contract -- the GA consumes it rather than recomputing the ruler.
+    Reserved-key removal is applied here, matching the semantics of usable_pool
+    (which also excludes reserved keys at call time).
+    Raises FileNotFoundError if the pool file is missing (Stage 1 must run first).
+    """
+    if not pool_file.exists():
+        raise FileNotFoundError(
+            f"GA pool file missing: {pool_file}. Run prepare_dataset.py (Stage 1) first.")
+    with pool_file.open(newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        rows = list(reader)
+    if rows and "isolate_key" not in rows[0]:
+        raise KeyError(
+            f"pool CSV {pool_file} lacks 'isolate_key' column; "
+            f"found columns: {list(rows[0].keys())}")
+    all_keys = [row["isolate_key"] for row in rows]
+    pool = sorted(k for k in all_keys if k not in reserved_keys)
+    if not pool:
+        raise SystemExit(f"pool {pool_file.name} is empty after reserved-key exclusion")
+    return pool
+
+
+def _run_one_pool(pool_name: str, pool: List[str], reference: Any, precomputed: Any,
+                  pool_out_dir: Path, args: Any, reserved: set,
+                  overlap: Dict[str, int]) -> Dict[str, Any]:
+    """Run the full GA search for one pool and write per-pool artifacts.
+    Returns a comparison-summary dict. All GA hyperparameters are taken from args;
+    the pool is the only variable across calls. overlap is pre-computed once by main().
+    """
+    import time
+    pool_out_dir.mkdir(parents=True, exist_ok=True)
+    fast_args = rc._score_args(str(pool_out_dir))
+    oracle = Oracle(reference, precomputed, fast_args)
+
+    t0 = time.monotonic()
+    result = run_search(pool, oracle.score, args.seed, args.population,
+                        args.generations, args.mutation_rate, args.tournament_size,
+                        args.elitism, args.plateau, args.diversity)
+    wall_seconds = time.monotonic() - t0
+    _check_no_total_scoring_failure(oracle)
+
+    if args.dump_scored:
+        jsonl_path, csv_path, n_scored = dump_scored_table(oracle, pool_out_dir, args.seed)
+        print(f"[{pool_name}] wrote {n_scored} scored triplet(s) to {jsonl_path} and {csv_path}")
+
+    seen, winners = set(), []
+    for triplet, value in result["final_population"]:
+        if triplet in seen:
+            continue
+        seen.add(triplet)
+        winners.append({"triplet": list(triplet), "fitness": value,
+                        **oracle.rows.get(triplet, {})})
+        if len(winners) >= args.top:
+            break
+    confirmation = confirm_winners(oracle, winners, pool_out_dir, args.with_phylogeny)
+
+    payload = {"config": vars(args), "pool_name": pool_name,
+               "calibration_reserved_excluded": len(reserved),
+               "pool_ruler": pool_name, "pool_size": len(pool),
+               "completeness_overlap": overlap,
+               "generations_run": result["generations_run"],
+               "stopped_on_plateau": result["stopped_on_plateau"],
+               "log": result["log"], "winners": winners, "confirmation": confirmation,
+               "scoring_errors": [{"triplet": list(t), "error": e} for t, e in oracle.errors]}
+    out_path = pool_out_dir / f"seed_{args.seed}.json"
+    out_path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+
+    if result["log"]:
+        first, last = result["log"][0], result["log"][-1]
+        print(f"[{pool_name}] generations: {result['generations_run']} "
+              f"(plateau stop: {result['stopped_on_plateau']})")
+        print(f"[{pool_name}] best fitness: first {first['best']:.4f} -> final {last['best']:.4f}")
+        print(f"[{pool_name}] winners written: {len(winners)}; confirmation: {confirmation}")
+    if oracle.errors:
+        print(f"[{pool_name}] scoring errors (scored 0.0): {len(oracle.errors)}", file=sys.stderr)
+    print(f"[{pool_name}] wrote {out_path}")
+
+    return {
+        "pool_name": pool_name,
+        "pool_size": len(pool),
+        "generations_run": result["generations_run"],
+        "stopped_on_plateau": result["stopped_on_plateau"],
+        "best_fitness": result["log"][-1]["best"] if result["log"] else None,
+        "winner_fitnesses": [w["fitness"] for w in winners],
+        "scoring_error_count": len(oracle.errors),
+        "wall_seconds": round(wall_seconds, 1),
+    }
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--reference-input", default="all_hanta")
+    parser.add_argument("--reference-input", default="output")
     parser.add_argument("--output", default="output/ga_search")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--population", type=int, default=150)
@@ -302,55 +403,46 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--dump-scored", action="store_true",
                         help="write every unique triplet the search scored (not just "
                              "the top --top winners) to "
-                             "all_scored_seed_<seed>.{jsonl,csv} in --output")
+                             "all_scored_seed_<seed>.{jsonl,csv} in the per-pool output dir")
     args = parser.parse_args(argv)
 
-    reference = rc.load_reference_data(Path(args.reference_input))
+    ref_dir = Path(args.reference_input)
+    reference = rc.prep.load_reference_data(ref_dir)
     precomputed = rc._build_precomputed(reference)
-    fast_args = rc._score_args(args.output)  # positional: keyword name is internal
-    oracle = Oracle(reference, precomputed, fast_args)
     reserved = load_reserved_isolate_keys()
-    pool = build_pool(reference, reserved)
+    out_root = Path(args.output)
+    overlap = completeness_overlap(reference, reserved)
 
-    result = run_search(pool, oracle.score, args.seed, args.population,
-                        args.generations, args.mutation_rate, args.tournament_size,
-                        args.elitism, args.plateau, args.diversity)
-    _check_no_total_scoring_failure(oracle)
+    comparison_rows: List[Dict[str, Any]] = []
+    for pool_name, pool_file_name in _POOL_SPECS:
+        pool_file = ref_dir / pool_file_name
+        pool = load_pool_from_file(pool_file, reserved)
+        pool_out_dir = out_root / pool_name
+        summary = _run_one_pool(pool_name, pool, reference, precomputed,
+                                pool_out_dir, args, reserved, overlap)
+        comparison_rows.append(summary)
 
-    if args.dump_scored:
-        jsonl_path, csv_path, n_scored = dump_scored_table(oracle, args.output, args.seed)
-        print(f"wrote {n_scored} scored triplet(s) to {jsonl_path} and {csv_path}")
-
-    seen, winners = set(), []
-    for triplet, value in result["final_population"]:
-        if triplet in seen:
-            continue
-        seen.add(triplet)
-        winners.append({"triplet": list(triplet), "fitness": value,
-                        **oracle.rows.get(triplet, {})})
-        if len(winners) >= args.top:
-            break
-    confirmation = confirm_winners(oracle, winners, Path(args.output), args.with_phylogeny)
-
-    payload = {"config": vars(args), "calibration_reserved_excluded": len(reserved),
-               "pool_size": len(pool), "generations_run": result["generations_run"],
-               "stopped_on_plateau": result["stopped_on_plateau"],
-               "log": result["log"], "winners": winners, "confirmation": confirmation,
-               "scoring_errors": [{"triplet": list(t), "error": e} for t, e in oracle.errors]}
-    out_dir = Path(args.output)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"seed_{args.seed}.json"
-    out_path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
-    if result["log"]:
-        first, last = result["log"][0], result["log"][-1]
-        print(f"generations: {result['generations_run']} "
-              f"(plateau stop: {result['stopped_on_plateau']})")
-        print(f"best fitness: first {first['best']:.4f} -> final {last['best']:.4f}")
-        print(f"winners written: {len(winners)}; confirmation: {confirmation}")
-    if oracle.errors:
-        print(f"scoring errors (scored 0.0, run continued): {len(oracle.errors)}",
-              file=sys.stderr)
-    print(f"wrote {out_path}")
+    # Combined comparison
+    comparison = {
+        "seed": args.seed,
+        "hyperparameters": {
+            "population": args.population, "generations": args.generations,
+            "mutation_rate": args.mutation_rate, "tournament_size": args.tournament_size,
+            "elitism": args.elitism, "plateau": args.plateau,
+        },
+        "runs": comparison_rows,
+    }
+    out_root.mkdir(parents=True, exist_ok=True)
+    comparison_path = out_root / "ga_pool_comparison.json"
+    comparison_path.write_text(json.dumps(comparison, indent=2, default=str), encoding="utf-8")
+    print("\n=== GA pool comparison ===")
+    for row in comparison_rows:
+        best_str = f"{row['best_fitness']:.4f}" if row['best_fitness'] is not None else "N/A"
+        print(f"  {row['pool_name']}: pool={row['pool_size']}, "
+              f"gens={row['generations_run']} (plateau={row['stopped_on_plateau']}), "
+              f"best={best_str}, "
+              f"errors={row['scoring_error_count']}, wall={row['wall_seconds']}s")
+    print(f"wrote {comparison_path}")
     return 0
 
 
@@ -405,16 +497,75 @@ class GaSearchTest(unittest.TestCase):
         winner = tournament(scored, rng, size=2)
         self.assertEqual(winner, ("d", "e", "f"))
 
-    def test_pool_matches_usable_pool(self):
-        """build_pool now calls the canonical rc.usable_pool, so test that it produces
-        the same result. This guards against accidental divergence."""
-        from pathlib import Path
-        reference = rc.load_reference_data(Path("all_hanta"))
-        reserved = rc.reserved_calibration_isolate_keys()
-        # Both should produce the same pool
-        alg_pool = set(build_pool(reference, reserved))
-        canonical = set(i.isolate_key for i in rc.usable_pool(reference, reserved))
-        self.assertEqual(alg_pool, canonical)
+    def test_pool_matches_strict_merged_pool(self):
+        """The strict_both pool file must contain the same isolate keys as
+        rc.strict_merged_pool (before reserved-key exclusion, since both pool files
+        are written without exclusion by Stage 1)."""
+        strict_file = Path("output/ga_pool_strict_both.csv")
+        if not Path("output/phylo_rpi_ga_isolates.json").exists() or not strict_file.exists():
+            self.skipTest("output/ snapshot or pool files not present -- run prepare_dataset.py first")
+        reference = rc.prep.load_reference_data(Path("output"))
+        reserved: set = set()  # no exclusion in pool files
+        file_pool = set(load_pool_from_file(strict_file, reserved))
+        canonical = set(i.isolate_key for i in rc.strict_merged_pool(reference, reserved))
+        self.assertEqual(file_pool, canonical)
+
+    def test_strict_pool_is_subset_of_terminal_pool(self):
+        """The strict pool (terminal AND coding-complete) must be a subset of the
+        terminal pool (terminal-complete only). Pool files are written by Stage 1."""
+        terminal_file = Path("output/ga_pool_terminal_complete.csv")
+        strict_file = Path("output/ga_pool_strict_both.csv")
+        if not terminal_file.exists() or not strict_file.exists():
+            self.skipTest("output/ pool files not present -- run prepare_dataset.py first")
+        reserved: set = set()
+        terminal_keys = set(load_pool_from_file(terminal_file, reserved))
+        strict_keys = set(load_pool_from_file(strict_file, reserved))
+        self.assertTrue(strict_keys.issubset(terminal_keys),
+                        f"strict_both keys not a subset of terminal_complete: "
+                        f"{strict_keys - terminal_keys}")
+
+    def test_completeness_overlap_partitions_the_union(self):
+        """both + only_coding + only_terminal must partition coding_complete |
+        terminal_complete -- every key in the union appears in exactly one of the
+        three sets. Uses fixture isolates so it runs without the output/ snapshot."""
+        from types import SimpleNamespace as NS
+        coding_only = NS(isolate_key="c1", has_complete_triplet=True)
+        terminal_only = NS(isolate_key="t1", has_complete_triplet=False)
+        both_ruler = NS(isolate_key="b1", has_complete_triplet=True)
+        reference = NS(isolates=[coding_only, terminal_only, both_ruler])
+        reserved: set = set()
+
+        with mock.patch.object(
+                rc, "wild_classified_pool",
+                return_value=[coding_only, terminal_only, both_ruler]), \
+             mock.patch.object(
+                rc, "usable_pool", return_value=[terminal_only, both_ruler]):
+            overlap = completeness_overlap(reference, reserved)
+
+        coding_complete = {"c1", "b1"}
+        terminal_complete = {"t1", "b1"}
+        union = coding_complete | terminal_complete
+        self.assertEqual(overlap["both"] + overlap["only_coding"] + overlap["only_terminal"],
+                          len(union))
+        self.assertEqual(overlap, {"both": 1, "only_coding": 1, "only_terminal": 1})
+
+    def test_completeness_overlap_ignores_isolates_outside_shared_universe(self):
+        """Regression for I4: an isolate with has_complete_triplet=True that is NOT in
+        rc.wild_classified_pool's universe (e.g. non-wild, unclassified, or reserved)
+        must not inflate only_coding -- it was never eligible for either ruler's pool,
+        so it isn't a real disagreement between the two rulers."""
+        from types import SimpleNamespace as NS
+        eligible_and_coding = NS(isolate_key="e1", has_complete_triplet=True)
+        ineligible_but_coding = NS(isolate_key="x1", has_complete_triplet=True)
+        reference = NS(isolates=[eligible_and_coding, ineligible_but_coding])
+        reserved: set = set()
+
+        with mock.patch.object(
+                rc, "wild_classified_pool", return_value=[eligible_and_coding]), \
+             mock.patch.object(rc, "usable_pool", return_value=[]):
+            overlap = completeness_overlap(reference, reserved)
+
+        self.assertEqual(overlap, {"both": 0, "only_coding": 1, "only_terminal": 0})
 
 
 class ConfirmWinnersTest(unittest.TestCase):

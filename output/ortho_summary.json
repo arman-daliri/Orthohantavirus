@@ -1,6 +1,6 @@
 {
   "pipeline_version": "2.0.0",
-  "generated_at_utc": "2026-09-06T23:39:51Z",
+  "generated_at_utc": "2026-09-10T08:00:41Z",
   "dataset_catalog_api_version": "V2",
   "provenance": {
     "taxon_id": 1980442,
@@ -89,6 +89,16 @@
     "human_derived_records": 2109,
     "lab_host_records": 338,
     "vaccine_strain_records": 4
+  },
+  "reference_snapshot": {
+    "isolate_count": 9867,
+    "genomic_accession_count": 16028,
+    "cds_indexed_accession_count": 15376,
+    "files": {
+      "ortho_reference_isolates.json": "a0c81af31d2f7e9e1f317d709168818a8d194d22cbb6c5748f005bf90fb65cd6",
+      "ortho_reference_genomic.json": "dbc802c2e9917b303a57b46df1c7f4ad9ff08859d330f9dc4d210d7ccf9fde53",
+      "ortho_reference_cds.json": "25a4cf7cecf926df0c0be99ee7eee21331b8043b427ffd4065dae1837648df2c"
+    }
   },
   "segment_counts": {
     "L": 4452,
