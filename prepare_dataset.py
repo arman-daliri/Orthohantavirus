@@ -957,9 +957,8 @@ def safe_write_csv(path: Path, rows: Sequence[Dict[str, Any]]) -> str:
 
     lineterminator="\\n" is pinned explicitly: pandas' to_csv() otherwise defaults to
     os.linesep, so the exact same rows produce LF line endings on Linux and CRLF on
-    Windows -- identical content, different bytes, different sha256. That silently
-    broke the whole point of ortho_output_checksums.txt (verifying output integrity
-    across machines) and made a plain content-identical rerun look like a diff.
+    Windows -- identical content, different bytes, different sha256. That made a plain
+    content-identical rerun look like a diff across platforms.
     """
     frame = pd.DataFrame(list(rows)) if rows else pd.DataFrame()
     data = frame.to_csv(index=False, lineterminator="\n").encode("utf-8")
@@ -976,10 +975,7 @@ def safe_write_json(path: Path, payload: Any) -> str:
 
 
 def write_output_checksums(path: Path, digests: Dict[str, str]) -> None:
-    """Write a sha256sum(1)-compatible manifest so output integrity can be checked later.
-
-    Verify with: sha256sum -c ortho_output_checksums.txt (run from the output directory).
-    """
+    """Write a sha256sum(1)-compatible manifest so output integrity can be checked later."""
     lines = [f"{digest}  {name}\n" for name, digest in sorted(digests.items())]
     _atomic_write_bytes(path, "".join(lines).encode("utf-8"))
 
@@ -1232,8 +1228,7 @@ def report_checksums(results: Sequence[ChecksumResult], allow_mismatch: bool) ->
         raise SystemExit(
             f"\nAborting: {len(failures)} input file(s) do not match NCBI's published checksums.\n"
             "Results computed from these bytes would not be reproducible on another platform.\n"
-            "Re-run with --allow-checksum-mismatch to proceed anyway (the mismatch is recorded "
-            "in ortho_summary.json)."
+            "Re-run with --allow-checksum-mismatch to proceed anyway."
         )
     logging.warning("Continuing despite %s checksum failure(s) because --allow-checksum-mismatch was set.",
                     len(failures))
@@ -2030,7 +2025,7 @@ def flag_cross_species_labels(isolates: Sequence[IsolateRecord]) -> None:
 # What follows is an alignment-free k-mer (Mash-style) proxy. It is good enough to rank
 # neighbours and triage reassortment candidates, and it is NOT a PED value. Every column
 # it produces is named kmer_* rather than ped_* so the distinction survives into the
-# output, and ortho_summary.json restates the limitation.
+# output.
 
 
 def kmer_profile(sequence: str, k: int = KMER_K) -> Dict[str, int]:
@@ -2577,9 +2572,8 @@ def build_risk_rows(
     isolates: Sequence[IsolateRecord],
     divergence: Dict[str, SegmentDivergenceProfile],
 ) -> List[Dict[str, Any]]:
-    """ortho_risk_table.csv is always phylo-blind now (Stage 2's phylogenetics analysis is a
-    separate script/run; combine on isolate_key -- see README's Outputs table). This is
-    byte-identical to the pre-split phylogenetics-free run's output.
+    """Build surveillance risk rows. Not called from run_pipeline() since Stage 1 no longer
+    writes ortho_risk_table.csv (removed in commit 6b21bb4); retained as a utility.
     """
     rows = []
     for isolate in isolates:
@@ -2711,9 +2705,8 @@ def build_ml_tables(
     Four deliberate changes from the previous implementation:
 
     - Features are emitted RAW. The previous version z-scored every column across the
-      whole dataset before writing, which leaks test-fold statistics into training. The
-      per-column mean/std are written to ortho_feature_scaling.json instead, so scaling
-      can be fitted inside the caller's cross-validation fold.
+      whole dataset before writing, which leaks test-fold statistics into training. Scaling
+      must be fitted inside the caller's cross-validation fold.
     - Feature selection is unsupervised (top-variance k-mers). The previous selector
       scored features as abs(between)/variance against label indices produced by sorting
       taxids alphabetically, which imposes an arbitrary ordinal scale on unordered
@@ -3341,7 +3334,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--output", help="Output directory; defaults to <input>/output")
     parser.add_argument("--allow-checksum-mismatch", action="store_true",
                         help="Continue even if inputs do not match NCBI's md5sum.txt "
-                             "(the mismatch is still recorded in ortho_summary.json)")
+                             "(the mismatch is still logged)")
     parser.add_argument("--cluster-threshold", type=float, default=0.02,
                         help="Cosine k-mer distance for single-linkage clustering within a species")
     # --concordance-tolerance / --discordance-threshold were removed along with the
@@ -3540,11 +3533,10 @@ class SurveillancePriorityReassortmentTermTest(unittest.TestCase):
 
 class SafeWriteCsvLineEndingTest(unittest.TestCase):
     """pandas' to_csv() defaults its line terminator to os.linesep -- LF on Linux, CRLF
-    on Windows -- for content-identical rows. That silently broke the whole point of
-    ortho_output_checksums.txt (verifying output integrity across machines): a rerun on
-    a different OS with byte-for-byte identical data produced a different sha256, which
-    read as a data conflict when it was really just an unpinned line terminator.
-    safe_write_csv must always emit LF, regardless of the platform it runs on.
+    on Windows -- for content-identical rows. A rerun on a different OS with byte-for-byte
+    identical data produces a different sha256, which reads as a data conflict when it is
+    really just an unpinned line terminator. safe_write_csv must always emit LF, regardless
+    of the platform it runs on.
     """
 
     def test_output_never_contains_crlf(self):

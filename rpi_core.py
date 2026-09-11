@@ -8988,8 +8988,8 @@ PUBLISHED_CROSSES: List[Dict[str, Any]] = [
         # D5 / Task 12. donor_species is "Orthohantavirus nigrorivense", NOT
         # "Orthohantavirus bayoui" -- an earlier lookup for this task assumed ICTV had
         # folded Black Creek Canal virus (BCCV) into the Bayou virus species, but
-        # this project's own curated species table (prepare_dataset.py's SPECIES_INFO,
-        # confirmed against output/ortho_species_table.csv) already resolves BCCV to
+        # this project's own curated species table (prepare_dataset.py's SPECIES_INFO)
+        # already resolves BCCV to
         # its own species, "Orthohantavirus nigrorivense" (abbrev "BCCV"), separate
         # from "Orthohantavirus bayoui". Verified directly: every isolate under
         # "Orthohantavirus nigrorivense" in all_hanta/ is a Black Creek Canal virus

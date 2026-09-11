@@ -539,7 +539,7 @@ class RenderBeforeFiguresIntegrationTest(unittest.TestCase):
     supported_reassortment_candidate isolate, not just that each piece works in isolation."""
 
     def test_renders_at_least_one_real_figure(self):
-        if not Path("output/ortho_reference_isolates.json").exists():
+        if not Path("output/phylo_rpi_ga_isolates.json").exists():
             self.skipTest("output/ reference snapshot not present -- run prepare_dataset.py first")
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:

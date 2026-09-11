@@ -6,7 +6,7 @@ Analyzes the reference isolate set from Stage 1's snapshot for real, tree-based
 reassortment evidence -- the rigorous replacement for the k-mer divergence diagnostics
 prepare_dataset.py (Stage 1) still emits as informational-only columns.
 
-Reads ONLY output/ortho_reference_isolates.json and output/ortho_reference_cds.json (via
+Reads ONLY output/phylo_rpi_ga_isolates.json and output/phylo_rpi_ga_cds.json (via
 prep.load_reference_data) -- never all_hanta/ncbi_dataset/ directly. Stage 1 is the sole
 reader of the raw NCBI package; this stage re-applies its own k-mer clustering and
 divergence diagnostics (assign_kmer_clusters / compute_segment_divergence) to the loaded
@@ -942,13 +942,12 @@ def phylo_call_by_isolate(phylo_rows: Sequence[Dict[str, Any]]) -> Dict[str, str
 
     Public utility, not called anywhere in this pipeline's own scripts: before the
     three-stage split, this fed prepare_dataset.py's surveillance_priority(phylo_call=...)
-    directly, in the same process. Post-split, ortho_risk_table.csv (Stage 1) is
-    unconditionally phylo-blind by design (see README's Pipeline stages section and
+    directly, in the same process. Post-split, Stage 1 is unconditionally phylo-blind by
+    design (see README's Pipeline stages section and
     docs/superpowers/specs/2026-08-13-three-stage-pipeline-split-design.md section 5),
     so nothing in Stage 1 or Stage 2 calls this anymore. It's kept, public, and tested
-    for exactly the manual isolate_key join the README documents -- call it yourself on
-    ortho_reassortment_table.csv's rows if you want this same scope-reduction before
-    joining onto ortho_risk_table.csv or your own analysis.
+    for exactly the manual isolate_key join -- call it yourself on
+    ortho_reassortment_table.csv's rows if you want this same scope-reduction.
 
     At --phylo-scope=both an isolate can have up to two rows, one per scope, and they can
     disagree WITHOUT contradicting each other: species-only and phylogroup-only trees
