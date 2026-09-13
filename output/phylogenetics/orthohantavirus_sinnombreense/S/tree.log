@@ -4,20 +4,20 @@ Contributed by Lam-Tung Nguyen, Dominik Schrempf, Chris Bielow,
 Olga Chernomor, Michael Woodhams, Diep Thi Hoang, Heiko Schmidt
 
 Host:    ario (AVX2, FMA3, 15 GB RAM)
-Command: tools\iqtree-3.1.3-Windows\bin\iqtree3.exe -s output\phylogenetics\orthohantavirus_sinnombreense\S\aligned.fasta --seqtype DNA -m MFP -B 1000 -T 11 --seed 42 --prefix output\phylogenetics\orthohantavirus_sinnombreense\S\tree --quiet --redo
+Command: C:/git-projects/Orthohantavirus/tools/iqtree-3.1.3-Windows/bin\iqtree3.exe -s output\phylogenetics\orthohantavirus_sinnombreense\S\aligned.fasta --seqtype DNA -m MFP -B 1000 -T 2 --seed 42 --prefix output\phylogenetics\orthohantavirus_sinnombreense\S\tree --quiet --redo
 Seed:    42 (Using SPRNG - Scalable Parallel Random Number Generator)
-Time:    Thu Sep 10 13:32:32 2026
-Kernel:  AVX+FMA - 11 threads (12 CPU cores detected)
+Time:    Fri Sep 11 23:02:44 2026
+Kernel:  AVX+FMA - 2 threads (12 CPU cores detected)
 
 Reading alignment file output\phylogenetics\orthohantavirus_sinnombreense\S\aligned.fasta ... Fasta format detected
-Reading fasta file: done in 0.0018927 secs
+Reading fasta file: done in 0.0011325 secs
 Alignment most likely contains DNA/RNA sequences
-Constructing alignment: done in 0.0031931 secs
+Constructing alignment: done in 0.0014721 secs using 1061% CPU
 WARNING: 12 sites contain only gaps or ambiguous characters.
 Alignment has 49 sequences with 1299 columns, 436 distinct patterns
 289 parsimony-informative, 98 singleton sites, 912 constant sites
        Gap/Ambiguity  Composition  p-value
-Analyzing sequences: done in 0.0004686 secs
+Analyzing sequences: done in 3.48e-005 secs
    1  I0000    0.92%    passed     99.30%
    2  I0001    0.92%    passed     96.47%
    3  I0002    0.92%    passed     99.84%
@@ -71,8 +71,8 @@ Analyzing sequences: done in 0.0004686 secs
 NOTE: I0022 is identical to I0020 but kept for subsequent analysis
 NOTE: I0028 is identical to I0021 but kept for subsequent analysis
 NOTE: I0030 is identical to I0024 but kept for subsequent analysis
-Checking for duplicate sequences: done in 0.0003484 secs
-Identifying sites to remove: done in 0.0021789 secs
+Checking for duplicate sequences: done in 9.21e-005 secs
+Identifying sites to remove: done in 0.0009089 secs
 NOTE: 2 identical sequences (see below) will be ignored for subsequent analysis
 NOTE: I0026 (identical to I0020) is ignored but added at the end
 NOTE: I0027 (identical to I0020) is ignored but added at the end
@@ -81,172 +81,34 @@ Alignment was printed to output\phylogenetics\orthohantavirus_sinnombreense\S\tr
 For your convenience alignment with unique sequences printed to output\phylogenetics\orthohantavirus_sinnombreense\S\tree.uniqueseq.phy
 
 
-Create initial parsimony tree by phylogenetic likelihood library (PLL)... 0.005 seconds
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+Create initial parsimony tree by phylogenetic likelihood library (PLL)... 0.003 seconds
 Perform fast likelihood tree search using GTR+I+G model...
 Estimate model parameters (epsilon = 5.000)
 Perform nearest neighbor interchange...
 Estimate model parameters (epsilon = 1.000)
-1. Initial log-likelihood: -6302.076
+1. Initial log-likelihood: -6302.075
 Optimal log-likelihood: -6302.018
-Rate parameters:  A-C: 2.45772  A-G: 28.44022  A-T: 2.52300  C-G: 0.20700  C-T: 35.94446  G-T: 1.00000
+Rate parameters:  A-C: 2.45803  A-G: 28.45103  A-T: 2.52332  C-G: 0.20717  C-T: 35.94613  G-T: 1.00000
 Base frequencies:  A: 0.304  C: 0.206  G: 0.231  T: 0.260
 Proportion of invariable sites: 0.344
 Gamma shape alpha: 0.268
-Parameters optimization took 1 rounds (0.059 sec)
-Time for fast ML tree search: 1.164 seconds
+Parameters optimization took 1 rounds (0.015 sec)
+Time for fast ML tree search: 0.164 seconds
 
 NOTE: ModelFinder requires 8 MB RAM!
 ModelFinder will test up to 968 DNA models (sample size: 1299 epsilon: 0.100) ...
  No. Model         -LnL         df  AIC          AICc         BIC
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
 Akaike Information Criterion:           TIM2+F+I+R2
 Corrected Akaike Information Criterion: TIM2+F+I+R2
 Bayesian Information Criterion:         TPM2u+F+I+G4
 Best-fit model: TPM2u+F+I+G4 chosen according to BIC
 
 All model information printed to output\phylogenetics\orthohantavirus_sinnombreense\S\tree.model.gz
-CPU time for ModelFinder: 61.969 seconds (0h:1m:1s)
-Wall-clock time for ModelFinder: 42.994 seconds (0h:0m:42s)
+CPU time for ModelFinder: 12.641 seconds (0h:0m:12s)
+Wall-clock time for ModelFinder: 6.616 seconds (0h:0m:6s)
 Generating 1000 samples for ultrafast bootstrap (seed: 42)...
 
 NOTE: 4 MB RAM (0 GB) is required!
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
 Estimate model parameters (epsilon = 0.100)
 Thoroughly optimizing +I+G parameters from 10 start values...
 Init pinv, alpha: 0.000, 0.254 / Estimate: 0.000, 0.140 / LogL: -6310.041
@@ -261,103 +123,106 @@ Init pinv, alpha: 0.624, 0.254 / Estimate: 0.584, 0.743 / LogL: -6307.944
 Init pinv, alpha: 0.702, 0.254 / Estimate: 0.632, 1.115 / LogL: -6307.852
 Optimal pinv,alpha: 0.238, 0.204 / LogL: -6305.025
 
-Parameters optimization took 2.326 sec
+Parameters optimization took 0.494 sec
 Wrote distance file to... 
 Computing ML distances based on estimated model parameters...
-Calculating distance matrix: done in 0.0030355 secs
-Computing ML distances took 0.003473 sec (of wall-clock time) 0.000000 sec (of CPU time)
-Setting up auxiliary I and S matrices: done in 0.0001214 secs
-Constructing RapidNJ tree: done in 0.0002253 secs
-Computing RapidNJ tree took 0.000487 sec (of wall-clock time) 0.000000 sec (of CPU time)
+Calculating distance matrix: done in 0.0057502 secs
+Computing ML distances took 0.005907 sec (of wall-clock time) 0.000000 sec (of CPU time)
+Setting up auxiliary I and S matrices: done in 6.94e-005 secs
+Constructing RapidNJ tree: done in 0.0001558 secs
+Computing RapidNJ tree took 0.000278 sec (of wall-clock time) 0.000000 sec (of CPU time)
 Log-likelihood of RapidNJ tree: -6367.939
 --------------------------------------------------------------------
 |             INITIALIZING CANDIDATE TREE SET                      |
 --------------------------------------------------------------------
-Generating 98 parsimony trees... 0.508 second
-Computing log-likelihood of 98 initial trees ... 4.069 seconds
+Generating 98 parsimony trees... 0.286 second
+Computing log-likelihood of 98 initial trees ... 0.298 seconds
 Current best score: -6305.025
 
 Do NNI search on 20 best initial trees
 Estimate model parameters (epsilon = 0.100)
 BETTER TREE FOUND at iteration 1: -6305.024
-Iteration 10 / LogL: -6305.519 / Time: 0h:0m:56s
-Iteration 20 / LogL: -6305.522 / Time: 0h:1m:3s
-Finish initializing candidate tree set (14)
-Current best tree score: -6305.024 / CPU time: 18.357
+Iteration 10 / LogL: -6305.519 / Time: 0h:0m:8s
+Iteration 20 / LogL: -6305.522 / Time: 0h:0m:8s
+Finish initializing candidate tree set (15)
+Current best tree score: -6305.024 / CPU time: 1.674
 Number of iterations: 20
 --------------------------------------------------------------------
 |               OPTIMIZING CANDIDATE TREE SET                      |
 --------------------------------------------------------------------
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 28: -6304.783
-Iteration 30 / LogL: -6333.208 / Time: 0h:1m:23s (0h:2m:16s left)
-UPDATE BEST LOG-LIKELIHOOD: -6304.775
+BETTER TREE FOUND at iteration 22: -6304.765
+BETTER TREE FOUND at iteration 28: -6304.759
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 36: -6304.545
-Iteration 40 / LogL: -6311.808 / Time: 0h:1m:37s (0h:2m:13s left)
+BETTER TREE FOUND at iteration 30: -6304.544
+Iteration 30 / LogL: -6304.544 / Time: 0h:0m:9s (0h:0m:10s left)
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 41: -6302.400
+BETTER TREE FOUND at iteration 32: -6303.853
 Estimate model parameters (epsilon = 0.100)
-UPDATE BEST LOG-LIKELIHOOD: -6302.384
+BETTER TREE FOUND at iteration 33: -6303.546
+BETTER TREE FOUND at iteration 40: -6303.545
+Iteration 40 / LogL: -6303.545 / Time: 0h:0m:10s (0h:0m:9s left)
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 43: -6301.259
-BETTER TREE FOUND at iteration 44: -6301.259
-Iteration 50 / LogL: -6301.259 / Time: 0h:1m:48s (0h:2m:5s left)
-Log-likelihood cutoff on original alignment: -6327.109
-Iteration 60 / LogL: -6301.474 / Time: 0h:2m:3s (0h:1m:54s left)
-Iteration 70 / LogL: -6313.538 / Time: 0h:2m:22s (0h:1m:46s left)
-UPDATE BEST LOG-LIKELIHOOD: -6301.258
-Iteration 80 / LogL: -6301.261 / Time: 0h:2m:39s (0h:1m:34s left)
-UPDATE BEST LOG-LIKELIHOOD: -6301.258
-BETTER TREE FOUND at iteration 90: -6301.258
-Iteration 90 / LogL: -6301.258 / Time: 0h:2m:52s (0h:2m:26s left)
-Iteration 100 / LogL: -6306.360 / Time: 0h:3m:8s (0h:2m:11s left)
-Log-likelihood cutoff on original alignment: -6327.109
-NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.992
-UPDATE BEST LOG-LIKELIHOOD: -6301.257
-Iteration 110 / LogL: -6301.260 / Time: 0h:3m:23s (0h:2m:12s left)
-UPDATE BEST LOG-LIKELIHOOD: -6301.257
-Iteration 120 / LogL: -6301.259 / Time: 0h:3m:40s (0h:1m:59s left)
-Iteration 130 / LogL: -6301.260 / Time: 0h:3m:58s (0h:1m:45s left)
-UPDATE BEST LOG-LIKELIHOOD: -6301.257
-Iteration 140 / LogL: -6302.383 / Time: 0h:4m:14s (0h:1m:31s left)
-Iteration 150 / LogL: -6301.263 / Time: 0h:4m:28s (0h:1m:15s left)
-Log-likelihood cutoff on original alignment: -6327.109
-Iteration 160 / LogL: -6301.259 / Time: 0h:4m:45s (0h:1m:0s left)
-Iteration 170 / LogL: -6301.265 / Time: 0h:4m:58s (0h:0m:45s left)
-Iteration 180 / LogL: -6301.266 / Time: 0h:5m:18s (0h:0m:30s left)
-Iteration 190 / LogL: -6313.801 / Time: 0h:5m:33s (0h:0m:15s left)
-TREE SEARCH COMPLETED AFTER 191 ITERATIONS / Time: 0h:5m:35s
+BETTER TREE FOUND at iteration 43: -6303.495
+Iteration 50 / LogL: -6304.547 / Time: 0h:0m:10s (0h:0m:8s left)
+Log-likelihood cutoff on original alignment: -6330.604
+BETTER TREE FOUND at iteration 53: -6303.495
+Iteration 60 / LogL: -6303.509 / Time: 0h:0m:11s (0h:0m:7s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 64: -6301.267
+Iteration 70 / LogL: -6301.294 / Time: 0h:0m:12s (0h:0m:7s left)
+Iteration 80 / LogL: -6301.280 / Time: 0h:0m:12s (0h:0m:6s left)
+Iteration 90 / LogL: -6303.496 / Time: 0h:0m:13s (0h:0m:5s left)
+Iteration 100 / LogL: -6303.547 / Time: 0h:0m:14s (0h:0m:5s left)
+Log-likelihood cutoff on original alignment: -6330.155
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.963
+NOTE: UFBoot does not converge, continue at least 100 more iterations
+Iteration 110 / LogL: -6301.273 / Time: 0h:0m:15s (0h:0m:7s left)
+UPDATE BEST LOG-LIKELIHOOD: -6301.266
+Iteration 120 / LogL: -6314.707 / Time: 0h:0m:16s (0h:0m:6s left)
+UPDATE BEST LOG-LIKELIHOOD: -6301.265
+Iteration 130 / LogL: -6301.267 / Time: 0h:0m:16s (0h:0m:5s left)
+Iteration 140 / LogL: -6319.200 / Time: 0h:0m:17s (0h:0m:4s left)
+Iteration 150 / LogL: -6302.392 / Time: 0h:0m:18s (0h:0m:3s left)
+Log-likelihood cutoff on original alignment: -6330.155
+Iteration 160 / LogL: -6301.290 / Time: 0h:0m:19s (0h:0m:3s left)
+Iteration 170 / LogL: -6313.539 / Time: 0h:0m:20s (0h:0m:2s left)
+Iteration 180 / LogL: -6302.422 / Time: 0h:0m:20s (0h:0m:1s left)
+Iteration 190 / LogL: -6301.269 / Time: 0h:0m:21s (0h:0m:0s left)
+Iteration 200 / LogL: -6301.270 / Time: 0h:0m:22s (0h:0m:0s left)
+Log-likelihood cutoff on original alignment: -6330.155
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.993
+TREE SEARCH COMPLETED AFTER 200 ITERATIONS / Time: 0h:0m:22s
 
 --------------------------------------------------------------------
 |                    FINALIZING TREE SEARCH                        |
 --------------------------------------------------------------------
 Performs final model parameters optimization
 Estimate model parameters (epsilon = 0.010)
-1. Initial log-likelihood: -6301.257
-Optimal log-likelihood: -6301.255
-Rate parameters:  A-C: 3.99948  A-G: 51.57468  A-T: 3.99948  C-G: 1.00000  C-T: 51.57468  G-T: 1.00000
+1. Initial log-likelihood: -6301.265
+Optimal log-likelihood: -6301.263
+Rate parameters:  A-C: 4.00905  A-G: 51.67991  A-T: 4.00905  C-G: 1.00000  C-T: 51.67991  G-T: 1.00000
 Base frequencies:  A: 0.304  C: 0.206  G: 0.231  T: 0.260
-Proportion of invariable sites: 0.242
-Gamma shape alpha: 0.207
-Parameters optimization took 1 rounds (0.059 sec)
-BEST SCORE FOUND : -6301.255
+Proportion of invariable sites: 0.241
+Gamma shape alpha: 0.206
+Parameters optimization took 1 rounds (0.008 sec)
+BEST SCORE FOUND : -6301.263
 Creating bootstrap support values...
 Split supports printed to NEXUS file output\phylogenetics\orthohantavirus_sinnombreense\S\tree.splits.nex
-Total tree length: 1.550
+Total tree length: 1.551
 
-Total number of iterations: 191
-CPU time used for tree search: 257.359 sec (0h:4m:17s)
-Wall-clock time used for tree search: 290.337 sec (0h:4m:50s)
-Total CPU time used: 324.859 sec (0h:5m:24s)
-Total wall-clock time used: 336.257 sec (0h:5m:36s)
+Total number of iterations: 200
+CPU time used for tree search: 29.234 sec (0h:0m:29s)
+Wall-clock time used for tree search: 14.969 sec (0h:0m:14s)
+Total CPU time used: 43.234 sec (0h:0m:43s)
+Total wall-clock time used: 22.264 sec (0h:0m:22s)
 
 Computing bootstrap consensus tree...
 Reading input file output\phylogenetics\orthohantavirus_sinnombreense\S\tree.splits.nex...
-47 taxa and 425 splits.
+47 taxa and 376 splits.
 Consensus tree written to output\phylogenetics\orthohantavirus_sinnombreense\S\tree.contree
 Reading input trees file output\phylogenetics\orthohantavirus_sinnombreense\S\tree.contree
-Log-likelihood of consensus tree: -6301.259
+Log-likelihood of consensus tree: -6301.265
 
 Analysis results written to: 
   IQ-TREE report:                output\phylogenetics\orthohantavirus_sinnombreense\S\tree.iqtree
@@ -369,4 +234,4 @@ Ultrafast bootstrap approximation results written to:
   Consensus tree:                output\phylogenetics\orthohantavirus_sinnombreense\S\tree.contree
   Screen log file:               output\phylogenetics\orthohantavirus_sinnombreense\S\tree.log
 
-Date and Time: Thu Sep 10 13:38:08 2026
+Date and Time: Fri Sep 11 23:03:06 2026

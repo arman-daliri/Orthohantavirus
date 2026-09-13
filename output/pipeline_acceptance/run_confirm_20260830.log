@@ -1,8 +1,0 @@
-tau = 3.914
-  a_random_fakes: n=20
-  b1_within_species_shuffle: n=30
-  b2_cross_species_sympatric: n=36
-  c_real_positive: n=11
-overall_ranking_supported = False
-
-wrote output\pipeline_acceptance\run_confirm_20260830.json

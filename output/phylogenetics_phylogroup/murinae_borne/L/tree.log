@@ -4,19 +4,19 @@ Contributed by Lam-Tung Nguyen, Dominik Schrempf, Chris Bielow,
 Olga Chernomor, Michael Woodhams, Diep Thi Hoang, Heiko Schmidt
 
 Host:    ario (AVX2, FMA3, 15 GB RAM)
-Command: tools\iqtree-3.1.3-Windows\bin\iqtree3.exe -s output\phylogenetics_phylogroup\murinae_borne\L\aligned.fasta --seqtype DNA -m MFP -B 1000 -T 11 --seed 42 --prefix output\phylogenetics_phylogroup\murinae_borne\L\tree --quiet --redo
+Command: C:/git-projects/Orthohantavirus/tools/iqtree-3.1.3-Windows/bin\iqtree3.exe -s output\phylogenetics_phylogroup\murinae_borne\L\aligned.fasta --seqtype DNA -m MFP -B 1000 -T 2 --seed 42 --prefix output\phylogenetics_phylogroup\murinae_borne\L\tree --quiet --redo
 Seed:    42 (Using SPRNG - Scalable Parallel Random Number Generator)
-Time:    Thu Sep 10 17:58:56 2026
-Kernel:  AVX+FMA - 11 threads (12 CPU cores detected)
+Time:    Sat Sep 12 04:13:50 2026
+Kernel:  AVX+FMA - 2 threads (12 CPU cores detected)
 
 Reading alignment file output\phylogenetics_phylogroup\murinae_borne\L\aligned.fasta ... Fasta format detected
-Reading fasta file: done in 0.0670313 secs using 46.62% CPU
+Reading fasta file: done in 0.0453432 secs using 103.4% CPU
 Alignment most likely contains DNA/RNA sequences
-Constructing alignment: done in 0.0485552 secs using 225.3% CPU
+Constructing alignment: done in 0.0276081 secs using 226.4% CPU
 Alignment has 550 sequences with 6466 columns, 3703 distinct patterns
 3118 parsimony-informative, 342 singleton sites, 3006 constant sites
        Gap/Ambiguity  Composition  p-value
-Analyzing sequences: done in 0.0029049 secs using 2689% CPU
+Analyzing sequences: done in 0.0040707 secs
    1  I0000    0.15%    passed     41.19%
    2  I0001    0.15%    passed     20.33%
    3  I0002    0.15%    passed     93.90%
@@ -603,8 +603,8 @@ NOTE: I0464 is identical to I0463 but kept for subsequent analysis
 NOTE: I0498 is identical to I0496 but kept for subsequent analysis
 NOTE: I0527 is identical to I0525 but kept for subsequent analysis
 NOTE: I0541 is identical to I0540 but kept for subsequent analysis
-Checking for duplicate sequences: done in 0.0064163 secs
-Identifying sites to remove: done in 0.0331756 secs using 282.6% CPU
+Checking for duplicate sequences: done in 0.0053682 secs
+Identifying sites to remove: done in 0.0201034 secs using 155.4% CPU
 NOTE: 20 identical sequences (see below) will be ignored for subsequent analysis
 NOTE: I0043 (identical to I0024) is ignored but added at the end
 NOTE: I0039 (identical to I0029) is ignored but added at the end
@@ -631,19 +631,19 @@ Alignment was printed to output\phylogenetics_phylogroup\murinae_borne\L\tree.un
 For your convenience alignment with unique sequences printed to output\phylogenetics_phylogroup\murinae_borne\L\tree.uniqueseq.phy
 
 
-Create initial parsimony tree by phylogenetic likelihood library (PLL)... 0.628 seconds
+Create initial parsimony tree by phylogenetic likelihood library (PLL)... 0.327 seconds
 Perform fast likelihood tree search using GTR+I+G model...
 Estimate model parameters (epsilon = 5.000)
 Perform nearest neighbor interchange...
 Estimate model parameters (epsilon = 1.000)
-1. Initial log-likelihood: -165867.537
-Optimal log-likelihood: -165866.444
-Rate parameters:  A-C: 2.59567  A-G: 13.99322  A-T: 1.46142  C-G: 0.68012  C-T: 23.62086  G-T: 1.00000
+1. Initial log-likelihood: -165867.593
+Optimal log-likelihood: -165866.506
+Rate parameters:  A-C: 2.54713  A-G: 13.79023  A-T: 1.44068  C-G: 0.67469  C-T: 23.28500  G-T: 1.00000
 Base frequencies:  A: 0.330  C: 0.163  G: 0.211  T: 0.297
 Proportion of invariable sites: 0.427
 Gamma shape alpha: 0.855
-Parameters optimization took 1 rounds (1.431 sec)
-Time for fast ML tree search: 30.318 seconds
+Parameters optimization took 1 rounds (1.548 sec)
+Time for fast ML tree search: 25.369 seconds
 
 NOTE: ModelFinder requires 651 MB RAM!
 ModelFinder will test up to 968 DNA models (sample size: 6466 epsilon: 0.100) ...
@@ -654,140 +654,133 @@ Bayesian Information Criterion:         GTR+F+R6
 Best-fit model: GTR+F+R6 chosen according to BIC
 
 All model information printed to output\phylogenetics_phylogroup\murinae_borne\L\tree.model.gz
-CPU time for ModelFinder: 22483.844 seconds (6h:14m:43s)
-Wall-clock time for ModelFinder: 2889.547 seconds (0h:48m:9s)
+CPU time for ModelFinder: 7063.562 seconds (1h:57m:43s)
+Wall-clock time for ModelFinder: 3588.441 seconds (0h:59m:48s)
 Generating 1000 samples for ultrafast bootstrap (seed: 42)...
 
 NOTE: 396 MB RAM (0 GB) is required!
 Estimate model parameters (epsilon = 0.100)
-1. Initial log-likelihood: -165400.560
-Optimal log-likelihood: -165400.481
-Rate parameters:  A-C: 2.57666  A-G: 14.23638  A-T: 1.42651  C-G: 0.68435  C-T: 22.76625  G-T: 1.00000
+1. Initial log-likelihood: -165400.506
+Optimal log-likelihood: -165400.427
+Rate parameters:  A-C: 2.57690  A-G: 14.23610  A-T: 1.42641  C-G: 0.68423  C-T: 22.76580  G-T: 1.00000
 Base frequencies:  A: 0.330  C: 0.163  G: 0.211  T: 0.297
-Site proportion and rates:  (0.540,0.020) (0.101,0.361) (0.078,1.209) (0.200,2.447) (0.081,4.372) (0.002,10.748)
-Parameters optimization took 1 rounds (4.356 sec)
+Site proportion and rates:  (0.539,0.020) (0.101,0.360) (0.077,1.205) (0.200,2.445) (0.081,4.370) (0.002,10.746)
+Parameters optimization took 1 rounds (3.887 sec)
 Wrote distance file to... 
 Computing ML distances based on estimated model parameters...
-Calculating distance matrix: done in 0.439978 secs using 1069% CPU
-Computing ML distances took 0.444130 sec (of wall-clock time) 4.843750 sec (of CPU time)
+Calculating distance matrix: done in 1.57189 secs using 200.8% CPU
+Computing ML distances took 1.577513 sec (of wall-clock time) 3.156250 sec (of CPU time)
 WARNING: Some pairwise ML distances are too long (saturated)
-Setting up auxiliary I and S matrices: done in 0.0062883 secs
-Constructing RapidNJ tree: done in 0.0117515 secs using 133% CPU
-Computing RapidNJ tree took 0.018156 sec (of wall-clock time) 0.015625 sec (of CPU time)
-Log-likelihood of RapidNJ tree: -169546.117
+Setting up auxiliary I and S matrices: done in 0.0051551 secs
+Constructing RapidNJ tree: done in 0.0089396 secs using 174.8% CPU
+Computing RapidNJ tree took 0.014194 sec (of wall-clock time) 0.015625 sec (of CPU time)
+Log-likelihood of RapidNJ tree: -169546.067
 --------------------------------------------------------------------
 |             INITIALIZING CANDIDATE TREE SET                      |
 --------------------------------------------------------------------
-Generating 98 parsimony trees... 75.827 second
-Computing log-likelihood of 98 initial trees ... 48.694 seconds
-Current best score: -165400.481
+Generating 98 parsimony trees... 37.355 second
+Computing log-likelihood of 98 initial trees ... 33.647 seconds
+Current best score: -165400.427
 
 Do NNI search on 20 best initial trees
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 1: -165393.932
+BETTER TREE FOUND at iteration 1: -165393.880
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 2: -165222.557
-Iteration 10 / LogL: -165242.729 / Time: 0h:53m:32s
-Iteration 20 / LogL: -165239.120 / Time: 0h:56m:42s
+BETTER TREE FOUND at iteration 2: -165222.532
+Iteration 10 / LogL: -165242.706 / Time: 1h:3m:12s
+Iteration 20 / LogL: -165239.095 / Time: 1h:5m:10s
 Finish initializing candidate tree set (20)
-Current best tree score: -165222.557 / CPU time: 498.311
+Current best tree score: -165222.532 / CPU time: 309.309
 Number of iterations: 20
 --------------------------------------------------------------------
 |               OPTIMIZING CANDIDATE TREE SET                      |
 --------------------------------------------------------------------
-Iteration 30 / LogL: -165581.659 / Time: 0h:59m:13s (0h:27m:27s left)
-Iteration 40 / LogL: -165275.187 / Time: 1h:1m:38s (0h:21m:25s left)
-Iteration 50 / LogL: -165540.270 / Time: 1h:4m:6s (0h:16m:55s left)
-Log-likelihood cutoff on original alignment: -165309.965
-Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 52: -165206.638
-Iteration 60 / LogL: -165391.786 / Time: 1h:6m:52s (0h:29m:11s left)
-Iteration 70 / LogL: -165726.110 / Time: 1h:9m:15s (0h:25m:4s left)
-Iteration 80 / LogL: -165280.352 / Time: 1h:11m:28s (0h:21m:14s left)
-Iteration 90 / LogL: -165207.079 / Time: 1h:13m:59s (0h:17m:59s left)
-Iteration 100 / LogL: -165217.604 / Time: 1h:16m:19s (0h:14m:47s left)
-Log-likelihood cutoff on original alignment: -165308.389
-NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.986
-NOTE: UFBoot does not converge, continue at least 100 more iterations
-Iteration 110 / LogL: -165244.455 / Time: 1h:18m:51s (0h:25m:20s left)
-Iteration 120 / LogL: -165227.227 / Time: 1h:21m:13s (0h:22m:13s left)
-Iteration 130 / LogL: -165285.509 / Time: 1h:23m:33s (0h:19m:12s left)
-Iteration 140 / LogL: -165224.839 / Time: 1h:26m:4s (0h:16m:22s left)
-Iteration 150 / LogL: -165216.517 / Time: 1h:28m:13s (0h:13m:26s left)
-Log-likelihood cutoff on original alignment: -165308.389
-Iteration 160 / LogL: -165730.618 / Time: 1h:30m:39s (0h:10m:41s left)
-Iteration 170 / LogL: -165262.072 / Time: 1h:33m:1s (0h:7m:57s left)
-Iteration 180 / LogL: -165211.924 / Time: 1h:35m:23s (0h:5m:16s left)
-Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 189: -165205.671
-Iteration 190 / LogL: -165282.565 / Time: 1h:38m:3s (0h:26m:8s left)
-Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 199: -165203.924
-Iteration 200 / LogL: -165304.532 / Time: 1h:40m:28s (0h:26m:1s left)
-Log-likelihood cutoff on original alignment: -165302.272
-NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.997
-Iteration 210 / LogL: -165590.145 / Time: 1h:42m:52s (0h:23m:33s left)
-Iteration 220 / LogL: -165324.137 / Time: 1h:45m:24s (0h:20m:54s left)
-Iteration 230 / LogL: -165316.965 / Time: 1h:47m:42s (0h:18m:12s left)
-Iteration 240 / LogL: -165237.082 / Time: 1h:49m:56s (0h:15m:30s left)
-Iteration 250 / LogL: -165623.660 / Time: 1h:51m:58s (0h:12m:48s left)
-Log-likelihood cutoff on original alignment: -165302.272
-Iteration 260 / LogL: -165527.830 / Time: 1h:54m:25s (0h:10m:14s left)
-Iteration 270 / LogL: -165429.911 / Time: 1h:56m:38s (0h:7m:38s left)
-Iteration 280 / LogL: -165579.851 / Time: 1h:59m:4s (0h:5m:5s left)
-Iteration 290 / LogL: -165406.892 / Time: 2h:1m:12s (0h:2m:31s left)
-Iteration 300 / LogL: -165391.488 / Time: 2h:3m:32s (0h:0m:0s left)
-Log-likelihood cutoff on original alignment: -165302.272
+Iteration 30 / LogL: -165569.524 / Time: 1h:6m:30s (0h:16m:38s left)
+Iteration 40 / LogL: -165726.361 / Time: 1h:7m:51s (0h:12m:47s left)
+Iteration 50 / LogL: -165473.353 / Time: 1h:9m:8s (0h:9m:54s left)
+Log-likelihood cutoff on original alignment: -165314.458
+Iteration 60 / LogL: -165514.932 / Time: 1h:10m:38s (0h:7m:42s left)
+Iteration 70 / LogL: -165669.316 / Time: 1h:12m:4s (0h:5m:41s left)
+Iteration 80 / LogL: -165324.324 / Time: 1h:13m:32s (0h:3m:49s left)
+Iteration 90 / LogL: -166729.724 / Time: 1h:14m:46s (0h:2m:1s left)
+Iteration 100 / LogL: -165519.489 / Time: 1h:16m:10s (0h:0m:19s left)
+Log-likelihood cutoff on original alignment: -165314.458
 NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.998
-TREE SEARCH COMPLETED AFTER 300 ITERATIONS / Time: 2h:3m:35s
+TREE SEARCH COMPLETED AFTER 103 ITERATIONS / Time: 1h:16m:32s
 
 --------------------------------------------------------------------
 |                    FINALIZING TREE SEARCH                        |
 --------------------------------------------------------------------
 Performs final model parameters optimization
 Estimate model parameters (epsilon = 0.010)
-1. Initial log-likelihood: -165203.924
-2. Current log-likelihood: -165203.863
-3. Current log-likelihood: -165203.807
-4. Current log-likelihood: -165203.752
-5. Current log-likelihood: -165203.727
-6. Current log-likelihood: -165203.689
-7. Current log-likelihood: -165203.654
-8. Current log-likelihood: -165203.620
-9. Current log-likelihood: -165203.602
-10. Current log-likelihood: -165203.573
-11. Current log-likelihood: -165203.553
-12. Current log-likelihood: -165203.533
-13. Current log-likelihood: -165203.516
-14. Current log-likelihood: -165203.500
-15. Current log-likelihood: -165203.481
-16. Current log-likelihood: -165203.465
-17. Current log-likelihood: -165203.448
-18. Current log-likelihood: -165203.432
-19. Current log-likelihood: -165203.415
-20. Current log-likelihood: -165203.403
-Optimal log-likelihood: -165203.390
-Rate parameters:  A-C: 2.58951  A-G: 14.28795  A-T: 1.42398  C-G: 0.69374  C-T: 22.73789  G-T: 1.00000
+1. Initial log-likelihood: -165222.532
+2. Current log-likelihood: -165222.499
+3. Current log-likelihood: -165222.448
+4. Current log-likelihood: -165222.404
+5. Current log-likelihood: -165222.366
+6. Current log-likelihood: -165222.329
+7. Current log-likelihood: -165222.294
+8. Current log-likelihood: -165222.259
+9. Current log-likelihood: -165222.225
+10. Current log-likelihood: -165222.201
+11. Current log-likelihood: -165222.179
+12. Current log-likelihood: -165222.144
+13. Current log-likelihood: -165222.121
+14. Current log-likelihood: -165222.098
+15. Current log-likelihood: -165222.076
+16. Current log-likelihood: -165222.053
+17. Current log-likelihood: -165222.031
+18. Current log-likelihood: -165222.009
+19. Current log-likelihood: -165221.988
+20. Current log-likelihood: -165221.966
+21. Current log-likelihood: -165221.945
+22. Current log-likelihood: -165221.927
+23. Current log-likelihood: -165221.906
+24. Current log-likelihood: -165221.886
+25. Current log-likelihood: -165221.867
+26. Current log-likelihood: -165221.850
+27. Current log-likelihood: -165221.828
+28. Current log-likelihood: -165221.811
+29. Current log-likelihood: -165221.792
+30. Current log-likelihood: -165221.774
+31. Current log-likelihood: -165221.755
+32. Current log-likelihood: -165221.738
+33. Current log-likelihood: -165221.720
+34. Current log-likelihood: -165221.703
+35. Current log-likelihood: -165221.685
+36. Current log-likelihood: -165221.669
+37. Current log-likelihood: -165221.655
+38. Current log-likelihood: -165221.643
+39. Current log-likelihood: -165221.631
+40. Current log-likelihood: -165221.619
+41. Current log-likelihood: -165221.608
+42. Current log-likelihood: -165221.597
+43. Current log-likelihood: -165221.586
+44. Current log-likelihood: -165221.575
+45. Current log-likelihood: -165221.564
+46. Current log-likelihood: -165221.554
+Optimal log-likelihood: -165221.539
+Rate parameters:  A-C: 2.59632  A-G: 14.31942  A-T: 1.42647  C-G: 0.69666  C-T: 22.72655  G-T: 1.00000
 Base frequencies:  A: 0.330  C: 0.163  G: 0.211  T: 0.297
-Site proportion and rates:  (0.539,0.020) (0.105,0.371) (0.092,1.330) (0.194,2.579) (0.069,4.507) (0.002,10.625)
-Parameters optimization took 20 rounds (66.206 sec)
-BEST SCORE FOUND : -165203.390
+Site proportion and rates:  (0.536,0.019) (0.102,0.347) (0.079,1.191) (0.201,2.450) (0.080,4.349) (0.002,10.392)
+Parameters optimization took 46 rounds (114.225 sec)
+BEST SCORE FOUND : -165221.539
 Creating bootstrap support values...
 Split supports printed to NEXUS file output\phylogenetics_phylogroup\murinae_borne\L\tree.splits.nex
-Total tree length: 10.873
+Total tree length: 10.836
 
-Total number of iterations: 300
-CPU time used for tree search: 21515.688 sec (5h:58m:35s)
-Wall-clock time used for tree search: 4511.187 sec (1h:15m:11s)
-Total CPU time used: 44550.625 sec (12h:22m:30s)
-Total wall-clock time used: 7484.301 sec (2h:4m:44s)
+Total number of iterations: 103
+CPU time used for tree search: 1913.672 sec (0h:31m:53s)
+Wall-clock time used for tree search: 991.441 sec (0h:16m:31s)
+Total CPU time used: 9226.625 sec (2h:33m:46s)
+Total wall-clock time used: 4708.224 sec (1h:18m:28s)
 
 Computing bootstrap consensus tree...
 Reading input file output\phylogenetics_phylogroup\murinae_borne\L\tree.splits.nex...
-530 taxa and 2368 splits.
+530 taxa and 2095 splits.
 Consensus tree written to output\phylogenetics_phylogroup\murinae_borne\L\tree.contree
 Reading input trees file output\phylogenetics_phylogroup\murinae_borne\L\tree.contree
-Log-likelihood of consensus tree: -165201.544
+Log-likelihood of consensus tree: -165222.517
 
 Analysis results written to: 
   IQ-TREE report:                output\phylogenetics_phylogroup\murinae_borne\L\tree.iqtree
@@ -799,4 +792,4 @@ Ultrafast bootstrap approximation results written to:
   Consensus tree:                output\phylogenetics_phylogroup\murinae_borne\L\tree.contree
   Screen log file:               output\phylogenetics_phylogroup\murinae_borne\L\tree.log
 
-Date and Time: Thu Sep 10 20:03:51 2026
+Date and Time: Sat Sep 12 05:32:27 2026

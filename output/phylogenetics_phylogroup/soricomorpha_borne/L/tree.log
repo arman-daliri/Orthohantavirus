@@ -4,106 +4,106 @@ Contributed by Lam-Tung Nguyen, Dominik Schrempf, Chris Bielow,
 Olga Chernomor, Michael Woodhams, Diep Thi Hoang, Heiko Schmidt
 
 Host:    ario (AVX2, FMA3, 15 GB RAM)
-Command: tools\iqtree-3.1.3-Windows\bin\iqtree3.exe -s output\phylogenetics_phylogroup\soricomorpha_borne\L\aligned.fasta --seqtype DNA -m MFP -B 1000 -T 11 --seed 42 --prefix output\phylogenetics_phylogroup\soricomorpha_borne\L\tree --quiet --redo
+Command: C:/git-projects/Orthohantavirus/tools/iqtree-3.1.3-Windows/bin\iqtree3.exe -s output\phylogenetics_phylogroup\soricomorpha_borne\L\aligned.fasta --seqtype DNA -m MFP -B 1000 -T 2 --seed 42 --prefix output\phylogenetics_phylogroup\soricomorpha_borne\L\tree --quiet --redo
 Seed:    42 (Using SPRNG - Scalable Parallel Random Number Generator)
-Time:    Thu Sep 10 16:24:06 2026
-Kernel:  AVX+FMA - 11 threads (12 CPU cores detected)
+Time:    Sat Sep 12 05:56:51 2026
+Kernel:  AVX+FMA - 2 threads (12 CPU cores detected)
 
 Reading alignment file output\phylogenetics_phylogroup\soricomorpha_borne\L\aligned.fasta ... Fasta format detected
-Reading fasta file: done in 0.0088182 secs
+Reading fasta file: done in 0.0070226 secs
 Alignment most likely contains DNA/RNA sequences
-Constructing alignment: done in 0.0146897 secs using 106.4% CPU
-Alignment has 80 sequences with 6547 columns, 4542 distinct patterns
-4067 parsimony-informative, 416 singleton sites, 2064 constant sites
+Constructing alignment: done in 0.0093688 secs
+Alignment has 80 sequences with 6552 columns, 4543 distinct patterns
+4067 parsimony-informative, 416 singleton sites, 2069 constant sites
        Gap/Ambiguity  Composition  p-value
-Analyzing sequences: done in 0.0004165 secs using 3752% CPU
-   1  I0000    3.27%    passed     25.12%
-   2  I0001    1.07%    passed     19.56%
-   3  I0002    1.30%    failed      0.00%
-   4  I0003    1.39%    passed     31.87%
-   5  I0004    1.39%    passed     70.94%
-   6  I0005    1.39%    passed     69.85%
-   7  I0006   77.62%    passed     98.42%
-   8  I0007   94.91%    passed     45.74%
+Analyzing sequences: done in 0.0005413 secs
+   1  I0000    3.34%    passed     25.10%
+   2  I0001    1.14%    passed     19.54%
+   3  I0002    1.37%    failed      0.00%
+   4  I0003    1.47%    passed     31.84%
+   5  I0004    1.47%    passed     70.92%
+   6  I0005    1.47%    passed     69.83%
+   7  I0006   77.64%    passed     98.42%
+   8  I0007   94.92%    passed     45.74%
    9  I0008   94.87%    passed     42.05%
   10  I0009   94.96%    passed     56.70%
   11  I0010   95.05%    passed     65.37%
   12  I0011   94.96%    passed     46.01%
-  13  I0012    1.39%    passed      6.46%
-  14  I0013   50.53%    passed     43.61%
-  15  I0014    1.12%    passed     24.65%
-  16  I0015    1.12%    passed     35.08%
-  17  I0016    1.12%    passed     45.35%
-  18  I0017    1.12%    passed     41.93%
-  19  I0018   55.09%    passed     84.51%
-  20  I0019   49.27%    passed     75.99%
-  21  I0020    1.12%    passed     74.42%
-  22  I0021    1.12%    passed     39.14%
-  23  I0022    1.12%    passed     39.14%
-  24  I0023    1.12%    passed     41.55%
-  25  I0024    1.12%    passed     21.22%
-  26  I0025    1.39%    passed     87.00%
-  27  I0026    1.30%    failed      0.04%
-  28  I0027    2.40%    passed     15.79%
-  29  I0028   87.70%    passed     66.68%
-  30  I0029   79.09%    passed     21.08%
-  31  I0030    1.37%    passed     79.56%
-  32  I0031   34.84%    passed     77.21%
-  33  I0032    1.60%    failed      0.00%
-  34  I0033    1.62%    passed     29.23%
-  35  I0034    2.49%    passed     34.81%
-  36  I0035   81.67%    passed     88.59%
-  37  I0036    1.34%    failed      0.06%
-  38  I0037    1.53%    failed      0.00%
+  13  I0012    1.47%    passed      6.45%
+  14  I0013   50.56%    passed     43.59%
+  15  I0014    1.19%    passed     24.63%
+  16  I0015    1.19%    passed     35.06%
+  17  I0016    1.19%    passed     45.35%
+  18  I0017    1.19%    passed     41.92%
+  19  I0018   55.13%    passed     84.50%
+  20  I0019   49.31%    passed     75.97%
+  21  I0020    1.19%    passed     74.40%
+  22  I0021    1.19%    passed     39.11%
+  23  I0022    1.19%    passed     39.11%
+  24  I0023    1.19%    passed     41.52%
+  25  I0024    1.19%    passed     21.21%
+  26  I0025    1.47%    passed     86.97%
+  27  I0026    1.37%    failed      0.04%
+  28  I0027    2.47%    passed     15.80%
+  29  I0028   87.71%    passed     66.69%
+  30  I0029   79.11%    passed     21.08%
+  31  I0030    1.45%    passed     79.57%
+  32  I0031   34.89%    passed     77.22%
+  33  I0032    1.68%    failed      0.00%
+  34  I0033    1.69%    passed     29.21%
+  35  I0034    2.56%    passed     34.84%
+  36  I0035   81.68%    passed     88.59%
+  37  I0036    1.42%    failed      0.06%
+  38  I0037    1.60%    failed      0.00%
   39  I0038   95.60%    passed     30.65%
-  40  I0039   30.43%    passed     72.60%
-  41  I0040   49.78%    failed      4.60%
+  40  I0039   30.48%    passed     72.58%
+  41  I0040   49.82%    failed      4.61%
   42  I0041   94.72%    failed      1.24%
   43  I0042   94.72%    passed     31.45%
   44  I0043   94.72%    passed     14.58%
-  45  I0044   24.73%    passed      6.72%
+  45  I0044   24.79%    passed      6.72%
   46  I0045   94.72%    passed     99.27%
-  47  I0046   87.44%    passed      8.37%
-  48  I0047   80.11%    passed     81.31%
-  49  I0048    1.62%    failed      3.51%
-  50  I0049   29.80%    passed     62.48%
-  51  I0050    1.62%    failed      2.45%
-  52  I0051    3.73%    failed      0.66%
+  47  I0046   87.45%    passed      8.38%
+  48  I0047   80.13%    passed     81.30%
+  49  I0048    1.69%    failed      3.51%
+  50  I0049   29.85%    passed     62.50%
+  51  I0050    1.69%    failed      2.46%
+  52  I0051    3.80%    failed      0.66%
   53  I0052   94.73%    passed     48.25%
-  54  I0053   94.70%    passed     36.61%
+  54  I0053   94.70%    passed     36.62%
   55  I0054   92.52%    passed     10.38%
-  56  I0055    1.34%    passed      9.14%
+  56  I0055    1.42%    passed      9.13%
   57  I0056   94.70%    passed      6.66%
   58  I0057   93.28%    passed     43.20%
-  59  I0058   55.90%    passed     57.13%
+  59  I0058   55.94%    passed     57.14%
   60  I0059   95.28%    passed     79.31%
   61  I0060   95.28%    passed     79.31%
   62  I0061   95.28%    passed     79.31%
-  63  I0062    1.36%    passed     95.16%
+  63  I0062    1.43%    passed     95.15%
   64  I0063   95.28%    passed     79.31%
-  65  I0064   33.63%    passed     51.95%
+  65  I0064   33.68%    passed     51.97%
   66  I0065   95.60%    passed     34.42%
   67  I0066   95.60%    passed     70.36%
   68  I0067   95.60%    passed     54.32%
   69  I0068   95.33%    passed     15.79%
-  70  I0069   56.29%    failed      0.72%
-  71  I0070   53.06%    failed      0.67%
-  72  I0071   53.06%    failed      1.67%
-  73  I0072   83.46%    passed     57.07%
-  74  I0073   84.66%    passed     45.22%
+  70  I0069   56.32%    failed      0.72%
+  71  I0070   53.10%    failed      0.67%
+  72  I0071   53.10%    failed      1.68%
+  73  I0072   83.47%    passed     57.07%
+  74  I0073   84.68%    passed     45.22%
   75  I0074   95.33%    passed     61.85%
   76  I0075   95.33%    passed     52.62%
   77  I0076   95.33%    passed     13.76%
   78  I0077   95.33%    passed     13.76%
-  79  I0078   94.82%    passed     28.10%
+  79  I0078   94.83%    passed     28.10%
   80  I0079   93.13%    failed      3.62%
 WARNING: 43 sequences contain more than 50% gaps/ambiguity
-****  TOTAL   50.45%  14 sequences failed composition chi2 test (p-value<5%; df=3)
+****  TOTAL   50.48%  14 sequences failed composition chi2 test (p-value<5%; df=3)
 NOTE: I0022 is identical to I0021 but kept for subsequent analysis
 NOTE: I0060 is identical to I0059 but kept for subsequent analysis
 NOTE: I0077 is identical to I0076 but kept for subsequent analysis
-Checking for duplicate sequences: done in 0.0015235 secs
-Identifying sites to remove: done in 0.0095767 secs
+Checking for duplicate sequences: done in 0.0010435 secs using 1497% CPU
+Identifying sites to remove: done in 0.0063817 secs
 NOTE: 2 identical sequences (see below) will be ignored for subsequent analysis
 NOTE: I0061 (identical to I0059) is ignored but added at the end
 NOTE: I0063 (identical to I0059) is ignored but added at the end
@@ -112,29 +112,29 @@ Alignment was printed to output\phylogenetics_phylogroup\soricomorpha_borne\L\tr
 For your convenience alignment with unique sequences printed to output\phylogenetics_phylogroup\soricomorpha_borne\L\tree.uniqueseq.phy
 
 
-Create initial parsimony tree by phylogenetic likelihood library (PLL)... 0.066 seconds
+Create initial parsimony tree by phylogenetic likelihood library (PLL)... 0.043 seconds
 Perform fast likelihood tree search using GTR+I+G model...
 Estimate model parameters (epsilon = 5.000)
 Perform nearest neighbor interchange...
 Estimate model parameters (epsilon = 1.000)
-1. Initial log-likelihood: -124768.583
-2. Current log-likelihood: -124764.770
-3. Current log-likelihood: -124762.145
-4. Current log-likelihood: -124759.537
-5. Current log-likelihood: -124757.246
-6. Current log-likelihood: -124755.296
-7. Current log-likelihood: -124753.821
-8. Current log-likelihood: -124752.711
-Optimal log-likelihood: -124751.747
-Rate parameters:  A-C: 7.99631  A-G: 11.85640  A-T: 2.53934  C-G: 3.38669  C-T: 28.86366  G-T: 1.00000
+1. Initial log-likelihood: -124756.819
+2. Current log-likelihood: -124752.964
+3. Current log-likelihood: -124750.339
+4. Current log-likelihood: -124747.726
+5. Current log-likelihood: -124745.437
+6. Current log-likelihood: -124743.502
+7. Current log-likelihood: -124742.049
+8. Current log-likelihood: -124740.956
+Optimal log-likelihood: -124740.024
+Rate parameters:  A-C: 7.94324  A-G: 11.75310  A-T: 2.51137  C-G: 3.35406  C-T: 28.72521  G-T: 1.00000
 Base frequencies:  A: 0.332  C: 0.156  G: 0.210  T: 0.301
 Proportion of invariable sites: 0.226
-Gamma shape alpha: 0.584
-Parameters optimization took 8 rounds (1.871 sec)
-Time for fast ML tree search: 6.695 seconds
+Gamma shape alpha: 0.585
+Parameters optimization took 8 rounds (1.442 sec)
+Time for fast ML tree search: 5.297 seconds
 
 NOTE: ModelFinder requires 132 MB RAM!
-ModelFinder will test up to 968 DNA models (sample size: 6547 epsilon: 0.100) ...
+ModelFinder will test up to 968 DNA models (sample size: 6552 epsilon: 0.100) ...
  No. Model         -LnL         df  AIC          AICc         BIC
 Akaike Information Criterion:           GTR+F+R6
 Corrected Akaike Information Criterion: GTR+F+R6
@@ -142,115 +142,153 @@ Bayesian Information Criterion:         GTR+F+R6
 Best-fit model: GTR+F+R6 chosen according to BIC
 
 All model information printed to output\phylogenetics_phylogroup\soricomorpha_borne\L\tree.model.gz
-CPU time for ModelFinder: 4271.625 seconds (1h:11m:11s)
-Wall-clock time for ModelFinder: 552.306 seconds (0h:9m:12s)
+CPU time for ModelFinder: 1898.859 seconds (0h:31m:38s)
+Wall-clock time for ModelFinder: 965.742 seconds (0h:16m:5s)
 Generating 1000 samples for ultrafast bootstrap (seed: 42)...
 
 NOTE: 86 MB RAM (0 GB) is required!
 Estimate model parameters (epsilon = 0.100)
-1. Initial log-likelihood: -124675.188
-2. Current log-likelihood: -124673.049
-3. Current log-likelihood: -124672.913
-Optimal log-likelihood: -124672.826
-Rate parameters:  A-C: 8.55797  A-G: 12.83078  A-T: 2.66812  C-G: 3.62965  C-T: 31.55641  G-T: 1.00000
+1. Initial log-likelihood: -124666.292
+2. Current log-likelihood: -124664.138
+3. Current log-likelihood: -124663.956
+4. Current log-likelihood: -124663.835
+Optimal log-likelihood: -124663.695
+Rate parameters:  A-C: 8.55785  A-G: 12.79964  A-T: 2.65126  C-G: 3.62638  C-T: 31.48610  G-T: 1.00000
 Base frequencies:  A: 0.332  C: 0.156  G: 0.210  T: 0.301
-Site proportion and rates:  (0.322,0.009) (0.161,0.137) (0.107,0.403) (0.188,0.898) (0.145,2.379) (0.077,5.458)
-Parameters optimization took 3 rounds (2.182 sec)
+Site proportion and rates:  (0.334,0.010) (0.175,0.163) (0.109,0.508) (0.166,0.959) (0.143,2.457) (0.072,5.571)
+Parameters optimization took 4 rounds (2.948 sec)
 Wrote distance file to... 
 Computing ML distances based on estimated model parameters...
-Calculating distance matrix: done in 0.0095695 secs
-Computing ML distances took 0.010550 sec (of wall-clock time) 0.015625 sec (of CPU time)
+Calculating distance matrix: done in 0.0246094 secs using 127% CPU
+Computing ML distances took 0.025668 sec (of wall-clock time) 0.062500 sec (of CPU time)
 WARNING: Some pairwise ML distances are too long (saturated)
-Setting up auxiliary I and S matrices: done in 0.0001632 secs
-Constructing RapidNJ tree: done in 0.0004521 secs
-Computing RapidNJ tree took 0.000683 sec (of wall-clock time) 0.000000 sec (of CPU time)
-Log-likelihood of RapidNJ tree: -127299.772
+Setting up auxiliary I and S matrices: done in 0.0001391 secs
+Constructing RapidNJ tree: done in 0.0003464 secs
+Computing RapidNJ tree took 0.000573 sec (of wall-clock time) 0.000000 sec (of CPU time)
+Log-likelihood of RapidNJ tree: -127292.677
 --------------------------------------------------------------------
 |             INITIALIZING CANDIDATE TREE SET                      |
 --------------------------------------------------------------------
-Generating 98 parsimony trees... 6.243 second
-Computing log-likelihood of 98 initial trees ... 9.978 seconds
-Current best score: -124672.826
+Generating 98 parsimony trees... 4.224 second
+Computing log-likelihood of 98 initial trees ... 5.746 seconds
+Current best score: -124663.695
 
 Do NNI search on 20 best initial trees
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 1: -124654.562
+BETTER TREE FOUND at iteration 1: -124645.234
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 2: -124653.646
-Iteration 10 / LogL: -124653.876 / Time: 0h:10m:1s
-Iteration 20 / LogL: -124653.681 / Time: 0h:10m:28s
-Finish initializing candidate tree set (17)
-Current best tree score: -124653.646 / CPU time: 73.246
+BETTER TREE FOUND at iteration 2: -124644.140
+Iteration 10 / LogL: -124656.914 / Time: 0h:16m:38s
+Iteration 20 / LogL: -124644.413 / Time: 0h:16m:55s
+Finish initializing candidate tree set (13)
+Current best tree score: -124644.140 / CPU time: 45.475
 Number of iterations: 20
 --------------------------------------------------------------------
 |               OPTIMIZING CANDIDATE TREE SET                      |
 --------------------------------------------------------------------
+Iteration 30 / LogL: -124644.612 / Time: 0h:17m:6s (0h:2m:29s left)
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 22: -124653.219
+UPDATE BEST LOG-LIKELIHOOD: -124644.022
+Iteration 40 / LogL: -124644.022 / Time: 0h:17m:19s (0h:1m:57s left)
 Estimate model parameters (epsilon = 0.100)
-UPDATE BEST LOG-LIKELIHOOD: -124653.156
-Iteration 30 / LogL: -124656.977 / Time: 0h:10m:53s (0h:5m:22s left)
-Iteration 40 / LogL: -124654.085 / Time: 0h:11m:19s (0h:4m:26s left)
-Iteration 50 / LogL: -124654.086 / Time: 0h:11m:43s (0h:3m:42s left)
-Log-likelihood cutoff on original alignment: -124703.356
-Iteration 60 / LogL: -124653.651 / Time: 0h:12m:10s (0h:3m:7s left)
-Iteration 70 / LogL: -124654.603 / Time: 0h:12m:35s (0h:2m:32s left)
-Iteration 80 / LogL: -124653.627 / Time: 0h:13m:0s (0h:2m:1s left)
-Iteration 90 / LogL: -124653.295 / Time: 0h:13m:28s (0h:1m:32s left)
-Iteration 100 / LogL: -124653.737 / Time: 0h:13m:50s (0h:1m:1s left)
-Log-likelihood cutoff on original alignment: -124703.356
-NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.995
-Iteration 110 / LogL: -124653.789 / Time: 0h:14m:12s (0h:4m:8s left)
-Iteration 120 / LogL: -124653.852 / Time: 0h:14m:39s (0h:3m:40s left)
-TREE SEARCH COMPLETED AFTER 123 ITERATIONS / Time: 0h:14m:48s
+UPDATE BEST LOG-LIKELIHOOD: -124643.700
+Iteration 50 / LogL: -124643.754 / Time: 0h:17m:31s (0h:1m:31s left)
+Log-likelihood cutoff on original alignment: -124687.970
+Iteration 60 / LogL: -124644.751 / Time: 0h:17m:43s (0h:1m:9s left)
+Iteration 70 / LogL: -124646.223 / Time: 0h:17m:55s (0h:0m:50s left)
+Iteration 80 / LogL: -124644.709 / Time: 0h:18m:5s (0h:0m:33s left)
+Iteration 90 / LogL: -124644.027 / Time: 0h:18m:18s (0h:0m:17s left)
+Iteration 100 / LogL: -124645.033 / Time: 0h:18m:30s (0h:0m:2s left)
+Log-likelihood cutoff on original alignment: -124688.537
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.999
+TREE SEARCH COMPLETED AFTER 103 ITERATIONS / Time: 0h:18m:33s
 
 --------------------------------------------------------------------
 |                    FINALIZING TREE SEARCH                        |
 --------------------------------------------------------------------
 Performs final model parameters optimization
 Estimate model parameters (epsilon = 0.010)
-1. Initial log-likelihood: -124653.156
-2. Current log-likelihood: -124653.124
-3. Current log-likelihood: -124653.092
-4. Current log-likelihood: -124653.057
-5. Current log-likelihood: -124653.027
-6. Current log-likelihood: -124653.011
-7. Current log-likelihood: -124652.983
-8. Current log-likelihood: -124652.971
-9. Current log-likelihood: -124652.954
-10. Current log-likelihood: -124652.940
-11. Current log-likelihood: -124652.927
-12. Current log-likelihood: -124652.914
-13. Current log-likelihood: -124652.902
-14. Current log-likelihood: -124652.890
-15. Current log-likelihood: -124652.878
-16. Current log-likelihood: -124652.866
-17. Current log-likelihood: -124652.856
-18. Current log-likelihood: -124652.844
-19. Current log-likelihood: -124652.834
-20. Current log-likelihood: -124652.823
-Optimal log-likelihood: -124652.808
-Rate parameters:  A-C: 8.56136  A-G: 12.79327  A-T: 2.64500  C-G: 3.63542  C-T: 31.63057  G-T: 1.00000
+1. Initial log-likelihood: -124643.700
+2. Current log-likelihood: -124643.624
+3. Current log-likelihood: -124643.535
+4. Current log-likelihood: -124643.447
+5. Current log-likelihood: -124643.363
+6. Current log-likelihood: -124643.281
+7. Current log-likelihood: -124643.202
+8. Current log-likelihood: -124643.124
+9. Current log-likelihood: -124643.047
+10. Current log-likelihood: -124642.973
+11. Current log-likelihood: -124642.902
+12. Current log-likelihood: -124642.832
+13. Current log-likelihood: -124642.763
+14. Current log-likelihood: -124642.707
+15. Current log-likelihood: -124642.652
+16. Current log-likelihood: -124642.599
+17. Current log-likelihood: -124642.535
+18. Current log-likelihood: -124642.484
+19. Current log-likelihood: -124642.434
+20. Current log-likelihood: -124642.390
+21. Current log-likelihood: -124642.343
+22. Current log-likelihood: -124642.296
+23. Current log-likelihood: -124642.251
+24. Current log-likelihood: -124642.213
+25. Current log-likelihood: -124642.169
+26. Current log-likelihood: -124642.133
+27. Current log-likelihood: -124642.097
+28. Current log-likelihood: -124642.059
+29. Current log-likelihood: -124642.037
+30. Current log-likelihood: -124642.004
+31. Current log-likelihood: -124641.983
+32. Current log-likelihood: -124641.947
+33. Current log-likelihood: -124641.927
+34. Current log-likelihood: -124641.896
+35. Current log-likelihood: -124641.876
+36. Current log-likelihood: -124641.857
+37. Current log-likelihood: -124641.837
+38. Current log-likelihood: -124641.808
+39. Current log-likelihood: -124641.789
+40. Current log-likelihood: -124641.770
+41. Current log-likelihood: -124641.753
+42. Current log-likelihood: -124641.731
+43. Current log-likelihood: -124641.700
+44. Current log-likelihood: -124641.683
+45. Current log-likelihood: -124641.666
+46. Current log-likelihood: -124641.648
+47. Current log-likelihood: -124641.632
+48. Current log-likelihood: -124641.614
+49. Current log-likelihood: -124641.597
+50. Current log-likelihood: -124641.581
+51. Current log-likelihood: -124641.564
+52. Current log-likelihood: -124641.549
+53. Current log-likelihood: -124641.532
+54. Current log-likelihood: -124641.517
+55. Current log-likelihood: -124641.501
+56. Current log-likelihood: -124641.485
+57. Current log-likelihood: -124641.470
+58. Current log-likelihood: -124641.455
+59. Current log-likelihood: -124641.439
+Optimal log-likelihood: -124641.422
+Rate parameters:  A-C: 8.55687  A-G: 12.79591  A-T: 2.64477  C-G: 3.64678  C-T: 31.74422  G-T: 1.00000
 Base frequencies:  A: 0.332  C: 0.156  G: 0.210  T: 0.301
-Site proportion and rates:  (0.318,0.009) (0.157,0.130) (0.104,0.371) (0.193,0.865) (0.145,2.295) (0.083,5.307)
-Parameters optimization took 20 rounds (8.321 sec)
-BEST SCORE FOUND : -124652.808
+Site proportion and rates:  (0.320,0.008) (0.163,0.136) (0.099,0.390) (0.192,0.871) (0.145,2.311) (0.081,5.334)
+Parameters optimization took 59 rounds (30.729 sec)
+BEST SCORE FOUND : -124641.422
 Creating bootstrap support values...
 Split supports printed to NEXUS file output\phylogenetics_phylogroup\soricomorpha_borne\L\tree.splits.nex
-Total tree length: 20.952
+Total tree length: 20.930
 
-Total number of iterations: 123
-CPU time used for tree search: 1227.219 sec (0h:20m:27s)
-Wall-clock time used for tree search: 332.792 sec (0h:5m:32s)
-Total CPU time used: 5568.953 sec (1h:32m:48s)
-Total wall-clock time used: 897.143 sec (0h:14m:57s)
+Total number of iterations: 103
+CPU time used for tree search: 279.703 sec (0h:4m:39s)
+Wall-clock time used for tree search: 143.961 sec (0h:2m:23s)
+Total CPU time used: 2247.281 sec (0h:37m:27s)
+Total wall-clock time used: 1144.632 sec (0h:19m:4s)
 
 Computing bootstrap consensus tree...
 Reading input file output\phylogenetics_phylogroup\soricomorpha_borne\L\tree.splits.nex...
-78 taxa and 303 splits.
+78 taxa and 309 splits.
 Consensus tree written to output\phylogenetics_phylogroup\soricomorpha_borne\L\tree.contree
 Reading input trees file output\phylogenetics_phylogroup\soricomorpha_borne\L\tree.contree
-Log-likelihood of consensus tree: -124652.823
+Log-likelihood of consensus tree: -124641.701
 
 Analysis results written to: 
   IQ-TREE report:                output\phylogenetics_phylogroup\soricomorpha_borne\L\tree.iqtree
@@ -262,4 +300,4 @@ Ultrafast bootstrap approximation results written to:
   Consensus tree:                output\phylogenetics_phylogroup\soricomorpha_borne\L\tree.contree
   Screen log file:               output\phylogenetics_phylogroup\soricomorpha_borne\L\tree.log
 
-Date and Time: Thu Sep 10 16:39:05 2026
+Date and Time: Sat Sep 12 06:15:56 2026

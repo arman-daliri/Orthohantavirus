@@ -4,19 +4,19 @@ Contributed by Lam-Tung Nguyen, Dominik Schrempf, Chris Bielow,
 Olga Chernomor, Michael Woodhams, Diep Thi Hoang, Heiko Schmidt
 
 Host:    ario (AVX2, FMA3, 15 GB RAM)
-Command: tools\iqtree-3.1.3-Windows\bin\iqtree3.exe -s output\phylogenetics\orthohantavirus_hantanense\S\aligned.fasta --seqtype DNA -m MFP -B 1000 -T 11 --seed 42 --prefix output\phylogenetics\orthohantavirus_hantanense\S\tree --quiet --redo
+Command: C:/git-projects/Orthohantavirus/tools/iqtree-3.1.3-Windows/bin\iqtree3.exe -s output\phylogenetics\orthohantavirus_hantanense\S\aligned.fasta --seqtype DNA -m MFP -B 1000 -T 2 --seed 42 --prefix output\phylogenetics\orthohantavirus_hantanense\S\tree --quiet --redo
 Seed:    42 (Using SPRNG - Scalable Parallel Random Number Generator)
-Time:    Thu Sep 10 12:01:38 2026
-Kernel:  AVX+FMA - 11 threads (12 CPU cores detected)
+Time:    Fri Sep 11 22:08:50 2026
+Kernel:  AVX+FMA - 2 threads (12 CPU cores detected)
 
 Reading alignment file output\phylogenetics\orthohantavirus_hantanense\S\aligned.fasta ... Fasta format detected
-Reading fasta file: done in 0.012461 secs
+Reading fasta file: done in 0.0050124 secs
 Alignment most likely contains DNA/RNA sequences
-Constructing alignment: done in 0.0156967 secs
+Constructing alignment: done in 0.0035651 secs
 Alignment has 273 sequences with 1293 columns, 571 distinct patterns
 498 parsimony-informative, 48 singleton sites, 747 constant sites
        Gap/Ambiguity  Composition  p-value
-Analyzing sequences: done in 0.0096966 secs
+Analyzing sequences: done in 0.0001995 secs
    1  I0000    0.93%    passed     78.96%
    2  I0001    0.23%    passed     87.39%
    3  I0002    0.23%    passed     97.40%
@@ -331,8 +331,8 @@ NOTE: I0202 is identical to I0201 but kept for subsequent analysis
 NOTE: I0224 is identical to I0223 but kept for subsequent analysis
 NOTE: I0234 is identical to I0232 but kept for subsequent analysis
 NOTE: I0264 is identical to I0262 but kept for subsequent analysis
-Checking for duplicate sequences: done in 0.0008759 secs
-Identifying sites to remove: done in 0.0037671 secs
+Checking for duplicate sequences: done in 0.0005203 secs
+Identifying sites to remove: done in 0.0021472 secs
 NOTE: 32 identical sequences (see below) will be ignored for subsequent analysis
 NOTE: I0013 (identical to I0005) is ignored but added at the end
 NOTE: I0014 (identical to I0005) is ignored but added at the end
@@ -371,192 +371,190 @@ Alignment was printed to output\phylogenetics\orthohantavirus_hantanense\S\tree.
 For your convenience alignment with unique sequences printed to output\phylogenetics\orthohantavirus_hantanense\S\tree.uniqueseq.phy
 
 
-Create initial parsimony tree by phylogenetic likelihood library (PLL)... 0.063 seconds
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
+Create initial parsimony tree by phylogenetic likelihood library (PLL)... 0.027 seconds
 Perform fast likelihood tree search using GTR+I+G model...
 Estimate model parameters (epsilon = 5.000)
 Perform nearest neighbor interchange...
 Estimate model parameters (epsilon = 1.000)
-1. Initial log-likelihood: -16243.144
-2. Current log-likelihood: -16241.798
-3. Current log-likelihood: -16240.709
-4. Current log-likelihood: -16239.550
-5. Current log-likelihood: -16238.267
-6. Current log-likelihood: -16236.857
-7. Current log-likelihood: -16235.330
-8. Current log-likelihood: -16233.678
-9. Current log-likelihood: -16231.924
-10. Current log-likelihood: -16230.092
-11. Current log-likelihood: -16228.236
-12. Current log-likelihood: -16226.438
-13. Current log-likelihood: -16224.808
-14. Current log-likelihood: -16223.436
-15. Current log-likelihood: -16222.384
-Optimal log-likelihood: -16221.318
-Rate parameters:  A-C: 1.53262  A-G: 8.81080  A-T: 1.38084  C-G: 0.34995  C-T: 14.91596  G-T: 1.00000
+1. Initial log-likelihood: -16243.130
+2. Current log-likelihood: -16241.784
+3. Current log-likelihood: -16240.694
+4. Current log-likelihood: -16239.536
+5. Current log-likelihood: -16238.253
+6. Current log-likelihood: -16236.843
+7. Current log-likelihood: -16235.315
+8. Current log-likelihood: -16233.669
+9. Current log-likelihood: -16231.912
+10. Current log-likelihood: -16230.081
+11. Current log-likelihood: -16228.225
+12. Current log-likelihood: -16226.432
+13. Current log-likelihood: -16224.802
+14. Current log-likelihood: -16223.433
+15. Current log-likelihood: -16222.382
+Optimal log-likelihood: -16221.320
+Rate parameters:  A-C: 1.51023  A-G: 8.68653  A-T: 1.35960  C-G: 0.34311  C-T: 14.68846  G-T: 1.00000
 Base frequencies:  A: 0.319  C: 0.192  G: 0.257  T: 0.231
-Proportion of invariable sites: 0.524
-Gamma shape alpha: 1.159
-Parameters optimization took 15 rounds (4.953 sec)
-Time for fast ML tree search: 14.822 seconds
+Proportion of invariable sites: 0.525
+Gamma shape alpha: 1.160
+Parameters optimization took 15 rounds (1.703 sec)
+Time for fast ML tree search: 2.678 seconds
 
 NOTE: ModelFinder requires 47 MB RAM!
 ModelFinder will test up to 968 DNA models (sample size: 1293 epsilon: 0.100) ...
  No. Model         -LnL         df  AIC          AICc         BIC
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
 Akaike Information Criterion:           GTR+F+R4
 Corrected Akaike Information Criterion: GTR+F+R4
 Bayesian Information Criterion:         GTR+F+R4
 Best-fit model: GTR+F+R4 chosen according to BIC
 
 All model information printed to output\phylogenetics\orthohantavirus_hantanense\S\tree.model.gz
-CPU time for ModelFinder: 302.859 seconds (0h:5m:2s)
-Wall-clock time for ModelFinder: 181.625 seconds (0h:3m:1s)
+CPU time for ModelFinder: 83.359 seconds (0h:1m:23s)
+Wall-clock time for ModelFinder: 42.714 seconds (0h:0m:42s)
 Generating 1000 samples for ultrafast bootstrap (seed: 42)...
 
 NOTE: 20 MB RAM (0 GB) is required!
-WARNING: Number of threads seems too high for short alignments. Use -T AUTO to determine best number of threads.
 Estimate model parameters (epsilon = 0.100)
-1. Initial log-likelihood: -16197.145
-Optimal log-likelihood: -16197.144
-Rate parameters:  A-C: 1.52600  A-G: 8.82223  A-T: 1.37314  C-G: 0.35057  C-T: 14.66729  G-T: 1.00000
+1. Initial log-likelihood: -16197.147
+Optimal log-likelihood: -16197.146
+Rate parameters:  A-C: 1.53632  A-G: 8.88198  A-T: 1.38214  C-G: 0.35325  C-T: 14.75275  G-T: 1.00000
 Base frequencies:  A: 0.319  C: 0.192  G: 0.257  T: 0.231
-Site proportion and rates:  (0.633,0.034) (0.187,1.381) (0.179,3.884) (0.001,18.341)
-Parameters optimization took 1 rounds (0.297 sec)
+Site proportion and rates:  (0.633,0.034) (0.187,1.380) (0.179,3.884) (0.001,18.320)
+Parameters optimization took 1 rounds (0.106 sec)
 Wrote distance file to... 
 Computing ML distances based on estimated model parameters...
-Calculating distance matrix: done in 0.0563278 secs using 749% CPU
-Computing ML distances took 0.057597 sec (of wall-clock time) 0.421875 sec (of CPU time)
-Setting up auxiliary I and S matrices: done in 0.0019628 secs
-Constructing RapidNJ tree: done in 0.003395 secs using 920.5% CPU
-Computing RapidNJ tree took 0.005661 sec (of wall-clock time) 0.031250 sec (of CPU time)
-Log-likelihood of RapidNJ tree: -16512.141
+Calculating distance matrix: done in 0.113147 secs using 193.3% CPU
+Computing ML distances took 0.113658 sec (of wall-clock time) 0.218750 sec (of CPU time)
+Setting up auxiliary I and S matrices: done in 0.0010498 secs
+Constructing RapidNJ tree: done in 0.0019623 secs
+Computing RapidNJ tree took 0.003115 sec (of wall-clock time) 0.000000 sec (of CPU time)
+Log-likelihood of RapidNJ tree: -16417.963
 --------------------------------------------------------------------
 |             INITIALIZING CANDIDATE TREE SET                      |
 --------------------------------------------------------------------
-Generating 98 parsimony trees... 5.149 second
-Computing log-likelihood of 98 initial trees ... 30.568 seconds
-Current best score: -16197.144
+Generating 98 parsimony trees... 3.075 second
+Computing log-likelihood of 98 initial trees ... 2.011 seconds
+Current best score: -16197.146
 
 Do NNI search on 20 best initial trees
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 1: -16186.587
-Iteration 10 / LogL: -16202.207 / Time: 0h:5m:12s
+BETTER TREE FOUND at iteration 1: -16186.582
+Iteration 10 / LogL: -16202.201 / Time: 0h:0m:56s
 Estimate model parameters (epsilon = 0.100)
 BETTER TREE FOUND at iteration 18: -16185.109
-Iteration 20 / LogL: -16211.106 / Time: 0h:6m:37s
+Iteration 20 / LogL: -16211.097 / Time: 0h:1m:5s
 Finish initializing candidate tree set (20)
-Current best tree score: -16185.109 / CPU time: 212.425
+Current best tree score: -16185.109 / CPU time: 21.883
 Number of iterations: 20
 --------------------------------------------------------------------
 |               OPTIMIZING CANDIDATE TREE SET                      |
 --------------------------------------------------------------------
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 25: -16183.451
+BETTER TREE FOUND at iteration 21: -16181.169
+Iteration 30 / LogL: -16187.932 / Time: 0h:1m:11s (0h:1m:30s left)
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 30: -16181.676
-Iteration 30 / LogL: -16181.676 / Time: 0h:7m:55s (0h:16m:52s left)
+BETTER TREE FOUND at iteration 32: -16179.002
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 35: -16176.347
-Iteration 40 / LogL: -16210.688 / Time: 0h:9m:8s (0h:14m:52s left)
-Iteration 50 / LogL: -16238.817 / Time: 0h:10m:22s (0h:12m:44s left)
-Log-likelihood cutoff on original alignment: -16242.274
+BETTER TREE FOUND at iteration 39: -16177.040
+Iteration 40 / LogL: -16196.661 / Time: 0h:1m:18s (0h:1m:30s left)
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 51: -16175.246
+BETTER TREE FOUND at iteration 48: -16176.557
+Iteration 50 / LogL: -16211.848 / Time: 0h:1m:24s (0h:1m:24s left)
+Log-likelihood cutoff on original alignment: -16242.286
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 53: -16171.295
-Iteration 60 / LogL: -16191.241 / Time: 0h:11m:31s (0h:13m:24s left)
-Iteration 70 / LogL: -16173.467 / Time: 0h:12m:39s (0h:11m:35s left)
+BETTER TREE FOUND at iteration 55: -16172.486
+Iteration 60 / LogL: -16172.618 / Time: 0h:1m:31s (0h:1m:18s left)
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 80: -16170.282
-Iteration 80 / LogL: -16170.282 / Time: 0h:13m:43s (0h:13m:31s left)
+BETTER TREE FOUND at iteration 62: -16164.895
+Iteration 70 / LogL: -16166.034 / Time: 0h:1m:38s (0h:1m:13s left)
 Estimate model parameters (epsilon = 0.100)
-BETTER TREE FOUND at iteration 84: -16169.436
-Iteration 90 / LogL: -16193.008 / Time: 0h:14m:45s (0h:12m:23s left)
-Iteration 100 / LogL: -16171.966 / Time: 0h:15m:49s (0h:10m:51s left)
-Log-likelihood cutoff on original alignment: -16242.274
-NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.995
-Iteration 110 / LogL: -16177.631 / Time: 0h:16m:51s (0h:11m:25s left)
-Iteration 120 / LogL: -16171.847 / Time: 0h:17m:54s (0h:10m:0s left)
-Iteration 130 / LogL: -16202.421 / Time: 0h:18m:59s (0h:8m:39s left)
-Iteration 140 / LogL: -16193.054 / Time: 0h:20m:2s (0h:7m:20s left)
-Iteration 150 / LogL: -16170.645 / Time: 0h:21m:8s (0h:6m:4s left)
-Log-likelihood cutoff on original alignment: -16242.274
-Iteration 160 / LogL: -16179.702 / Time: 0h:22m:31s (0h:4m:54s left)
-Iteration 170 / LogL: -16172.882 / Time: 0h:24m:32s (0h:3m:49s left)
-Iteration 180 / LogL: -16202.104 / Time: 0h:25m:39s (0h:2m:31s left)
-TREE SEARCH COMPLETED AFTER 185 ITERATIONS / Time: 0h:26m:9s
+BETTER TREE FOUND at iteration 80: -16162.118
+Iteration 80 / LogL: -16162.118 / Time: 0h:1m:45s (0h:1m:19s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 89: -16161.173
+Iteration 90 / LogL: -16164.848 / Time: 0h:1m:51s (0h:1m:16s left)
+Iteration 100 / LogL: -16166.221 / Time: 0h:1m:57s (0h:1m:7s left)
+Log-likelihood cutoff on original alignment: -16242.286
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.960
+NOTE: UFBoot does not converge, continue at least 100 more iterations
+Iteration 110 / LogL: -16299.040 / Time: 0h:2m:4s (0h:1m:7s left)
+Iteration 120 / LogL: -16165.707 / Time: 0h:2m:10s (0h:0m:59s left)
+Iteration 130 / LogL: -16165.116 / Time: 0h:2m:17s (0h:0m:51s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 135: -16159.111
+Iteration 140 / LogL: -16497.844 / Time: 0h:2m:23s (0h:1m:9s left)
+Iteration 150 / LogL: -16250.232 / Time: 0h:2m:29s (0h:1m:1s left)
+Log-likelihood cutoff on original alignment: -16242.286
+Iteration 160 / LogL: -16376.534 / Time: 0h:2m:35s (0h:0m:53s left)
+Iteration 170 / LogL: -16162.191 / Time: 0h:2m:41s (0h:0m:45s left)
+Iteration 180 / LogL: -16465.853 / Time: 0h:2m:47s (0h:0m:38s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 188: -16156.645
+Iteration 190 / LogL: -16204.267 / Time: 0h:2m:54s (0h:1m:8s left)
+Iteration 200 / LogL: -16178.276 / Time: 0h:3m:0s (0h:1m:0s left)
+Log-likelihood cutoff on original alignment: -16242.286
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.991
+Iteration 210 / LogL: -16221.131 / Time: 0h:3m:7s (0h:1m:2s left)
+Iteration 220 / LogL: -16167.527 / Time: 0h:3m:14s (0h:0m:55s left)
+Iteration 230 / LogL: -16157.240 / Time: 0h:3m:21s (0h:0m:48s left)
+Iteration 240 / LogL: -16167.630 / Time: 0h:3m:27s (0h:0m:41s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 241: -16156.587
+Iteration 250 / LogL: -16176.895 / Time: 0h:3m:33s (0h:1m:2s left)
+Log-likelihood cutoff on original alignment: -16242.286
+Iteration 260 / LogL: -16158.674 / Time: 0h:3m:39s (0h:0m:55s left)
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 264: -16156.495
+Iteration 270 / LogL: -16186.913 / Time: 0h:3m:47s (0h:1m:4s left)
+Iteration 280 / LogL: -16156.622 / Time: 0h:3m:54s (0h:0m:57s left)
+Iteration 290 / LogL: -16206.805 / Time: 0h:4m:1s (0h:0m:50s left)
+Iteration 300 / LogL: -16164.580 / Time: 0h:4m:7s (0h:0m:43s left)
+Log-likelihood cutoff on original alignment: -16233.555
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.993
+Estimate model parameters (epsilon = 0.100)
+BETTER TREE FOUND at iteration 302: -16156.344
+Iteration 310 / LogL: -16164.745 / Time: 0h:4m:15s (0h:1m:3s left)
+Iteration 320 / LogL: -16165.618 / Time: 0h:4m:22s (0h:0m:56s left)
+Iteration 330 / LogL: -16176.776 / Time: 0h:4m:29s (0h:0m:49s left)
+Iteration 340 / LogL: -16188.872 / Time: 0h:4m:35s (0h:0m:42s left)
+Iteration 350 / LogL: -16170.216 / Time: 0h:4m:42s (0h:0m:35s left)
+Log-likelihood cutoff on original alignment: -16228.077
+Iteration 360 / LogL: -16159.793 / Time: 0h:4m:49s (0h:0m:28s left)
+Iteration 370 / LogL: -16159.235 / Time: 0h:4m:55s (0h:0m:21s left)
+Iteration 380 / LogL: -16158.759 / Time: 0h:5m:1s (0h:0m:15s left)
+Iteration 390 / LogL: -16194.953 / Time: 0h:5m:8s (0h:0m:8s left)
+Iteration 400 / LogL: -16165.425 / Time: 0h:5m:15s (0h:0m:1s left)
+Log-likelihood cutoff on original alignment: -16228.077
+NOTE: Bootstrap correlation coefficient of split occurrence frequencies: 0.994
+TREE SEARCH COMPLETED AFTER 403 ITERATIONS / Time: 0h:5m:18s
 
 --------------------------------------------------------------------
 |                    FINALIZING TREE SEARCH                        |
 --------------------------------------------------------------------
 Performs final model parameters optimization
 Estimate model parameters (epsilon = 0.010)
-1. Initial log-likelihood: -16169.436
-Optimal log-likelihood: -16169.434
-Rate parameters:  A-C: 1.52527  A-G: 8.80357  A-T: 1.33641  C-G: 0.33753  C-T: 14.76596  G-T: 1.00000
+1. Initial log-likelihood: -16156.344
+Optimal log-likelihood: -16156.333
+Rate parameters:  A-C: 1.55302  A-G: 8.87100  A-T: 1.34449  C-G: 0.35451  C-T: 14.72546  G-T: 1.00000
 Base frequencies:  A: 0.319  C: 0.192  G: 0.257  T: 0.231
-Site proportion and rates:  (0.632,0.034) (0.179,1.328) (0.185,3.767) (0.004,12.315)
-Parameters optimization took 1 rounds (0.382 sec)
-BEST SCORE FOUND : -16169.434
+Site proportion and rates:  (0.637,0.036) (0.197,1.476) (0.165,4.048) (0.001,19.478)
+Parameters optimization took 1 rounds (0.222 sec)
+BEST SCORE FOUND : -16156.333
 Creating bootstrap support values...
 Split supports printed to NEXUS file output\phylogenetics\orthohantavirus_hantanense\S\tree.splits.nex
-Total tree length: 3.049
+Total tree length: 3.037
 
-Total number of iterations: 185
-CPU time used for tree search: 1435.516 sec (0h:23m:55s)
-Wall-clock time used for tree search: 1384.338 sec (0h:23m:4s)
-Total CPU time used: 1744.047 sec (0h:29m:4s)
-Total wall-clock time used: 1570.581 sec (0h:26m:10s)
+Total number of iterations: 403
+CPU time used for tree search: 531.125 sec (0h:8m:51s)
+Wall-clock time used for tree search: 274.746 sec (0h:4m:34s)
+Total CPU time used: 617.094 sec (0h:10m:17s)
+Total wall-clock time used: 318.923 sec (0h:5m:18s)
 
 Computing bootstrap consensus tree...
 Reading input file output\phylogenetics\orthohantavirus_hantanense\S\tree.splits.nex...
-241 taxa and 1386 splits.
+241 taxa and 1430 splits.
 Consensus tree written to output\phylogenetics\orthohantavirus_hantanense\S\tree.contree
 Reading input trees file output\phylogenetics\orthohantavirus_hantanense\S\tree.contree
-Log-likelihood of consensus tree: -16171.865
+Log-likelihood of consensus tree: -16156.355
 
 Analysis results written to: 
   IQ-TREE report:                output\phylogenetics\orthohantavirus_hantanense\S\tree.iqtree
@@ -568,4 +566,4 @@ Ultrafast bootstrap approximation results written to:
   Consensus tree:                output\phylogenetics\orthohantavirus_hantanense\S\tree.contree
   Screen log file:               output\phylogenetics\orthohantavirus_hantanense\S\tree.log
 
-Date and Time: Thu Sep 10 12:27:50 2026
+Date and Time: Fri Sep 11 22:14:10 2026

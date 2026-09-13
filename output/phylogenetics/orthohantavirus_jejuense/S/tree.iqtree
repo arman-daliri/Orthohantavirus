@@ -180,7 +180,7 @@ F81+R2            -4363.239    8768.478 - 1.16e-147    8769.208 - 1.44e-147    8
 JC+R2             -4363.242    8768.484 - 1.16e-147    8769.215 - 1.43e-147    8876.846 - 3.52e-142
 JC+R2             -4363.242    8768.484 - 1.16e-147    8769.215 - 1.43e-147    8876.846 - 3.52e-142
 JC+I+R2           -4363.153    8770.306 - 4.66e-148    8771.107 - 5.56e-148    8883.828 - 1.07e-143
-JC+I+G4           -4368.465    8778.930 - 6.25e-150    8779.661 - 7.72e-150    8887.292 - 1.9e-144
+JC+I+G4           -4368.465    8778.930 - 6.25e-150    8779.660 - 7.72e-150    8887.292 - 1.9e-144
 JC+R3             -4363.401    8772.803 - 1.34e-148    8773.677 - 1.54e-148    8891.484 - 2.33e-145
 JC+I+R3           -4363.210    8774.420 - 5.96e-149    8775.371 - 6.59e-149    8898.262 - 7.88e-147
 JC                -4493.025    9024.050 - 3.7e-203    9024.650 - 4.89e-203    9122.091 - 1.96e-195
@@ -200,10 +200,10 @@ Model of substitution: TIM2+F+I
 Rate parameter R:
 
   A-C: 3.2281
-  A-G: 26.6573
+  A-G: 26.6575
   A-T: 3.2281
   C-G: 1.0000
-  C-T: 41.9580
+  C-T: 41.9583
   G-T: 1.0000
 
 State frequencies: (empirical counts from alignment)
@@ -246,9 +246,9 @@ Numbers in parentheses are  ultrafast bootstrap support (%)
 +--I0000
 |
 |                                                    +---I0001
-|                                                 +--| (90)
+|                                                 +--| (89)
 |                                                 |  +--I0002
-|                                              +--| (78)
+|                                              +--| (77)
 |                                              |  +-------I0005
 |                               +--------------| (100)
 |                               |              |  +------I0003
@@ -258,22 +258,22 @@ Numbers in parentheses are  ultrafast bootstrap support (%)
 |                               |            +**I0006
 |                               |         +--| (57)
 |                               |         |  +**I0009
-|                               +---------| (100)
+|                               +---------| (99)
 |                                         |  +**I0007
-|                                         +--| (96)
+|                                         +--| (95)
 |                                            +**I0008
 |
 +--I0010
 
 Tree in newick format:
 
-(I0000:0.0090491737,((((I0001:0.0273505628,I0002:0.0155087360)90:0.0133053289,I0005:0.0492774406)78:0.0133402921,(I0003:0.0444487791,I0004:0.0486187236)83:0.0236237304)100:0.0938515575,((I0006:0.0000010000,I0009:0.0000010000)57:0.0029253960,(I0007:0.0000010000,I0008:0.0000010000)96:0.0151825235)100:0.0617659860)100:0.1929719975,I0010:0.0141164702);
+(I0000:0.0090491703,((((I0001:0.0273505636,I0002:0.0155087378)89:0.0133053314,I0005:0.0492774408)77:0.0133402886,(I0003:0.0444487760,I0004:0.0486187311)83:0.0236237300)100:0.0938515746,((I0006:0.0000010000,I0009:0.0000010000)57:0.0029253921,(I0007:0.0000010000,I0008:0.0000010000)95:0.0151825269)99:0.0617659918)100:0.1929720177,I0010:0.0141164733);
 
 CONSENSUS TREE
 --------------
 
 Consensus tree is constructed from 1000 bootstrap trees
-Log-likelihood of consensus tree: -4020.675820
+Log-likelihood of consensus tree: -4020.675823
 Robinson-Foulds distance between ML tree and consensus tree: 0
 
 Branches with support >0.000000% are kept (extended consensus)
@@ -283,9 +283,9 @@ Numbers in parentheses are bootstrap supports (%)
 +--I0000
 |
 |                                                    +---I0001
-|                                                 +--| (90)
+|                                                 +--| (89)
 |                                                 |  +--I0002
-|                                              +--| (78)
+|                                              +--| (77)
 |                                              |  +-------I0005
 |                               +--------------| (100)
 |                               |              |  +------I0003
@@ -295,9 +295,9 @@ Numbers in parentheses are bootstrap supports (%)
 |                               |            +--I0006
 |                               |         +--| (57)
 |                               |         |  +--I0009
-|                               +---------| (100)
+|                               +---------| (99)
 |                                         |  +--I0007
-|                                         +--| (96)
+|                                         +--| (95)
 |                                            +--I0008
 |
 +--I0010
@@ -305,13 +305,13 @@ Numbers in parentheses are bootstrap supports (%)
 
 Consensus tree in newick format: 
 
-(I0000:0.0090562557,((((I0001:0.0273311573,I0002:0.0155166097)90:0.0132848855,I0005:0.0492703104)78:0.0133086305,(I0003:0.0444276329,I0004:0.0486155728)83:0.0236541231)100:0.0938304180,((I0006:0.0000025164,I0009:0.0000025164)57:0.0030882884,(I0007:0.0000025164,I0008:0.0000025164)96:0.0149523819)100:0.0616689353)100:0.1928550190,I0010:0.0141061898);
+(I0000:0.0090562521,((((I0001:0.0273311577,I0002:0.0155166114)89:0.0132848879,I0005:0.0492703103)77:0.0133086274,(I0003:0.0444276294,I0004:0.0486155793)83:0.0236541223)100:0.0938304341,((I0006:0.0000025164,I0009:0.0000025164)57:0.0030882850,(I0007:0.0000025164,I0008:0.0000025164)95:0.0149523847)99:0.0616689410)100:0.1928550383,I0010:0.0141061930);
 
 ALISIM COMMAND
 --------------
 To simulate an alignment of the same length as the original alignment, using the tree and model parameters estimated from this analysis, you can use the following command:
 
---alisim simulated_MSA -t output\phylogenetics\orthohantavirus_jejuense\S\tree.treefile -m "TIM2{3.22805,26.6573,41.958}+F{0.35653,0.181654,0.209418,0.252398}+I{0.693667}" --length 1287
+--alisim simulated_MSA -t output\phylogenetics\orthohantavirus_jejuense\S\tree.treefile -m "TIM2{3.22807,26.6575,41.9583}+F{0.35653,0.181654,0.209418,0.252398}+I{0.693667}" --length 1287
 
 To mimic the alignment used to produce this analysis, i.e. simulate an alignment of the same length as the original alignment, using the tree and model parameters estimated from this analysis *and* copying the same gap positions as the original alignment, you can use the following command:
 
@@ -326,7 +326,7 @@ For more information on using AliSim, please visit: www.iqtree.org/doc/AliSim
 TIME STAMP
 ----------
 
-Date and time: Thu Sep 10 14:10:52 2026
-Total CPU time used: 33.890625 seconds (0h:0m:33s)
-Total wall-clock time used: 43.8288222 seconds (0h:0m:43s)
+Date and time: Fri Sep 11 23:07:27 2026
+Total CPU time used: 3.375 seconds (0h:0m:3s)
+Total wall-clock time used: 1.8137513 seconds (0h:0m:1s)
 

@@ -52,7 +52,7 @@ TPM2u+F+I        -10043.184   20136.369 - 8.68e-005   20136.750 -   9e-005   202
 GTR+F+I          -10031.275   20118.549 +    0.643   20119.027 +    0.635   20290.495 -  0.00384
 TN+F+I           -10045.539   20141.078 - 8.24e-006   20141.460 - 8.54e-006   20294.601 - 0.000493
 HKY+F+I          -10052.548   20153.097 - 2.02e-008   20153.449 - 2.13e-008   20300.479 - 2.61e-005
-TVM+F+I          -10040.526   20135.051 - 0.000168   20135.495 - 0.000169   20300.855 - 2.16e-005
+TVM+F+I          -10040.526   20135.052 - 0.000168   20135.496 - 0.000169   20300.856 - 2.16e-005
 TIM+F+I          -10045.445   20142.889 - 3.33e-006   20143.302 - 3.4e-006   20302.553 - 9.25e-006
 TIM3+F+I         -10045.482   20142.965 - 3.21e-006   20143.377 - 3.28e-006   20302.628 - 8.9e-006
 TPM3u+F+I        -10052.460   20154.921 - 8.13e-009   20155.302 - 8.43e-009   20308.443 - 4.86e-007
@@ -94,7 +94,7 @@ F81+I            -10812.542   21665.084 -        0   21665.331 -        0   2178
 JC+G4            -10817.652   21675.305 -        0   21675.551 -        0   21798.123 -        0
 JC+R2            -10813.763   21669.526 -        0   21669.797 -        0   21798.485 -        0
 JC+I+R2          -10813.367   21670.734 -        0   21671.031 -        0   21805.834 -        0
-JC+I+G4          -10819.716   21681.433 -        0   21681.704 -        0   21810.392 -        0
+JC+I+G4          -10819.716   21681.433 -        0   21681.704 -        0   21810.391 -        0
 JC+R3            -10813.961   21673.923 -        0   21674.247 -        0   21815.163 -        0
 JC+I+R3          -10813.421   21674.842 -        0   21675.194 -        0   21822.223 -        0
 JC               -10985.217   22008.434 -        0   22008.657 -        0   22125.111 -        0
@@ -114,10 +114,10 @@ Model of substitution: TIM2+F+I
 Rate parameter R:
 
   A-C: 2.9465
-  A-G: 22.7497
+  A-G: 22.7493
   A-T: 2.9465
   C-G: 1.0000
-  C-T: 36.2360
+  C-T: 36.2353
   G-T: 1.0000
 
 State frequencies: (empirical counts from alignment)
@@ -131,7 +131,7 @@ Rate matrix Q:
 
   A   -0.7867    0.0619    0.6083    0.1164
   C    0.1226    -1.581   0.02674     1.432
-  G     0.947   0.02101    -1.007   0.03951
+  G     0.947   0.02101    -1.007   0.03952
   T    0.1226    0.7613   0.02674   -0.9106
 
 Model of rate heterogeneity: Invar
@@ -160,11 +160,11 @@ Numbers in parentheses are  ultrafast bootstrap support (%)
 +--I0000
 |
 |                                                     +---I0001
-|                                                  +--| (92)
+|                                                  +--| (91)
 |                                                  |  +----I0002
-|                                               +--| (64)
+|                                               +--| (62)
 |                                               |  |  +--I0003
-|                                               |  +--| (69)
+|                                               |  +--| (70)
 |                                               |     +---I0005
 |                            +------------------| (100)
 |                            |                  +--------I0004
@@ -181,13 +181,13 @@ Numbers in parentheses are  ultrafast bootstrap support (%)
 
 Tree in newick format:
 
-(I0000:0.0082408329,((((I0001:0.0230670036,I0002:0.0306472167)92:0.0104188657,(I0003:0.0200182850,I0005:0.0222801210)69:0.0099198650)64:0.0174324590,I0004:0.0534195416)100:0.1093193349,(I0006:0.0092713678,((I0007:0.0000011753,I0009:0.0000011753)100:0.0030160158,I0008:0.0032822621)92:0.0081089296)100:0.1089189707)100:0.1655299847,I0010:0.0266809902);
+(I0000:0.0082408239,((((I0001:0.0230669994,I0002:0.0306472047)91:0.0104188603,(I0003:0.0200182755,I0005:0.0222801151)70:0.0099198725)62:0.0174325031,I0004:0.0534194735)100:0.1093191331,(I0006:0.0092713490,((I0007:0.0000011751,I0009:0.0000011751)100:0.0030160150,I0008:0.0032822633)92:0.0081089455)100:0.1089188998)100:0.1655296721,I0010:0.0266809958);
 
 CONSENSUS TREE
 --------------
 
 Consensus tree is constructed from 1000 bootstrap trees
-Log-likelihood of consensus tree: -10033.861822
+Log-likelihood of consensus tree: -10033.861823
 Robinson-Foulds distance between ML tree and consensus tree: 0
 
 Branches with support >0.000000% are kept (extended consensus)
@@ -197,11 +197,11 @@ Numbers in parentheses are bootstrap supports (%)
 +--I0000
 |
 |                                                     +---I0001
-|                                                  +--| (92)
+|                                                  +--| (91)
 |                                                  |  +----I0002
-|                                               +--| (64)
+|                                               +--| (62)
 |                                               |  |  +--I0003
-|                                               |  +--| (69)
+|                                               |  +--| (70)
 |                                               |     +---I0005
 |                            +------------------| (100)
 |                            |                  +--------I0004
@@ -219,13 +219,13 @@ Numbers in parentheses are bootstrap supports (%)
 
 Consensus tree in newick format: 
 
-(I0000:0.0082417096,((((I0001:0.0230650776,I0002:0.0306431971)92:0.0104119015,(I0003:0.0200075340,I0005:0.0222861371)69:0.0099317334)64:0.0178498502,I0004:0.0528473994)100:0.1088464167,(I0006:0.0092366336,((I0007:0.0000021345,I0009:0.0000021345)100:0.0030155509,I0008:0.0032808269)92:0.0081462462)100:0.1088637695)100:0.1655379567,I0010:0.0266763151);
+(I0000:0.0082417020,((((I0001:0.0230650777,I0002:0.0306431898)91:0.0104118955,(I0003:0.0200075220,I0005:0.0222861351)70:0.0099317413)62:0.0178499002,I0004:0.0528473255)100:0.1088462141,(I0006:0.0092366144,((I0007:0.0000021345,I0009:0.0000021345)100:0.0030155506,I0008:0.0032808271)92:0.0081462618)100:0.1088636987)100:0.1655376483,I0010:0.0266763184);
 
 ALISIM COMMAND
 --------------
 To simulate an alignment of the same length as the original alignment, using the tree and model parameters estimated from this analysis, you can use the following command:
 
---alisim simulated_MSA -t output\phylogenetics\orthohantavirus_jejuense\M\tree.treefile -m "TIM2{2.94654,22.7497,36.236}+F{0.322955,0.162997,0.207468,0.306581}+I{0.674461}" --length 3432
+--alisim simulated_MSA -t output\phylogenetics\orthohantavirus_jejuense\M\tree.treefile -m "TIM2{2.94648,22.7493,36.2353}+F{0.322955,0.162997,0.207468,0.306581}+I{0.674461}" --length 3432
 
 To mimic the alignment used to produce this analysis, i.e. simulate an alignment of the same length as the original alignment, using the tree and model parameters estimated from this analysis *and* copying the same gap positions as the original alignment, you can use the following command:
 
@@ -240,7 +240,7 @@ For more information on using AliSim, please visit: www.iqtree.org/doc/AliSim
 TIME STAMP
 ----------
 
-Date and time: Thu Sep 10 14:11:26 2026
-Total CPU time used: 28.828125 seconds (0h:0m:28s)
-Total wall-clock time used: 27.9151386 seconds (0h:0m:27s)
+Date and time: Fri Sep 11 23:07:34 2026
+Total CPU time used: 3.515625 seconds (0h:0m:3s)
+Total wall-clock time used: 1.8746958 seconds (0h:0m:1s)
 
