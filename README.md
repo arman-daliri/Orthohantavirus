@@ -567,6 +567,56 @@ python -m unittest rpi_core              # full suite, 334 tests
 
 Session work-logs (`notes_*.md`, `suggesting.md`, the consolidation generator scripts) were deleted once superseded by this docs map and `docs/PROJECT-STATE.md`. Their content remains in git history if ever needed.
 
+### Reassortment detector — validation against published reassortants
+
+`rpi_core.py validate` scores a panel whose ground truth is known independently of the detector, and reports a confusion matrix. Run it with:
+
+```bash
+python rpi_core.py validate --json output/validation/validation_report.json
+```
+
+**Result (54 candidates, all built from real sequences in `all_hanta/`):**
+
+| Class | n | Result |
+|---|---|---|
+| Published **inter-species** reassortants | 3 | 3/3 exchanged segment correctly named |
+| Synthetic inter-species swaps (S, M and L donated in turn) | 15 | 15/15 correctly named |
+| **True negatives** — real unmodified isolates, one per species | 27 | 27/27 silent, **0 false positives** |
+| Published **intra-species** reassortants | 5 | 5/5 silent — **measured blind spot, not a pass** |
+| Adversarial (random, shuffled, truncated, empty) | 4 | 4/4 handled, none scored as a reassortant |
+
+Sensitivity 18/18 (1.00), specificity 27/27 (1.00).
+
+#### Which published reassortants were tested
+
+These are **reconstructions of published constellations** from the parental sequences in this dataset, not the published reassortant clones themselves. Where the paper's exact parental strain is in the dataset it was used, and the report marks the row `parents_are_exact_published_strains`.
+
+| Source | Cross | Parents used | Detected |
+|---|---|---|---|
+| **Rizvanov, Khaiboullina & St Jeor (2004)** *Virology* 327:225–232, [doi:10.1016/j.virol.2004.07.012](https://doi.org/10.1016/j.virol.2004.07.012) | SNV S+L × ANDV M | **Exact published strains** — SNV NM R11 (`NC_077669.1`, `NC_077671.1`) × ANDV Chile-9717869 (`NC_003467.2`) | ✅ `m_only`, segment M |
+| Rizvanov et al. (2004), reciprocal | ANDV S+L × SNV M | **Exact published strains** — ANDV Chile-9717869 (`NC_003466.1`, `NC_003468.2`) × SNV NM R11 (`NC_077670.1`) | ✅ `m_only`, segment M |
+| **Handke, Oelschlegel, Franke, Wiedemann, Krüger & Rang (2010)** *J Gen Virol* 91:2351–2359, [doi:10.1099/vir.0.021139-0](https://doi.org/10.1099/vir.0.021139-0) | PUUV S+L × PHV M | Representative strains — PUUV Saratov-MG120 × PHV `NC_038940.1` | ✅ `m_only`, segment M |
+| **Rodriguez, Owens, Peters & Nichol (1998)** *Virology* 242:99–106, [doi:10.1006/viro.1997.8990](https://doi.org/10.1006/viro.1997.8990), Table 7 | SNV NM R11 × CC107, M-exchanged and S-exchanged arms | **Exact published strains** — NM R11 (`NC_077669.1`/`NC_077670.1`/`NC_077671.1`) × CC107/POR (`KT885046.1`/`KT885045.1`/`KT885044.1`) | ⚪ Silent — intra-species blind spot |
+| **Klempa (2018)** *Virus Genes* 54:638–646, [doi:10.1007/s11262-018-1590-z](https://doi.org/10.1007/s11262-018-1590-z) | DOBV intra-genotype M; PUUV intra-lineage M | Representative strains | ⚪ Silent — intra-species blind spot |
+| **Park, Kim, Kim, Kim & Song (2025)** *Sci Rep*, [doi:10.1038/s41598-025-11003-z](https://doi.org/10.1038/s41598-025-11003-z) | HTNV intra-species L exchange | Representative Korean *Apodemus agrarius* strains | ⚪ Silent — intra-species blind spot |
+
+#### The blind spot is real and is not a test failure
+
+Gate 1 detects reassortment by assigning each segment to its nearest reference **species** and looking for disagreement. When both parents are the same species — which is what Rodriguez 1998, Klempa 2018 and Park 2025 describe — all three segments assign to that species and gate 1 correctly reports `concordant`. **Intra-species reassortment is invisible to gate 1 by construction.** Gate 4's per-segment phylogenetics is the layer that catches it. Do not read "0 false positives" as "detects all reassortment".
+
+#### Gate 4 in the validation harness
+
+Gate 4 needs `mafft` and `iqtree` on PATH. When running `rpi_core.py validate` in an environment without those binaries, gate 4 is skipped and every verdict in the validation run reads `insufficient_comparators` — **Gate 1's pattern and discordant-segment columns are the signal being measured in that context, not the verdict.** Pass `--with-phylogeny` to `rpi_core.py validate` once real binaries are on PATH to lift this.
+
+Gate 4 is fully exercised when running `Algorithm.py --with-phylogeny` (Step 3b): that command runs gate4 confirmation on all 10 GA winners per pool using the same mafft+iqtree stack as Step 2. The current pipeline run's gate4 verdicts are recorded in `ga_search/*/seed_20260904.json`.
+
+#### Two detector defects this validation found and fixed
+
+1. **Real RefSeq genomes were discarded as `junk_sequence`.** Gate 0 enforced ICTV's segment band exactly, but that band is for *deciding which segment a record is*, not a validity test. Luxi virus LX309 S (`NC_038530.1`, 2107 nt vs 1200–2100) failed by **seven nucleotides**; Tatenale virus Upton Heath M (`NC_055637.1`, 3355 nt vs 3400–3800) also failed. `junk_sequence` is terminal, so divergent novel hantaviruses — the most interesting candidates — were dropped unscored. Now warns within a tolerance band; `SEGMENT_LENGTH_ABSURD_MAX` remains a hard ceiling.
+2. **Full-length ORFs were thrown away when the deposit lacked its stop codon.** The ORF search required an in-frame stop. GenBank records are routinely trimmed to the CDS: Tatenale M is annotated coding-complete with an 1118 aa glycoprotein but deposited 5 nt short of the stop, so the real ORF was discarded and a spurious **62 aa** ORF won — after which gate 1 called an ordinary isolate `too_divergent`. ORFs running off the end of a record are now kept (translated to the last complete codon). Junk detection is unaffected: random 3600 nt still yields only a 94 aa ORF.
+
+Run `rpi_core.py score --rpi-report` to write `rpi_validation_report.json` alongside the candidate table. It collects the validation entry points — retrospective reproduction (§11.1), the rank-consistency check (§11.2), the gate3-veto vs continuous-Factor-E cross-layer check (§11.3), and the sensitivity sweep (§12). The flag is off by default, so existing runs are unchanged.
+
 ### Step 3b — `Algorithm.py` (combinatorial GA search)
 
 | Item | Detail |
@@ -663,60 +713,6 @@ The full defect-by-defect writeup (`TEACHME.html`) described a dataset snapshot 
 10. **`modal_agrees` saturates and must never be quoted alone.** In the retrospective reproduction harness the distant top set is `{M}`, the close top set is `{M, S}`, and every benchmark observation's top set contains M — so no input in this benchmark can return `False`. `composition_distance` (total-variation distance between prior and observed composition) is the **primary** agreement measure; it is quantitative and can fail. A tied prediction (`predicted_modal_segment = null`) is a non-prediction, not a confirmation, and must not be counted as a success.
 
 The full design spec, including the sensitivity sweep (`sensitivity_sweep`) and the rank-consistency sanity check (`rank_consistency`) that operationalize these limitations, is at `docs/superpowers/specs/2026-08-24-reassortment-plausibility-index-design.md`.
-
----
-
-## Reassortment detector — validation against published reassortants
-
-`rpi_core.py validate` scores a panel whose ground truth is known independently of the detector, and reports a confusion matrix. Run it with:
-
-```bash
-python rpi_core.py validate --json output/validation/validation_report.json
-```
-
-**Result (54 candidates, all built from real sequences in `all_hanta/`):**
-
-| Class | n | Result |
-|---|---|---|
-| Published **inter-species** reassortants | 3 | 3/3 exchanged segment correctly named |
-| Synthetic inter-species swaps (S, M and L donated in turn) | 15 | 15/15 correctly named |
-| **True negatives** — real unmodified isolates, one per species | 27 | 27/27 silent, **0 false positives** |
-| Published **intra-species** reassortants | 5 | 5/5 silent — **measured blind spot, not a pass** |
-| Adversarial (random, shuffled, truncated, empty) | 4 | 4/4 handled, none scored as a reassortant |
-
-Sensitivity 18/18 (1.00), specificity 27/27 (1.00).
-
-### Which published reassortants were tested
-
-These are **reconstructions of published constellations** from the parental sequences in this dataset, not the published reassortant clones themselves. Where the paper's exact parental strain is in the dataset it was used, and the report marks the row `parents_are_exact_published_strains`.
-
-| Source | Cross | Parents used | Detected |
-|---|---|---|---|
-| **Rizvanov, Khaiboullina & St Jeor (2004)** *Virology* 327:225–232, [doi:10.1016/j.virol.2004.07.012](https://doi.org/10.1016/j.virol.2004.07.012) | SNV S+L × ANDV M | **Exact published strains** — SNV NM R11 (`NC_077669.1`, `NC_077671.1`) × ANDV Chile-9717869 (`NC_003467.2`) | ✅ `m_only`, segment M |
-| Rizvanov et al. (2004), reciprocal | ANDV S+L × SNV M | **Exact published strains** — ANDV Chile-9717869 (`NC_003466.1`, `NC_003468.2`) × SNV NM R11 (`NC_077670.1`) | ✅ `m_only`, segment M |
-| **Handke, Oelschlegel, Franke, Wiedemann, Krüger & Rang (2010)** *J Gen Virol* 91:2351–2359, [doi:10.1099/vir.0.021139-0](https://doi.org/10.1099/vir.0.021139-0) | PUUV S+L × PHV M | Representative strains — PUUV Saratov-MG120 × PHV `NC_038940.1` | ✅ `m_only`, segment M |
-| **Rodriguez, Owens, Peters & Nichol (1998)** *Virology* 242:99–106, [doi:10.1006/viro.1997.8990](https://doi.org/10.1006/viro.1997.8990), Table 7 | SNV NM R11 × CC107, M-exchanged and S-exchanged arms | **Exact published strains** — NM R11 (`NC_077669.1`/`NC_077670.1`/`NC_077671.1`) × CC107/POR (`KT885046.1`/`KT885045.1`/`KT885044.1`) | ⚪ Silent — intra-species blind spot |
-| **Klempa (2018)** *Virus Genes* 54:638–646, [doi:10.1007/s11262-018-1590-z](https://doi.org/10.1007/s11262-018-1590-z) | DOBV intra-genotype M; PUUV intra-lineage M | Representative strains | ⚪ Silent — intra-species blind spot |
-| **Park, Kim, Kim, Kim & Song (2025)** *Sci Rep*, [doi:10.1038/s41598-025-11003-z](https://doi.org/10.1038/s41598-025-11003-z) | HTNV intra-species L exchange | Representative Korean *Apodemus agrarius* strains | ⚪ Silent — intra-species blind spot |
-
-### The blind spot is real and is not a test failure
-
-Gate 1 detects reassortment by assigning each segment to its nearest reference **species** and looking for disagreement. When both parents are the same species — which is what Rodriguez 1998, Klempa 2018 and Park 2025 describe — all three segments assign to that species and gate 1 correctly reports `concordant`. **Intra-species reassortment is invisible to gate 1 by construction.** Gate 4's per-segment phylogenetics is the layer that catches it. Do not read "0 false positives" as "detects all reassortment".
-
-### Gate 4 in the validation harness
-
-Gate 4 needs `mafft` and `iqtree` on PATH. When running `rpi_core.py validate` in an environment without those binaries, gate 4 is skipped and every verdict in the validation run reads `insufficient_comparators` — **Gate 1's pattern and discordant-segment columns are the signal being measured in that context, not the verdict.** Pass `--with-phylogeny` to `rpi_core.py validate` once real binaries are on PATH to lift this.
-
-Gate 4 is fully exercised when running `Algorithm.py --with-phylogeny` (Step 3b): that command runs gate4 confirmation on all 10 GA winners per pool using the same mafft+iqtree stack as Step 2. The current pipeline run's gate4 verdicts are recorded in `ga_search/*/seed_20260904.json`.
-
-### Two detector defects this validation found and fixed
-
-1. **Real RefSeq genomes were discarded as `junk_sequence`.** Gate 0 enforced ICTV's segment band exactly, but that band is for *deciding which segment a record is*, not a validity test. Luxi virus LX309 S (`NC_038530.1`, 2107 nt vs 1200–2100) failed by **seven nucleotides**; Tatenale virus Upton Heath M (`NC_055637.1`, 3355 nt vs 3400–3800) also failed. `junk_sequence` is terminal, so divergent novel hantaviruses — the most interesting candidates — were dropped unscored. Now warns within a tolerance band; `SEGMENT_LENGTH_ABSURD_MAX` remains a hard ceiling.
-2. **Full-length ORFs were thrown away when the deposit lacked its stop codon.** The ORF search required an in-frame stop. GenBank records are routinely trimmed to the CDS: Tatenale M is annotated coding-complete with an 1118 aa glycoprotein but deposited 5 nt short of the stop, so the real ORF was discarded and a spurious **62 aa** ORF won — after which gate 1 called an ordinary isolate `too_divergent`. ORFs running off the end of a record are now kept (translated to the last complete codon). Junk detection is unaffected: random 3600 nt still yields only a 94 aa ORF.
-
-Run `rpi_core.py score --rpi-report` to write `rpi_validation_report.json` alongside the candidate table. It collects the validation entry points — retrospective reproduction (§11.1), the rank-consistency check (§11.2), the gate3-veto vs continuous-Factor-E cross-layer check (§11.3), and the sensitivity sweep (§12). The flag is off by default, so existing runs are unchanged.
-
----
 
 ## Citations
 
