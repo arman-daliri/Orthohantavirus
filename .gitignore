@@ -29,6 +29,13 @@ output/ga_pool_*.csv
 output/ga_pools_manifest.json
 output/ga_search/
 
+# Step 3 validation gate4 tree artifacts -- MAFFT alignments and IQ-TREE outputs
+# per candidate, regenerable with `rpi_core.py validate --with-phylogeny`. Each
+# alignment file runs ~76,000 lines; the full panel produces >1,400 files. The
+# summary validation_report.json IS tracked (it's the scored result, not raw
+# alignment bytes).
+output/validation/candidate_phylogenetics/
+
 # Captured stdout/stderr from pipeline runs -- record absolute paths and machine-
 # specific timing; not a research artifact.
 output/*_stdout.txt
