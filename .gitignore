@@ -22,3 +22,14 @@ output/phylo_rpi_ga_isolates.json
 output/phylo_rpi_ga_genomic.json
 output/phylo_rpi_ga_cds.json
 output/phylo_rpi_ga_snapshot_manifest.json
+
+# Step 1 pool files and Step 3 GA-search outputs -- all regenerable by running the
+# pipeline; large (pool CSVs ~3 MB; ga_search/ tree artifacts can exceed 1 GB).
+output/ga_pool_*.csv
+output/ga_pools_manifest.json
+output/ga_search/
+
+# Captured stdout/stderr from pipeline runs -- record absolute paths and machine-
+# specific timing; not a research artifact.
+output/*_stdout.txt
+output/*_stderr.txt
