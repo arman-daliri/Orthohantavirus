@@ -10,6 +10,14 @@ diffs, individual commit hashes) is deliberately dropped here — it remains ful
 recoverable via `git log`/`git show` on the commit that removed those files. Read this
 file first; go to git history only when you need a number this file omits.
 
+**Progress log extended 2026-09-18 (evening)** to cover 2026-09-10 → 2026-09-18 (§4 Phases
+11–13, §5). That pass folded in the four remaining Claude Code chat sessions for this
+project (2026-09-09 → 2026-09-18) and then deleted them; this file, `README.md` and
+`git log` are now the only record. Numbers in Phases 11–13 are sourced as follows: run
+logs and JSON under `output/` (read directly), `README.md` at `4df4135`, `git log`, and the
+sessions' own compaction summaries (marked *(session summary)* where nothing on disk
+re-confirms them).
+
 ---
 
 ## 1. Project aim
@@ -86,7 +94,7 @@ snapshot — this "no false dependency" design was an explicit, evaluated decisi
 | `prepare_dataset.py` (was `all_hanta.py`) | Stage 1 ingest: taxonomy resolution, isolate grouping, segment/completeness resolution, host/pathogenicity classification, k-mer clustering (diagnostic only), pool construction. Writes the reference snapshot every downstream stage reads. |
 | `phylogeny.py` | Stage 2: real MAFFT alignment + IQ-TREE ML trees per species/phylogroup/segment, Robinson-Foulds topology comparison, bootstrap-gated reassortment calls. Group-level thread-pool parallelism added 2026-09-10. |
 | `rpi_core.py` | Stage 3a: the **single consolidated module** (was 6 files: `reassortment_detector.py`, `rpi_calibration.py`, `rpi_discrimination.py`, `rpi_discrimination_stats.py`, `validate_reassortment_detector.py`, `pipeline.py`) — the 4-gate detector (gate0 sanity, gate1 k-mer pre-screen, gate2 structural annotation, gate3 ecological veto) plus gate4 (real phylogenetics, called from the candidate-scoring path) plus the entire RPI toolchain: calibration, discrimination-panel scoring, statistics, validation harness, CLI. One CLI entry point: `python rpi_core.py {run,calibrate,validate,score,diagnose-e,diagnose-gate0}`. |
-| `Algorithm.py` | Stage 3b: genetic-algorithm search over segment-donor triplets, treating `rpi_core.py` as a frozen scoring oracle. Never creates/edits sequence — only recombines existing reference isolates. |
+| `Algorithm.py` | Stage 3b: genetic-algorithm search over segment-donor triplets, treating `rpi_core.py` as a frozen scoring oracle. Never creates/edits sequence — only recombines existing reference isolates. Runs **two pools sequentially** (`terminal_complete`, `strict_both`; §4 Phase 11), writes `ga_search/<pool>/seed_<N>.json` plus `ga_pool_comparison.json`; `--dump-scored` writes every scored triplet; `--with-phylogeny` gate4-confirms the 10 winners per pool (resolves `mafft`/`iqtree3` from **PATH** — there is no `--mafft-bin`/`--iqtree-bin` flag on this script). |
 | `figures.py` | Renders before/after phylogenetic tree figures from Stage 2's committed outputs and the GA winners. |
 
 ### The gate framework (inside `rpi_core.py`, unchanged by RPI work)
@@ -159,9 +167,20 @@ impossibility) — a deliberate departure from the pipeline's other, additive sc
   independently re-parsing ~15 MB of raw package data. The snapshot is gitignored
   (~75 MB derived blob whose ungitignored source doesn't exist in the repo either) and
   regenerated on demand.
-- **`Algorithm.py`'s GA search pool must be `rpi_core.usable_pool`**, not a second bespoke
+- **`Algorithm.py`'s GA pools must derive from `rpi_core.usable_pool`**, not a second bespoke
   filter — a code-review finding showed an earlier version searched a pool that was 51%
-  contaminated and missing 65% of the legitimate isolates.
+  contaminated and missing 65% of the legitimate isolates (fixed `105bd5c`; the empirical
+  numbers from before that fix were discarded and redone). Since 2026-09-11 there are **two**
+  pools by design: `terminal_complete` (= `usable_pool`, 314 rows) and `strict_both`
+  (terminally-complete ∩ coding-complete, 108 rows). Stage 1 writes both **unfiltered**; the
+  42 calibration-reserved isolates are removed inside `Algorithm.py` at load time, giving 272
+  and 94 searchable isolates.
+- **Output files are named for their consumer** (2026-09-11): `phylo_rpi_ga_*` = read by
+  phylogeny + rpi_core + Algorithm (the reference snapshot), `ga_*` = Algorithm only, `rpi_*`
+  = rpi_core, `ortho_*` = the Stage 2 result tables. Stage 1 writes nothing no downstream
+  stage reads (6b21bb4 removed the rest).
+- **The prose uses "Step N", not "Stage N"** (README convention set 2026-09-13; Step 3a =
+  `rpi_core.py`, Step 3b = `Algorithm.py`). This file still says "Stage" in older sections.
 - **Never change gate logic, verdicts, or `gate*_` columns.** RPI stays a parallel column set,
   enforced by a standing regression test.
 - **One commit per workstream; if a step fails, log it and continue** rather than aborting an
@@ -284,8 +303,12 @@ not fixed, two genuine sources of cross-machine/cross-run non-determinism: k-mer
 (BLAS floating-point non-associativity, affects only diagnostic columns, not scoring/verdicts)
 and multi-threaded IQ-TREE/MAFFT numeric diagnostics (well-documented parallel
 non-associativity; the *categorical* `reassortment_call` stayed stable for 2994/2995 rows).
-Completed the first-ever full validation run with **real gate4 data behind all 55 validation
-candidates** and real gate4 confirmation on all 10 GA long-pool winners — 9 of 10 implicated
+Completed the first-ever full validation run with **real gate4 data behind 40 of the 55
+validation candidates** (12 returned `insufficient_comparators` — backbone species with too
+few reference isolates for a tree, structural not a bug; 3 adversarial-junk cases were
+correctly rejected at gate0 and never reached gate4; of the 40 analyzed: 20 `no_conflict`,
+17 `weak_signal_low_bootstrap_support`, 3 `supported_reassortment_candidate`) and real gate4
+confirmation on all 10 GA long-pool winners — 9 of 10 implicated
 a single species (*O. hantanense*) alone, so `no_conflict` on those is gate4 correctly doing
 its intra-species job (gate 1's structural blind spot), reported verbatim per a standing
 binding rule (no re-running for a "nicer" result).
@@ -317,33 +340,163 @@ real-tool OOM-rollback benchmark actually being run (the development environment
 mafft/iqtree) — an explicit, adjudicated risk acceptance, not an oversight, with the
 benchmark task left open for whenever a Linux/conda environment is available.
 
+**Phase 11 — Windows full reruns, dual GA pools, branch merge (2026-09-09 → 09-11).**
+- *Pools.* The GA pool was first narrowed to a strict-merged set (`bf65f78`: terminally-
+  complete ∩ coding-complete, 94 searchable isolates, down from 272), and the three
+  completeness definitions (coding-complete / terminally-complete / strict merged) were made
+  to compare over one shared universe (`783359a`). Best fitness stayed 0.4717 — the optimum
+  was already inside the strict set. On 09-11 the single pool became **two** (`c90ccfc`):
+  `Algorithm.py` runs `terminal_complete` and `strict_both` back to back and writes a
+  side-by-side `ga_pool_comparison.json`.
+- *First full rerun on this Windows machine (2026-09-10).* Step 1 ≈ 26 s. Step 2 with
+  `--phylo-workers 4`: log start 12:01, species scope done 15:46, phylogroup scope done
+  22:57 — **≈ 11 h** *(session summary of that run's log, which no longer exists on disk;
+  it quoted 687 min)*, i.e. **not** faster than the
+  2026-09-06 serial run on the same machine (≈ 9 h 21 m, pre-consolidation §7g). See §5
+  open item on the unreproduced speed-up. Algorithm.py default run: 669 s, 1,734 unique
+  triplets scored, plateau at generation 21, best 0.4717.
+- *Why "the numbers differ between runs".* Answered 2026-09-10: the pool changed (272 → 94)
+  and the earlier `--with-phylogeny` run had no `candidate_phylogenetics/` because the flag
+  was not passed; that earlier gate4 run took 48 h+ and had stalled at 4 of 10 winners
+  *(session summary)*.
+- *Step 1 trimmed (`6b21bb4`)*: output writes no downstream step reads were removed.
+- *Naming + scrub (`c90ccfc`, `fb5c0ae`)*: consumer-prefix output names (§3), references to
+  removed files scrubbed. *Code-review fixes (`4d1cb8e`)* on `Algorithm.py`.
+- *Merge (`d071055`, 2026-09-11)*: `06-module-final-simplification` merged into `main`; the
+  branch was then deleted. `main` is the only line.
+
+**Phase 12 — Clean-slate rerun and output/ reset (2026-09-11 → 09-13).** Requirement set by
+the project owner: behave as if no previous output ever existed — no test may silently skip
+because a folder is missing, nothing may consume an old artifact. The owner renamed `output/`
+to `output_old/` (kept as a read-only historical record, never used as input) and
+everything was regenerated:
+- *Step 1* fresh; a second Step 1 run produced byte-identical pool CSVs and identical SHA-256
+  digests for the three snapshot files (only `generated_at_utc` differs) *(session summary)*.
+  Pools: 314 / 108 rows raw; 272 / 94 after removing the 42 reserved-calibration isolates.
+  (The old README's "227 / 206" was a misreading: 272 is post-exclusion terminal-complete,
+  206 is the old `ortho_ml_sequence_table.csv` row count. Nothing changed in the data.)
+- *Step 2*: the `--phylo-workers 4` attempt was **OOM-killed**; the rerun with
+  `--phylo-workers 1 --phylo-threads 2` finished **2026-09-11 20:03:51 → 09-12 06:15:57
+  (10 h 12 min)**, per `output/ortho_phylogeny.log`. 9,867 isolates, 223 complete triplets,
+  2,995 rows × 38 cols: 2,975 analyzed, 20 `species_below_min_taxa`, 0 failed; 8
+  `supported_reassortment_candidate`, 6 `weak_signal…`, 2,961 `no_conflict`.
+- *Step 3, dual GA, no gate4*: 390.4 s (`terminal_complete`, pool 272) and 406.8 s
+  (`strict_both`, pool 94); both plateau-stop at generation 21 at best fitness
+  0.4716981132 (= 25/53, the structural ceiling of §6 #13); 0 scoring errors; 1,526 / 1,734
+  unique triplets scored (`output/ga_search/ga_pool_comparison.json`, `all_scored_*.jsonl`).
+- *Gate4 confirmation of the winners* (`Algorithm.py --with-phylogeny`): attempt 1 failed
+  because `Algorithm.py` has no tool-path flags (fix: put `tools/` dirs on PATH); attempt 2
+  was **OOM-killed** on the large cross-species trees (≈ 486 and ≈ 698 taxa) until memory was
+  freed; the from-scratch rerun completed on 2026-09-13 — ≈ 23 h wall-clock for both pools
+  *(request → completion timestamps in the session, so an upper bound)*. 60 gate4 treefiles
+  (10 winners × 3 segments × 2 pools), 20 winners analyzed, 0 errors *(session summary)*. **Verdicts, verbatim** (10 winners per pool):
+  `terminal_complete` — 1 `supported_reassortment_candidate` (winner 0, hantanense +
+  seoulense, gate1 `s_or_l_involving`), 4 `weak_signal_low_bootstrap_support`, 5
+  `no_conflict`; `strict_both` — 3 `weak_signal_low_bootstrap_support`, 7 `no_conflict`.
+  (README briefly carried 1 / 9 for `strict_both`; corrected in `4df4135` against the
+  seed JSON.) As in §4 Phase 8, `no_conflict` on same-species winners is gate4 doing its job.
+- *Tests, all five suites, 0 skipped* *(session summary, 2026-09-11/12)*: `rpi_core` 334,
+  `Algorithm` 27, `phylogeny` 35, `prepare_dataset` 18, `figures` 10 (12 after `d6f9243`).
+  They are `unittest` classes inside the modules — `pytest` collects 0; use
+  `python -m unittest <module>`.
+- *Old-vs-new comparison, then `output_old/` deleted (2026-09-13, explicit instruction).*
+  Phylogeny results were **not** byte-identical (IQ-TREE thread-count non-determinism,
+  as already documented in Phase 8); the GA output layout/schema differs by design; the
+  `strict_both` scored-triplet JSONL **is** byte-identical, and pool row counts match.
+  Caveat of record: "isolates are classified identically" was **inferred** from that scoring
+  identity plus the two-run Step 1 digests, not from a direct byte diff of the old and new
+  snapshot files. `output_old/` was untracked by git, so its deletion is not recoverable.
+- *Docs and repo hygiene.* README restructured into ordered Steps 0–3b with Linux and
+  Windows run instructions, a reproducibility section, and ASD-STE100-style tables
+  (`9b43985`, `287e8da`, `974e7e7`, `fbe036a`); pipeline artefacts removed from git tracking
+  (`7bf6906`) and `.gitignore` extended (`304bdbd`, `6d90786`) after `/ultrareview` refused a
+  2,379-file / 4.8 M-line diff; tracked `output/` is now `ortho_reassortment_table.csv`, the
+  `phylogenetics*/` trees and the two figure folders. Before/after tree figures are rendered
+  per pool into `output/figures_terminal_complete/` and `output/figures_terminal_cds_complete/`
+  (`b7c5a66`, `9b19954`).
+
+**Phase 13 — Consolidation and review sweep (2026-09-18).**
+- Planning docs, task ledgers and (in the evening pass) the chat sessions folded into this
+  file (`7d4fbc0`, `8786071`).
+- *Code-review coverage.* `rpi_core.py`, `phylogeny.py`, `Algorithm.py` have formal review
+  history. `prepare_dataset.py` had none until today: reviewed, **no findings**. `figures.py`:
+  two findings — `local_neighborhood` silently returned the whole unpruned tree when a tip
+  was missing, and `render_before_figures` let case/punctuation-colliding isolate keys
+  overwrite each other's PNG. Neither was triggered by the committed output (all 7 "before"
+  keys stay distinct; "after" figures are index-named); both fixed in `d6f9243` with two
+  guard tests, re-run reproduces the same 7 filenames. Two `/code-review /ultrareview` runs
+  on the clean tree returned no diff and no findings.
+- *Methods-draft cross-check.* A local draft ("method - sep 17", untracked, not in the working
+  tree now) was checked against the code: the MAFFT / IQ-TREE / phylogeny / RPI-formula / GA
+  sections (1.2–1.7) matched the implementation; the host-classification table in §1.1 was
+  scrambled (category labels and counts do not match README's host table; a 338-vs-33
+  inconsistency) and `rpi_retention`'s F factor was undocumented. Not edited — still open.
+
 ---
 
-## 5. Current state (as of the latest recorded session, 2026-09-10 branch work; see
-`git log` for anything after)
+## 5. Current state (as of 2026-09-18 evening; `git log` outranks this section)
 
-- **Branch:** work has progressed through `05-module-consolidation` (merged) into
-  `06-module-final-simplification` for the phylogeny-parallelism work. Always trust
-  `git log --oneline -20` over any stale narrative, including this one.
-- **Test suite:** `python -m unittest rpi_core` has run as high as **330+ tests**, all
-  passing, at various checkpoints (test count grows session to session — re-run before
-  quoting). **Known environment quirk:** the whole-module invocation reliably OOM-kills in
-  constrained environments; the established workaround is running each of `rpi_core.py`'s
-  ~80 test classes as its own process.
-- **Validation harness:** last full run (with real gate4 data behind all 55 candidates) —
-  **PASS**: sensitivity 19/19, specificity 27/27, blind spot 5/5, adversarial 4/4.
-- **Reference snapshot:** gitignored, regenerated on demand by running Stage 1 first; a
-  fresh checkout needs `python prepare_dataset.py --input . --output output` before any
-  downstream command.
-- **Repo root is down to the three stage files** (`prepare_dataset.py`, `phylogeny.py`,
-  `rpi_core.py`) plus `Algorithm.py` and `figures.py` — no more shim/generator scripts.
-- **Open, not yet actioned:** a redundancy survey of superseded output artifacts (flagged,
-  awaiting explicit go-ahead, nothing deleted); the phylogeny-parallelism real-tool OOM
-  benchmark (blocked on an environment with mafft/iqtree); several LOW-severity
-  code-review findings deliberately parked as not provably score-neutral (`Algorithm.py`'s
-  `--diversity` infinite-loop risk under a tiny pool; `--elitism 0` losing the
-  incumbent-survives guarantee; a systemic scoring failure being indistinguishable from a
-  genuinely flat 0.0 landscape without an error-rate abort threshold).
+- **Branch:** `main` only, in sync with `origin/main` at `4df4135` (checked with
+  `git status -sb`). Branches `05-module-consolidation` and `06-module-final-simplification`
+  are merged and gone.
+- **Pipeline last run end-to-end:** the 2026-09-11 → 09-13 clean-slate run of §4 Phase 12
+  (Step 1 → Step 2 → dual GA → gate4 confirmation), all outputs regenerated from scratch.
+  Committed results are the gate4 verdicts in Phase 12 and the tracked `output/` items named
+  there; everything else under `output/` is gitignored and regenerable.
+- **Test suite:** per-module counts in Phase 12 (334 / 27 / 35 / 18 / 10→12), measured
+  2026-09-11/12 and **not re-run in the 09-18 pass** — re-run before quoting. **Known
+  environment quirk:** a whole-module `python -m unittest rpi_core` can OOM-kill in
+  constrained environments; the workaround is one test class per process.
+- **Validation harness:** last full run **2026-09-09**, `PASS` — sensitivity 19/19,
+  specificity 27/27, blind spot 5/5, adversarial 4/4, with real gate4 data behind 40 of 55
+  candidates (§4 Phase 8). `output/validation/validation_report.json` was untracked in
+  `7bf6906` and is **not on disk**; it was not regenerated in the clean-slate run.
+  Regenerating it (`python rpi_core.py validate --with-phylogeny`) is a multi-day job on this
+  hardware (largest candidate ≈ 5 h 39 min alone).
+- **Reference snapshot:** gitignored; a fresh checkout needs
+  `python prepare_dataset.py --input . --output output` before any downstream command.
+- **Repo root:** `prepare_dataset.py`, `phylogeny.py`, `rpi_core.py`, `Algorithm.py`,
+  `figures.py` — no shim or generator scripts.
+- **Redundancy survey:** actioned 2026-09-09 (`be098b0`); nothing pending.
+
+### Open items (none blocks the others; all need an explicit decision or a run)
+
+1. **`Algorithm.py` §7e findings still open**: (3) a missing `data/rpi_calibration.json`
+   silently returns an empty reserved set, un-reserving the 42 calibration isolates when run
+   from another cwd; (4) `--diversity` can loop forever when fewer than `population` distinct
+   triplets exist; (11) `--elitism 0` drops the incumbent-survives guarantee; (5) the k-mer
+   and CDS caches pin ≈ 750 MB for the process lifetime (a trade-off against the 9.5× speed-up,
+   not an obvious fix). A fix for 3 and 4 was drafted on 2026-09-18 and **discarded, not
+   committed**, because it was made while reading a stale copy of this file. Per the standing
+   rule only provably score-neutral fixes with a guard test land autonomously.
+2. **README gate4 timing is internally inconsistent**: four places say gate4 adds "~11 hr per
+   pool", while the Step 3b runtime paragraph says ~328 min (~5.5 h) per pool. The 09-12→13
+   rerun took ≈ 23 h for **both** pools together, which fits ~11 h per pool. Reconcile before
+   quoting either.
+3. **Step 2 parallel speed-up is not reproduced on Windows.** README's table projects
+   ~310 min for `--phylo-workers 4` (from the 09-06 log); measured on this machine: ≈ 561 min
+   serial (09-06), ≈ 11 h with 4 workers (09-10), 10 h 12 min with 1 worker × 2 threads
+   (09-11, after the 4-worker attempt OOM-killed). Cause not investigated (memory pressure and
+   4 × (cores − 1) thread oversubscription are candidates — unverified). The real-tool
+   OOM-rollback benchmark from Phase 10 is still deferred.
+4. **Methods draft §1.1 host table** needs correcting against README's host table (Phase 13).
+5. **`--with-phylogeny` needs `mafft`/`iqtree3` on PATH** — `Algorithm.py` has no flag for it
+   (asymmetric with `phylogeny.py`'s `--mafft-bin`/`--iqtree-bin`).
+6. **Three GA-winner donors (`hantanense|lr1` in `terminal_complete` winners 00/06/07) have
+   no tree path in `ortho_reassortment_table.csv`**; the "after" figure prints
+   "not in a committed tree" for them by design.
+7. **Public release** has not been built; `docs/PUBLIC_RELEASE.md` is the list to follow.
+8. **Open question carried from §6 #13:** whether a GA whose objective saturates on ~1.7% of
+   the search space is the right instrument — options are a documented tie-breaker (e.g.
+   `rpi_retention`), reporting the ceiling set as unordered, or making `divergence_stratum`
+   use real parental nucleotide divergence (which changes scores and needs re-calibration).
+9. **Working-tree hazard — read before committing anything.** On 2026-09-18 `README.md`,
+   `docs/PROJECT-STATE.md`, `docs/PUBLIC_RELEASE.md` and `figures.py` repeatedly reappeared
+   as "modified" holding **pre-consolidation content** (older PROJECT-STATE, a `figures.py`
+   without the `d6f9243` fix); the four files carried identical-to-the-millisecond mtimes,
+   i.e. one batch write. Committing that state would revert the consolidation and the
+   `figures.py` fixes. Always `git diff` first; restore with `git restore <file>`. The writer
+   was not identified (an editor holding stale buffers is the first thing to check).
 
 ---
 
@@ -439,3 +592,14 @@ remain recoverable from git history (the tracked files) up to the commit immedia
 before this one; the gitignored SDD ledgers were local-only working material and are not
 recoverable once deleted. `README.md` and `docs/PUBLIC_RELEASE.md` were updated in the same
 commit to stop pointing at the removed files.
+
+**Chat sessions, 2026-09-18 evening.** At the owner's request the remaining Claude Code
+sessions for this project were read (user prompts, assistant outcomes and each session's
+compaction summaries), their pipeline progress was folded into §4 Phases 11–13 and §5, and
+they were then deleted, leaving only the session that performed the consolidation. Deleted:
+`7a348444` (09-09, an earlier consolidation + Stage 1 snapshot session), `d9309959`
+(09-09 → 09-13, phylogeny parallelism, reruns, README restructure — the large one), and two
+empty Remote-Control bridge stubs (`1dd9bd43`, `68c5589a`). Raw transcripts are not
+recoverable; anything not written here or in git is gone. The manual copy at
+`~/.claude/projects/.../backup_sessions_2026-09-05/` (eight older transcripts) was **not**
+touched.
