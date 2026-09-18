@@ -49,8 +49,6 @@ private. It is the reason public release must be a copy, not a visibility change
   team too; the resume-pointer content in it is not (it points at `docs/PROJECT-STATE.md`,
   which is internal)
 - `environment.yml`, `requirements-pip.txt`
-- `docs/superpowers/specs/` and `docs/superpowers/plans/` — design specs and plans
-  (**review each before copying**; they are internal working documents)
 - **Small example data only** — a handful of candidate FASTAs sufficient to run the
   README's example invocation end to end. Not the full package.
 - `LICENSE` — *not yet present, must be added before release*
@@ -84,7 +82,6 @@ private. It is the reason public release must be a copy, not a visibility change
 - [ ] Add `LICENSE` (pick one — code and derived data may want different terms)
 - [ ] Add `CITATION.cff`
 - [ ] Confirm the public README's example invocation runs against the small example data
-- [ ] Re-read `docs/superpowers/specs/` and `plans/` for anything internal
 - [ ] Confirm no absolute local paths in any copied file
 - [ ] Confirm `dendropy`, `mafft`, `iqtree`, `viennarna` pins in `environment.yml` match a
       real, built environment

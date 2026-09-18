@@ -539,7 +539,7 @@ python -m unittest rpi_core              # full suite, 334 tests
 
 `run` reuses the pinned calibration artifact (`data/rpi_calibration.json`) unless it is missing or `--recalibrate` is passed. A step that raises halts the run there. Each step's input is the previous step's output, so nothing downstream runs on a half-built result.
 
-**Module layout.** `rpi_core.py` is the only file for this toolchain — consolidated from six modules (`reassortment_detector.py`, `rpi_calibration.py`, `rpi_discrimination.py`, `rpi_discrimination_stats.py`, `validate_reassortment_detector.py`, `pipeline.py`); see `docs/superpowers/specs/2026-08-31-single-file-consolidation-design.md` for the full mechanical record.
+**Module layout.** `rpi_core.py` is the only file for this toolchain — consolidated from six modules (`reassortment_detector.py`, `rpi_calibration.py`, `rpi_discrimination.py`, `rpi_discrimination_stats.py`, `validate_reassortment_detector.py`, `pipeline.py`); see `docs/PROJECT-STATE.md` (Phase 6) for the record of that consolidation.
 
 **Headline results — from the post-`build_swap`-fix panel only** (seed 20260829, τ = 3.914; see `notes_e_isolate_fix.md` for the full before/after record):
 
@@ -572,26 +572,20 @@ python -m unittest rpi_core              # full suite, 334 tests
 9. **The K stratum is derived from a proxy, and every row says so.** `identity` is fed from `gate0.best_kmer_identity` — **protein** k-mer novelty against the nearest reference, maximised over segments — not the **parental nucleotide** divergence §7 stratifies on, and it lives on a different scale (~0.35–0.46 observed, against calibration points of 0.548 / 0.707 / 0.85). Every scored row carries `rpi_k_stratum_provisional = true` for this reason. Deriving real parental identity from the reference sequences is a documented follow-up.
 10. **`modal_agrees` saturates and must never be quoted alone.** In the retrospective reproduction harness the distant top set is `{M}`, the close top set is `{M, S}`, and every benchmark observation's top set contains M — so no input in this benchmark can return `False`. `composition_distance` (total-variation distance between prior and observed composition) is the **primary** agreement measure; it is quantitative and can fail. A tied prediction (`predicted_modal_segment = null`) is a non-prediction, not a confirmation, and must not be counted as a success.
 
-The full design spec, including the sensitivity sweep (`sensitivity_sweep`) and the rank-consistency sanity check (`rank_consistency`) that operationalize these limitations, is at `docs/superpowers/specs/2026-08-24-reassortment-plausibility-index-design.md`.
+The sensitivity sweep (`sensitivity_sweep`) and the rank-consistency sanity check (`rank_consistency`) that operationalize these limitations are documented in `docs/PROJECT-STATE.md`.
 
 **Docs map:**
 
 | Document | What it's for |
 |---|---|
-| `docs/PROJECT-STATE.md` | Single source of truth for session-to-session state: decisions of record (D1–D14), measured facts, what's done, the exact next action |
+| `docs/PROJECT-STATE.md` | Single source of truth: project aim, architecture, decisions of record (D1–D14), full progress timeline, current state, binding limitations, repo policy — the one file to read before touching this codebase |
 | `data/rpi_calibration.json` | Pinned M_pack calibration artifact — τ = 3.914, the 42-isolate panel it was derived from, and the D1 decision inputs; ships in the repo so the rescaling is independently verifiable |
-| `docs/superpowers/specs/2026-08-12-reassortment-detector-design.md`, `2026-08-13-three-stage-pipeline-split-design.md` | Gate-based reassortment detector design and the 3-step pipeline split |
-| `docs/superpowers/specs/2026-08-24-reassortment-plausibility-index-design.md` | RPI design spec — factor definitions, the limitations section this README reproduces, the sensitivity sweep and rank-consistency checks |
-| `docs/superpowers/specs/2026-08-29-rpi-fitness-function-design.md` | WS3/WS4: τ calibration, M_pack/M_pol scoring, the discrimination panel and pass criterion reported in Step 3a |
-| `docs/superpowers/specs/2026-08-30-rpi-e-geo-isolate-level-fix-design.md` | Factor E isolate-level fix — `ecological_opportunity` now reads the specific parent isolates, not the whole species population |
-| `docs/superpowers/specs/2026-08-31-single-file-consolidation-design.md` | `rpi_core.py` single-file consolidation design (six modules → one; branch `05-module-consolidation`, merged to `main`) |
-| `docs/superpowers/specs/2026-09-04-combinatorial-search-design.md` | `Algorithm.py` combinatorial GA search design — population seeding, fitness, gate4 confirmation, dual-pool run |
-| `docs/superpowers/specs/2026-09-06-overnight-full-pipeline-rerun-design.md` | Full end-to-end pipeline rerun design — promotion protocol, non-determinism analysis, validation with real gate4 data |
-| `docs/superpowers/specs/2026-09-09-stage1-reference-snapshot-design.md` | `prepare_dataset.py` reference-snapshot design — isolate/genomic/CDS JSON serialisation and the SHA-256 manifest |
-| `docs/superpowers/specs/2026-09-10-phylogeny-group-parallelism-design.md` | `phylogeny.py` group-parallelism design — concurrent species/phylogroup tree builds |
 | `docs/My Library.csv` | Zotero-exported citation library; every numerical claim in this README is checked against it |
 
-Session work-logs (`notes_*.md`, `suggesting.md`, the consolidation generator scripts) were deleted once superseded by this docs map and `docs/PROJECT-STATE.md`. Their content remains in git history if ever needed.
+Session work-logs, design specs, and task plans (`docs/superpowers/{specs,plans,notes}/`,
+`.superpowers/sdd/`) were consolidated into `docs/PROJECT-STATE.md` and deleted on
+2026-09-18. Tracked content remains in git history if ever needed; the gitignored SDD
+ledgers were local-only and are not recoverable.
 
 ### Reassortment detector — validation against published reassortants
 
