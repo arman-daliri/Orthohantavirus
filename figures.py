@@ -96,10 +96,17 @@ def local_neighborhood(tree: "Bio.Phylo.BaseTree.Tree", target_name: str,
                        min_tips: int = DEFAULT_MIN_TIPS) -> "Bio.Phylo.BaseTree.Clade":
     """Smallest ancestor clade of `target_name` with at least `min_tips` terminals, or
     the whole tree if it never reaches that size. A deep copy so callers can mutate
-    (ladderize) the returned clade without touching the cached full tree."""
+    (ladderize) the returned clade without touching the cached full tree.
+
+    Raises ValueError if `target_name` is not a tip of `tree` -- this means the tree
+    and the caller's isolate_key have drifted (stale CSV row, regenerated tree, or a
+    tip missing from labels.json), and silently falling back to the full tree would
+    render a wrong, unhighlighted figure instead of failing loudly.
+    """
     path = tree.get_path(target_name)
     if not path:
-        return copy.deepcopy(tree.root)
+        raise ValueError(f"{target_name!r} is not a tip of the given tree -- "
+                         f"tree and isolate_key/labels.json have likely drifted")
     for ancestor in reversed(path[:-1]):
         if ancestor.count_terminals() >= min_tips:
             return copy.deepcopy(ancestor)
@@ -238,6 +245,7 @@ def render_before_figures(output_dir: Path, data_dir: str = "output",
 
     output_dir.mkdir(parents=True, exist_ok=True)
     written: List[Path] = []
+    seen_names: Dict[str, int] = {}
     for row in rows:
         isolate_key = row["isolate_key"]
         discordant = row.get("discordant_segment") or ""
@@ -280,7 +288,14 @@ def render_before_figures(output_dir: Path, data_dir: str = "output",
                  f"output/phylogenetics{'_phylogroup' if row_scope == 'phylogroup' else ''}/).",
                  ha="center", fontsize=7, color="#555555")
         fig.tight_layout(rect=(0, 0.03, 1, 1))
-        out_path = output_dir / f"{prep.normalize_attr_name(isolate_key)}.png"
+        base_name = prep.normalize_attr_name(isolate_key)
+        if base_name in seen_names:
+            seen_names[base_name] += 1
+            file_name = f"{base_name}_{seen_names[base_name]}"
+        else:
+            seen_names[base_name] = 0
+            file_name = base_name
+        out_path = output_dir / f"{file_name}.png"
         fig.savefig(out_path, dpi=150)
         plt.close(fig)
         written.append(out_path)
@@ -466,6 +481,11 @@ class LocalNeighborhoodTest(unittest.TestCase):
         self.assertEqual(tree.count_terminals(), before)
         self.assertIsNotNone(tree.get_path("t1"))
 
+    def test_missing_tip_raises_instead_of_returning_whole_tree(self):
+        tree = self._tree()
+        with self.assertRaises(ValueError):
+            local_neighborhood(tree, "not_a_real_tip", min_tips=3)
+
 
 class DrawCladogramTest(unittest.TestCase):
     def test_returns_position_for_every_tip(self):
@@ -530,6 +550,48 @@ class TreePathsByIsolateFromTableTest(unittest.TestCase):
         self.assertEqual(set(result), {"iso1"})
         self.assertEqual(result["iso1"]["S"], "phylogenetics/g/S/tree.treefile")
         self.assertEqual(result["iso1"]["M"], "phylogenetics/g/M/tree.treefile")
+
+
+class RenderBeforeFiguresFilenameCollisionTest(unittest.TestCase):
+    """Two isolate_keys that normalize to the same filename (case/punctuation only)
+    must not silently overwrite one another -- each must get a distinct file, and
+    `written` must accurately list exactly one path per input row."""
+
+    def test_normalized_name_collision_gets_disambiguated(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            group_dir = tmp_path / "phylogenetics" / "g"
+            seg_dir = group_dir / "S"
+            seg_dir.mkdir(parents=True)
+            newick = ("((((t1:0.1,t2:0.1):0.1,t3:0.1):0.1,(t4:0.1,t5:0.1):0.1):0.1,"
+                      "(t6:0.1,t7:0.1):0.1);")
+            (seg_dir / "tree.treefile").write_text(newick, encoding="utf-8")
+            (group_dir / "labels.json").write_text(
+                json.dumps({"t1": "ISO-1", "t2": "iso_1"}), encoding="utf-8")
+
+            table_path = tmp_path / "ortho_reassortment_table.csv"
+            rows = [
+                {"isolate_key": "ISO-1", "reassortment_call": "supported_reassortment_candidate",
+                 "analysis_scope": "species", "species_name": "sp", "discordant_segment": "",
+                 "s_tree_path": "phylogenetics/g/S/tree.treefile", "m_tree_path": "", "l_tree_path": ""},
+                {"isolate_key": "iso_1", "reassortment_call": "supported_reassortment_candidate",
+                 "analysis_scope": "species", "species_name": "sp", "discordant_segment": "",
+                 "s_tree_path": "phylogenetics/g/S/tree.treefile", "m_tree_path": "", "l_tree_path": ""},
+            ]
+            with table_path.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
+                writer.writeheader()
+                writer.writerows(rows)
+
+            out_dir = tmp_path / "figs"
+            written = render_before_figures(out_dir, data_dir=str(tmp_path),
+                                            reassortment_table=table_path, min_tips=3)
+
+            self.assertEqual(len(written), 2)
+            self.assertEqual(len(set(written)), 2)
+            for path in written:
+                self.assertTrue(path.exists())
 
 
 class RenderBeforeFiguresIntegrationTest(unittest.TestCase):
