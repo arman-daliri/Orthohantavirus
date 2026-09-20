@@ -432,6 +432,40 @@ everything was regenerated:
   scrambled (category labels and counts do not match README's host table; a 338-vs-33
   inconsistency) and `rpi_retention`'s F factor was undocumented. Not edited — still open.
 
+**Phase 14 — E-factor geo/time defensibility sweep design (2026-09-19).**
+Brainstorming session over E-factor ecological (host/geo/time) terms in `ecological_opportunity`
+(`rpi_core.py:1310-1411`), focusing on defensibility for publication. Current geo/time terms are
+binary: country-match (1.0 if same or unknown, else eco_floor=0.01) and year-overlap
+(1.0 if spans touch, else inverse-of-gap floored at 0.01). Both lack defensible anchors. Primary
+literature (Razzauti 2009 on Puumala virus lineage co-circulation, Castel 2017 on hantavirus
+diversification over millions of years, Forbes 2018 on reservoir persistence) supports that
+lineages persist for decades and co-circulate regionally, not merely within one year's sampling.
+**Decision:** replace both terms with exponential decay:
+- **Geo:** `geo = max(eco_floor, exp(-d / d₀))` where `d` is great-circle distance between
+  country centroids. Defaults: `d₀ ≈ 1,090 km` (chosen: puts ~5,000 km gap at the floor, same
+  as current different-country rule; not measured). Same-country pairs score 1.0 exactly as
+  today. Missing-country pairs stay 1.0 (neutral, unknown). Requires small centroid table
+  (`data/country_centroids.csv`, one row per 81 countries, sourced from public gazetteer).
+- **Time:** `time = max(eco_floor, exp(-Δt / τ))` where `Δt` is year gap between parent isolates.
+  Defaults: `τ = 25 years` (chosen: a labelled scale-parameter, not empirically derived;
+  sweep will show sensitivity). Year-0-to-1 pairs stay 1.0 (tolerance-inclusive, as today);
+  missing-year pairs stay 1.0 (neutral).
+**Defensibility approach:** Run a 4×4 grid of (d₀, τ) combinations — d₀ ∈ {50, 250, 1000, 2500}
+km, τ ∈ {10, 25, 50, 100} years — **without a full GA rerun**. Instead, (a) score the real
+benchmark discrimination panel (a_random, b1_within_species, b2_sympatric, c_real_positives)
+under all 16 cells and check whether `overall_ranking_supported` (b2>random, b1>b2) holds in
+all cells, and (b) add a synthetic-panel rank-correlation check (following existing
+`sensitivity_sweep` precedent from host_decay, `rpi_core.py:2852-2868`) to confirm no cell
+produces a sampling artifact. If the headline pass-criterion holds across the whole grid, the
+paper cites "sweep confirms results are stable across plausible parameter ranges" without
+claiming the defaults are measured. If any cell fails, that is reportable: the E-factor's geo/time
+terms are parameter-sensitive and cannot be pinned from first principles or existing data.
+**Scope.** This Phase is **design and defensibility argument only**; no implementation commits.
+Next: forward-spec this Phase 14 design to the implementation plan (brainstorming skill, sections 1–4
+of the overall E-factor/shared-eligibility/tanglegram design). Track in section §4 (Phase 14)
+rather than as a separate `docs/superpowers/specs/` entry — this repo consolidates all planning
+into `PROJECT-STATE.md` per Phase 13's own consolidation decision.
+
 ---
 
 ## 5. Current state (as of 2026-09-18 evening; `git log` outranks this section)
