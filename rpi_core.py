@@ -967,9 +967,11 @@ def gate2_track_a(candidate_m_protein: str, implicated_species: List[str]) -> Ga
             tmis_ok = False
 
     ph_ok = True
+    ph_checked_any = False
     for _label, position in anchor["ph_switch"].items():
         if position is None:
             continue
+        ph_checked_any = True
         residue, aligned = find_aligned_residue(candidate_m_protein, ref_seq, position)
         ref_residue = ref_seq[position - 1]
         if not aligned or residue != ref_residue:
@@ -980,7 +982,7 @@ def gate2_track_a(candidate_m_protein: str, implicated_species: List[str]) -> Ga
         anchor_basis=anchor["basis"],
         waasa_intact="WAASA" in candidate_m_protein,
         tmis_conserved=tmis_ok if tmis_checked_any else None,
-        ph_switch_conserved=ph_ok,
+        ph_switch_conserved=ph_ok if ph_checked_any else None,
         structural_check_not_available=False,
     )
 
@@ -2851,13 +2853,8 @@ def sensitivity_sweep(factor: float = 0.5) -> Dict[str, Any]:
     # exact host_decay/alpha tautology this module has already fixed twice.
     geo_d0_low = RPI_WEIGHTS["geo_d0_km"] * (1 - factor)
     geo_d0_high = RPI_WEIGHTS["geo_d0_km"] * (1 + factor)
-    # Shallow copy: only the top-level "geo_d0_km" scalar is replaced below, no nested
-    # dict is ever mutated in place, so dict(RPI_WEIGHTS) is exactly as safe as
-    # copy.deepcopy here at a fraction of the cost.
-    geo_d0_low_weights = dict(RPI_WEIGHTS)
-    geo_d0_low_weights["geo_d0_km"] = geo_d0_low
-    geo_d0_high_weights = dict(RPI_WEIGHTS)
-    geo_d0_high_weights["geo_d0_km"] = geo_d0_high
+    geo_d0_low_weights = _weights_override(geo_d0_km=geo_d0_low)
+    geo_d0_high_weights = _weights_override(geo_d0_km=geo_d0_high)
     geo_d0_gen_low = _score_panel(panel, geo_d0_low_weights)["generation"]
     geo_d0_gen_high = _score_panel(panel, geo_d0_high_weights)["generation"]
     varied["geo_d0_km"] = {
@@ -2872,10 +2869,8 @@ def sensitivity_sweep(factor: float = 0.5) -> Dict[str, Any]:
 
     time_tau_low = RPI_WEIGHTS["time_tau_years"] * (1 - factor)
     time_tau_high = RPI_WEIGHTS["time_tau_years"] * (1 + factor)
-    time_tau_low_weights = dict(RPI_WEIGHTS)
-    time_tau_low_weights["time_tau_years"] = time_tau_low
-    time_tau_high_weights = dict(RPI_WEIGHTS)
-    time_tau_high_weights["time_tau_years"] = time_tau_high
+    time_tau_low_weights = _weights_override(time_tau_years=time_tau_low)
+    time_tau_high_weights = _weights_override(time_tau_years=time_tau_high)
     time_tau_gen_low = _score_panel(panel, time_tau_low_weights)["generation"]
     time_tau_gen_high = _score_panel(panel, time_tau_high_weights)["generation"]
     varied["time_tau_years"] = {
@@ -4358,6 +4353,22 @@ class Gate2TrackATest(unittest.TestCase):
             result = gate2_track_a(anchor["sequence"], [species])
         self.assertFalse(result.structural_check_not_available)
         self.assertTrue(result.ph_switch_conserved)
+
+    def test_all_none_ph_switch_positions_report_not_checked(self):
+        """Mirrors tmis_checked_any: if every ph_switch position in an anchor's table
+        were uncitable (all None), ph_ok's initial True must not be reported as
+        "conserved" -- that would be false confidence from zero actual comparisons.
+        No STRUCTURAL_ANCHORS entry currently has an all-None ph_switch table, so this
+        guards a case this fix changes behavior for without changing any current
+        anchor's output."""
+        species = "Orthohantavirus andesense"
+        anchor = copy.deepcopy(STRUCTURAL_ANCHORS[species])
+        for label in anchor["ph_switch"]:
+            anchor["ph_switch"][label] = None
+        with mock.patch.dict(STRUCTURAL_ANCHORS, {species: anchor}):
+            result = gate2_track_a(anchor["sequence"], [species])
+        self.assertFalse(result.structural_check_not_available)
+        self.assertIsNone(result.ph_switch_conserved)
 
 
 class Gate2TrackBTest(unittest.TestCase):
