@@ -2849,9 +2849,12 @@ def sensitivity_sweep(factor: float = 0.5) -> Dict[str, Any]:
     # exact host_decay/alpha tautology this module has already fixed twice.
     geo_d0_low = RPI_WEIGHTS["geo_d0_km"] * (1 - factor)
     geo_d0_high = RPI_WEIGHTS["geo_d0_km"] * (1 + factor)
-    geo_d0_low_weights = copy.deepcopy(RPI_WEIGHTS)
+    # Shallow copy: only the top-level "geo_d0_km" scalar is replaced below, no nested
+    # dict is ever mutated in place, so dict(RPI_WEIGHTS) is exactly as safe as
+    # copy.deepcopy here at a fraction of the cost.
+    geo_d0_low_weights = dict(RPI_WEIGHTS)
     geo_d0_low_weights["geo_d0_km"] = geo_d0_low
-    geo_d0_high_weights = copy.deepcopy(RPI_WEIGHTS)
+    geo_d0_high_weights = dict(RPI_WEIGHTS)
     geo_d0_high_weights["geo_d0_km"] = geo_d0_high
     geo_d0_gen_low = _score_panel(panel, geo_d0_low_weights)["generation"]
     geo_d0_gen_high = _score_panel(panel, geo_d0_high_weights)["generation"]
@@ -2867,9 +2870,9 @@ def sensitivity_sweep(factor: float = 0.5) -> Dict[str, Any]:
 
     time_tau_low = RPI_WEIGHTS["time_tau_years"] * (1 - factor)
     time_tau_high = RPI_WEIGHTS["time_tau_years"] * (1 + factor)
-    time_tau_low_weights = copy.deepcopy(RPI_WEIGHTS)
+    time_tau_low_weights = dict(RPI_WEIGHTS)
     time_tau_low_weights["time_tau_years"] = time_tau_low
-    time_tau_high_weights = copy.deepcopy(RPI_WEIGHTS)
+    time_tau_high_weights = dict(RPI_WEIGHTS)
     time_tau_high_weights["time_tau_years"] = time_tau_high
     time_tau_gen_low = _score_panel(panel, time_tau_low_weights)["generation"]
     time_tau_gen_high = _score_panel(panel, time_tau_high_weights)["generation"]
@@ -3179,6 +3182,7 @@ def _one_parameter_curve(
         panel: Sequence[Dict[str, Any]], param_name: str, grid: Sequence[float],
         weights_at: "Callable[[float], Dict[str, Any]]", rank_by: str,
         discrimination_inputs: Optional[Dict[str, List[Dict[str, Any]]]],
+        baseline: Sequence[float],
 ) -> Dict[str, Any]:
     """One parameter's one-at-a-time sweep: rank correlation, top-5/top-10 overlap and
     per-candidate rank movement on the synthetic panel at every grid point, plus (when
@@ -3187,23 +3191,30 @@ def _one_parameter_curve(
     `rank_by` is "generation" or "retention" -- which compute_rpi column this
     parameter actually scales (host_decay/geo_d0_km/time_tau_years feed
     rpi_generation; retention_by_odd_segment/F feeds rpi_retention only, exactly as
-    sensitivity_sweep already distinguishes).
+    sensitivity_sweep already distinguishes). `baseline` is that column's UNPERTURBED
+    values on `panel`, in panel order -- passed in rather than recomputed here because
+    parameter_robustness_sweep needs the same baseline for all four one-at-a-time
+    curves plus the joint sweep, and _score_panel(panel) is identical every time.
     """
     labels = [c["label"] for c in panel]
-    baseline = _score_panel(panel)[rank_by]
     baseline_order = _rank_order_desc(labels, baseline)
     baseline_rank = {label: i + 1 for i, label in enumerate(baseline_order)}
 
     points = []
-    # label -> list of ranks observed across the WHOLE grid, for rank-movement.
-    rank_history: Dict[str, List[int]] = {label: [] for label in labels}
+    # label -> min/max rank observed ACROSS THE GRID (not seeded from baseline_rank --
+    # matches the grid-only history the original per-grid-point list tracked). Only the
+    # extremes are ever reported, so there is no need to keep every grid point's rank.
+    min_rank: Dict[str, int] = {}
+    max_rank: Dict[str, int] = {}
     for value in grid:
         table = weights_at(value)
         scored = _score_panel(panel, table)[rank_by]
         order = _rank_order_desc(labels, scored)
         rank_at_value = {label: i + 1 for i, label in enumerate(order)}
         for label in labels:
-            rank_history[label].append(rank_at_value[label])
+            rank = rank_at_value[label]
+            min_rank[label] = min(min_rank.get(label, rank), rank)
+            max_rank[label] = max(max_rank.get(label, rank), rank)
 
         point: Dict[str, Any] = {
             param_name: value,
@@ -3212,8 +3223,7 @@ def _one_parameter_curve(
             "top10_overlap_vs_default": _topk_overlap(baseline_order, order, 10),
         }
         if discrimination_inputs is not None:
-            table_discrim = weights_at(value)
-            scored_groups = _rescore_discrimination_inputs(discrimination_inputs, table_discrim)
+            scored_groups = _rescore_discrimination_inputs(discrimination_inputs, table)
             pass_result = evaluate_pass_criterion(scored_groups)
             point["real_discrimination_panel"] = {
                 "overall_ranking_supported": pass_result["overall_ranking_supported"],
@@ -3224,18 +3234,17 @@ def _one_parameter_curve(
 
     rank_movement = {}
     for label in labels:
-        history = rank_history[label]
         base = baseline_rank[label]
         rank_movement[label] = {
             "baseline_rank": base,
-            "min_rank_across_sweep": min(history),
-            "max_rank_across_sweep": max(history),
+            "min_rank_across_sweep": min_rank[label],
+            "max_rank_across_sweep": max_rank[label],
             # Positive = moved UP (toward rank 1, more plausible) at its best point in
             # the sweep; positive = moved DOWN at its worst point. Both reported
             # per-candidate, not just a global worst-case, because a stable global
             # correlation can hide a large move for one candidate that matters.
-            "largest_upward_move": base - min(history),
-            "largest_downward_move": max(history) - base,
+            "largest_upward_move": base - min_rank[label],
+            "largest_downward_move": max_rank[label] - base,
         }
     worst_mover_label = max(rank_movement, key=lambda l: max(
         rank_movement[l]["largest_upward_move"], rank_movement[l]["largest_downward_move"]))
@@ -3295,43 +3304,59 @@ def parameter_robustness_sweep(
     discrimination_inputs = (
         _discrimination_panel_rpi_inputs(reference, seed=seed) if reference is not None else None)
 
+    # Computed once and reused everywhere below (four one-at-a-time curves plus the
+    # joint sweep all need the SAME unperturbed baseline) -- _score_panel(panel) with
+    # no weights override always returns the identical values, so recomputing it per
+    # caller would just be the same work repeated five times.
+    baseline_scored = _score_panel(panel)
+    baseline_generation = baseline_scored["generation"]
+    baseline_retention = baseline_scored["retention"]
+
+    # RPI_WEIGHTS is never mutated in place below -- every perturbation REPLACES a
+    # top-level key with a new value (a new scalar, or a brand-new dict from
+    # _perturbed_host_decay/_scaled_retention) rather than editing a nested dict in
+    # place. A shallow copy of the top-level dict is therefore exactly as safe as
+    # copy.deepcopy here, at a fraction of the cost.
     def weights_geo(value: float) -> Dict[str, Any]:
-        table = copy.deepcopy(RPI_WEIGHTS)
+        table = dict(RPI_WEIGHTS)
         table["geo_d0_km"] = value
         return table
 
     def weights_time(value: float) -> Dict[str, Any]:
-        table = copy.deepcopy(RPI_WEIGHTS)
+        table = dict(RPI_WEIGHTS)
         table["time_tau_years"] = value
         return table
 
     def weights_host(scale: float) -> Dict[str, Any]:
-        table = copy.deepcopy(RPI_WEIGHTS)
+        table = dict(RPI_WEIGHTS)
         table["host_decay"] = _perturbed_host_decay(scale)
         return table
 
     def weights_f(scale: float) -> Dict[str, Any]:
-        table = copy.deepcopy(RPI_WEIGHTS)
+        table = dict(RPI_WEIGHTS)
         table["retention_by_odd_segment"] = _scaled_retention(scale)
         return table
 
     one_at_a_time = {
         "geo_d0_km": _one_parameter_curve(
-            panel, "geo_d0_km", d0_grid, weights_geo, "generation", discrimination_inputs),
+            panel, "geo_d0_km", d0_grid, weights_geo, "generation", discrimination_inputs,
+            baseline_generation),
         "time_tau_years": _one_parameter_curve(
-            panel, "time_tau_years", tau_grid, weights_time, "generation", discrimination_inputs),
+            panel, "time_tau_years", tau_grid, weights_time, "generation", discrimination_inputs,
+            baseline_generation),
         "host_decay_scale": _one_parameter_curve(
-            panel, "host_decay_scale", host_scale_grid, weights_host, "generation", discrimination_inputs),
+            panel, "host_decay_scale", host_scale_grid, weights_host, "generation",
+            discrimination_inputs, baseline_generation),
         "retention_f_scale": _one_parameter_curve(
-            panel, "retention_f_scale", f_scale_grid, weights_f, "retention", discrimination_inputs),
+            panel, "retention_f_scale", f_scale_grid, weights_f, "retention",
+            discrimination_inputs, baseline_retention),
     }
 
     # --- Joint sweep: all four together, modest full factorial.
-    baseline_generation = _score_panel(panel)["generation"]
     labels = [c["label"] for c in panel]
     joint_results = []
     for d0_scale, tau_scale, host_scale, f_scale in itertools.product(joint_scales, repeat=4):
-        table = copy.deepcopy(RPI_WEIGHTS)
+        table = dict(RPI_WEIGHTS)
         table["geo_d0_km"] = RPI_WEIGHTS["geo_d0_km"] * d0_scale
         table["time_tau_years"] = RPI_WEIGHTS["time_tau_years"] * tau_scale
         table["host_decay"] = _perturbed_host_decay(host_scale)
@@ -10683,10 +10708,7 @@ def _robustness_sweep_main(argv: Optional[Sequence[str]] = None) -> int:
     if not args.skip_real_panel:
         reference = prep.load_reference_data(Path(args.reference_input) / "output")
     result = parameter_robustness_sweep(reference=reference, seed=args.seed)
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(
-        json.dumps(_json_safe(result), indent=2, default=str, allow_nan=False),
-        encoding="utf-8")
+    write_artifact(result, args.output)
     print(f"wrote {args.output}")
     plot_parameter_robustness_sweep(result, args.figure)
     print(f"wrote {args.figure}")
