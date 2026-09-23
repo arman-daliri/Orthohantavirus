@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, FrozenSet, List, Optional, Sequence, Set, Tuple
 import numpy as np
 from Bio.Align import PairwiseAligner, substitution_matrices
 import prepare_dataset as prep
@@ -284,7 +284,28 @@ RPI_WEIGHTS: Dict[str, Any] = {
         # host_order all empty). Unknown, not separated -- must not collapse to
         # 'different_order'. See host_rank_proximity's top-of-function guard.
         "unknown_host_metadata": 1.0,
+        # Incidental spillover host (e.g. human clinical case) acting as proxy for reservoir.
+        "dead_end_spillover_host": 1.0,
     },
+    # Geo/time decay scale parameters (Phase 14, 2026-09-23). STRUCTURAL, NOT MEASURED
+    # -- no primary source pins a specific d0/tau for hantavirus reassortment opportunity
+    # decay; see geo_decay/time_decay docstrings and parameter_robustness_sweep for the
+    # defensibility argument (robustness across a swept range, not literature-derived
+    # precision). Replaces the prior binary country-match / inverse-gap-year forms.
+    #   geo_d0_km: great-circle e-folding distance between country centroids. 1090 km
+    #       places the "37% opportunity" point at the upper end of documented hantavirus
+    #       lineage co-circulation/reassortment scales -- Labutin et al. 2026 (PLOS
+    #       Pathogens, Tula virus reassortants concentrated in a 12.5 km host-hybrid
+    #       contact zone) and Razzauti et al. 2009 (two distinct PUUV lineages
+    #       co-circulating and reassorting at 32% frequency within one small trapping
+    #       site) both support LOCAL co-location as the operative scale, not the exact
+    #       1090 km figure itself, which is a labeled anchor swept for robustness.
+    #   time_tau_years: year-gap e-folding constant. 25 years is a labeled scale
+    #       parameter (no primary source measures it directly); reservoir lineage
+    #       persistence over decades (Castel et al. 2017; Forbes et al. 2018) motivates
+    #       an order-of-magnitude of "several decades", not the exact value.
+    "geo_d0_km": 1090.0,
+    "time_tau_years": 25.0,
     # Floors keeping every factor strictly positive. See the no-literal-zeros rule.
     "eco_floor": 0.01,
     # Generation -> retention shift, normalised to M = 1.0.
@@ -1099,7 +1120,7 @@ def build_candidate_isolate_record(candidate_id: str, species_label: str) -> "pr
         s_protein_aa="", m_protein_aa="", l_protein_aa="", concatenated_protein_aa="",
         segments_present=["S", "M", "L"], coding_complete_segments=["S", "M", "L"],
         triplet_status="coding_complete_triplet", has_complete_triplet=True,
-        is_lab_derived=False, is_vaccine_strain=False, has_nss_orf=False,
+        is_lab_derived=False, is_vaccine_strain=False, is_incidental_host=False, has_nss_orf=False,
         metadata_conflict=False, taxonomic_incongruence=False, cross_species_partners=[],
         kmer_cluster_id="", s_protein_accessions=[], m_protein_accessions=[],
         l_protein_accessions=[], all_accessions=[], warnings=[],
@@ -1275,6 +1296,95 @@ def host_genus_of(isolate: "prep.IsolateRecord") -> str:
     return isolate.host_name.split()[0] if isolate.host_name else ""
 
 
+COUNTRY_CENTROIDS_PATH = Path(__file__).parent / "data" / "country_centroids.csv"
+
+# Earth radius, mean (IUGG), km. Matches the constant every standard haversine
+# reference implementation uses; not itself a modeling assumption.
+_EARTH_RADIUS_KM = 6371.0088
+
+
+@lru_cache(maxsize=1)
+def _country_centroids(path: Path = COUNTRY_CENTROIDS_PATH) -> Dict[str, Tuple[float, float]]:
+    """country -> (lat, lon) degrees, one row per country string this project's
+    reference snapshot actually contains (verified 2026-09-23: 81 distinct non-empty
+    country values). Approximate geographic centroids (public-domain gazetteer-style
+    figures), not survey-grade -- geo_decay's exponential form means small centroid
+    error changes the score smoothly, not by a cliff, unlike a binary same/different
+    scheme where a wrong centroid could flip the whole term.
+
+    `lru_cache` because this is read-only reference data loaded from a small, tracked
+    CSV -- reread on every candidate would be pure overhead with no correctness benefit
+    (mirrors COUNTRY_CONTINENT being a plain module-level constant).
+    """
+    centroids: Dict[str, Tuple[float, float]] = {}
+    with open(path, encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            centroids[row["country"]] = (float(row["lat"]), float(row["lon"]))
+    return centroids
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance between two (lat, lon) points in degrees, in km."""
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return 2 * _EARTH_RADIUS_KM * math.asin(min(1.0, math.sqrt(a)))
+
+
+def geo_decay(country_a: str, country_b: str, d0_km: float, floor: float,
+              centroids: Optional[Dict[str, Tuple[float, float]]] = None) -> float:
+    """Factor E's geographic-opportunity term: exp(-d / d0_km), floored.
+
+    Replaces the prior binary country-match rule (2026-09 Phase 14). Same country (or
+    either side missing) stays exactly 1.0 -- unchanged from the binary version, and for
+    the same reason: missing metadata is unknown, not separated, and same-country pairs
+    are trivially co-locatable regardless of centroid precision. A country absent from
+    `_country_centroids` raises loudly (mirrors COUNTRY_CONTINENT's own "fail loud on an
+    unmapped country" rule at build_group_a_random) rather than silently defaulting --
+    guessing a centroid would defeat the geo term's whole purpose.
+
+    `d0_km` is a labeled scale parameter (RPI_WEIGHTS['geo_d0_km']), not a measured
+    constant -- see that key's comment and parameter_robustness_sweep for the
+    defensibility argument.
+    """
+    if not country_a or not country_b or country_a == country_b:
+        return 1.0
+    table = centroids if centroids is not None else _country_centroids()
+    try:
+        lat1, lon1 = table[country_a]
+        lat2, lon2 = table[country_b]
+    except KeyError as exc:
+        raise KeyError(
+            f"country_centroids.csv is missing centroid for {exc}; add it rather than "
+            "silently defaulting -- see geo_decay's docstring.") from exc
+    distance_km = _haversine_km(lat1, lon1, lat2, lon2)
+    return max(floor, math.exp(-distance_km / d0_km))
+
+
+def time_decay(span_a: Optional[Tuple[int, int]], span_b: Optional[Tuple[int, int]],
+               tau_years: float, floor: float) -> float:
+    """Factor E's temporal-opportunity term: exp(-gap / tau_years), floored.
+
+    Replaces the prior inverse-gap-year rule (1/(1+gap), Phase 14). Spans that merely
+    touch (e.g. isolates a year apart, an inclusive-year overlap of 0) still count as
+    overlapping and score exactly 1.0 -- unchanged tolerance from the binary version,
+    since point samples a year apart are effectively contemporaneous for a multi-year
+    reservoir infection cycle, not evidence of temporal separation. Missing year data on
+    either side stays neutral (1.0), same as before.
+
+    `tau_years` is a labeled scale parameter (RPI_WEIGHTS['time_tau_years']), not a
+    measured constant -- see that key's comment and parameter_robustness_sweep.
+    """
+    if span_a is None or span_b is None:
+        return 1.0
+    overlap = min(span_a[1], span_b[1]) - max(span_a[0], span_b[0]) + 1
+    if overlap >= 0:
+        return 1.0
+    gap_years = abs(overlap)
+    return max(floor, math.exp(-gap_years / tau_years))
+
+
 def host_rank_proximity(a: "prep.IsolateRecord", b: "prep.IsolateRecord") -> str:
     """Finest shared host taxonomic rank between two isolates' reservoirs.
 
@@ -1290,6 +1400,8 @@ def host_rank_proximity(a: "prep.IsolateRecord", b: "prep.IsolateRecord") -> str
         # mirrors ecological_opportunity's own geo term, which stays neutral when
         # either side's country set is empty rather than assuming the worst.
         return "unknown_host_metadata"
+    if getattr(a, "is_incidental_host", False) or getattr(b, "is_incidental_host", False):
+        return "dead_end_spillover_host"
     if a.host_name and a.host_name == b.host_name:
         return "same_species"
     genus_a, genus_b = host_genus_of(a), host_genus_of(b)
@@ -1380,27 +1492,9 @@ def ecological_opportunity(
                 continue
 
             host = table["host_decay"][host_rank_proximity(isolate_a, isolate_b)]
-            country_a, country_b = isolate_a.country, isolate_b.country
-            # Missing-means-neutral takes precedence: an empty country on either side
-            # is unknown, not separated, so it must be checked before the floor branch
-            # could otherwise apply.
-            if not country_a or not country_b:
-                geo = 1.0
-            elif country_a == country_b:
-                geo = 1.0
-            else:
-                geo = floor
-
+            geo = geo_decay(isolate_a.country, isolate_b.country, table["geo_d0_km"], floor)
             span_a, span_b = _year_span([isolate_a]), _year_span([isolate_b])
-            if span_a and span_b:
-                # +1: inclusive-year spans that merely touch (e.g. 2001 vs 2002, a
-                # one-year gap between point samples) count as overlapping -- point
-                # samples a year apart are effectively contemporaneous for a
-                # multi-year reservoir infection cycle, not evidence of separation.
-                overlap = min(span_a[1], span_b[1]) - max(span_a[0], span_b[0]) + 1
-                time = 1.0 if overlap >= 0 else max(floor, 1.0 / (1.0 + abs(overlap)))
-            else:
-                time = 1.0
+            time = time_decay(span_a, span_b, table["time_tau_years"], floor)
 
             worst["rpi_e_host"] = min(worst["rpi_e_host"], host)
             worst["rpi_e_geo"] = min(worst["rpi_e_geo"], geo)
@@ -2484,7 +2578,7 @@ def _make_ecology_isolate(species: str, country: str, host_order: str, year: str
         s_nt_length=0, m_nt_length=0, l_nt_length=0,
         s_protein_aa="", m_protein_aa="", l_protein_aa="", concatenated_protein_aa="",
         segments_present=[], coding_complete_segments=[], triplet_status="", has_complete_triplet=False,
-        is_lab_derived=lab, is_vaccine_strain=vaccine, has_nss_orf=False,
+        is_lab_derived=lab, is_vaccine_strain=vaccine, is_incidental_host=False, has_nss_orf=False,
         metadata_conflict=False, taxonomic_incongruence=False, cross_species_partners=[],
         kmer_cluster_id="", s_protein_accessions=[], m_protein_accessions=[],
         l_protein_accessions=[], all_accessions=[], warnings=[],
@@ -2535,10 +2629,12 @@ def _rpi_sensitivity_panel() -> List[Dict[str, Any]]:
     def two(label: str, odd_segment: str, identity: float, m_pack: float, m_pol: float,
             host_name_a: str = "Peromyscus maniculatus", host_family_a: str = "Cricetidae",
             host_order_a: str = "Rodentia", host_name_b: str = "Peromyscus maniculatus",
-            host_family_b: str = "Cricetidae", host_order_b: str = "Rodentia") -> Dict[str, Any]:
-        isolate_a = _eco_isolate(f"Sp_{label}_a", "USA", "2001", host_order=host_order_a,
+            host_family_b: str = "Cricetidae", host_order_b: str = "Rodentia",
+            country_a: str = "USA", country_b: str = "USA",
+            year_a: str = "2001", year_b: str = "2001") -> Dict[str, Any]:
+        isolate_a = _eco_isolate(f"Sp_{label}_a", country_a, year_a, host_order=host_order_a,
                                   host_family=host_family_a, host_name=host_name_a)
-        isolate_b = _eco_isolate(f"Sp_{label}_b", "USA", "2001", host_order=host_order_b,
+        isolate_b = _eco_isolate(f"Sp_{label}_b", country_b, year_b, host_order=host_order_b,
                                   host_family=host_family_b, host_name=host_name_b)
         return {
             "label": label, "implicated_species": [isolate_a.species_name, isolate_b.species_name],
@@ -2573,6 +2669,25 @@ def _rpi_sensitivity_panel() -> List[Dict[str, Any]]:
         # sweep would report stability it never tested.
         two("K_alpha_flip_distant_S", "S", 0.60, 1.0, 1.0),
         two("L_alpha_flip_close_L", "L", 0.90, 0.8944, 0.8944),
+        # M/N/O and P/Q/R: engineered for the geo_d0_km/time_tau_years sweep direction,
+        # the same way A/B are engineered for retention_by_odd_segment and K/L for
+        # jeffreys_alpha. Every candidate above uses country="USA", year="2001" on both
+        # sides, so geo=time=1.0 identically for all twelve regardless of d0/tau -- a
+        # sweep over either parameter against that panel alone would be tautological
+        # (see the "assert on the row that ships" / no-tautological-sweep rule). Host
+        # proximity, identity and molecular scores are held at a fixed, unremarkable
+        # same-species/close/mid-M point on all six so geo (M/N/O) or time (P/Q/R)
+        # decay is the ONLY thing that can reorder each triplet relative to the others.
+        # Country pairs read real centroids from country_centroids.csv:
+        # Belgium/Germany ~420 km (near), Lithuania/Finland ~760 km (mid),
+        # Finland/Guinea ~6,590 km (far) -- spanning the swept d0 grid (100-3000 km).
+        two("M_geo_near", "M", 0.90, 0.7, 0.7, country_a="Belgium", country_b="Germany"),
+        two("N_geo_mid", "M", 0.90, 0.7, 0.7, country_a="Lithuania", country_b="Finland"),
+        two("O_geo_far", "M", 0.90, 0.7, 0.7, country_a="Finland", country_b="Guinea"),
+        # Year gaps of 5, 30 and 80 span the swept tau grid (5-150 years).
+        two("P_time_near", "M", 0.90, 0.7, 0.7, year_a="1985", year_b="1990"),
+        two("Q_time_mid", "M", 0.90, 0.7, 0.7, year_a="1985", year_b="2015"),
+        two("R_time_far", "M", 0.90, 0.7, 0.7, year_a="1985", year_b="2065"),
     ]
     single = _eco_isolate("Sp_I_single", "USA", "2001")
     panel.append({
@@ -2685,6 +2800,48 @@ def sensitivity_sweep(factor: float = 0.5) -> Dict[str, Any]:
         "note": "Correlated against rpi_generation on the fixed synthetic panel "
                 "(_rpi_sensitivity_panel), the same route as every other parameter. "
                 "'samples' is descriptive only.",
+    }
+
+    # --- geo_d0_km / time_tau_years: affect Factor E (rpi_generation) via
+    # ecological_opportunity's geo/time terms. Meaningful only because M/N/O and P/Q/R
+    # in _rpi_sensitivity_panel vary country/year -- every other panel candidate holds
+    # country="USA", year="2001" on both sides, so geo=time=1.0 regardless of d0/tau for
+    # those twelve and a sweep against the OLD all-USA/2001 panel would have been the
+    # exact host_decay/alpha tautology this module has already fixed twice.
+    geo_d0_low = RPI_WEIGHTS["geo_d0_km"] * (1 - factor)
+    geo_d0_high = RPI_WEIGHTS["geo_d0_km"] * (1 + factor)
+    geo_d0_low_weights = copy.deepcopy(RPI_WEIGHTS)
+    geo_d0_low_weights["geo_d0_km"] = geo_d0_low
+    geo_d0_high_weights = copy.deepcopy(RPI_WEIGHTS)
+    geo_d0_high_weights["geo_d0_km"] = geo_d0_high
+    geo_d0_gen_low = _score_panel(panel, geo_d0_low_weights)["generation"]
+    geo_d0_gen_high = _score_panel(panel, geo_d0_high_weights)["generation"]
+    varied["geo_d0_km"] = {
+        "scaled_by": (1 - factor, 1 + factor), "low": geo_d0_low, "high": geo_d0_high,
+        "rank_correlation": _worst_rank_correlation(
+            _spearman(baseline_generation, geo_d0_gen_low),
+            _spearman(baseline_generation, geo_d0_gen_high)),
+        "note": "Correlated against rpi_generation on the fixed synthetic panel "
+                "(_rpi_sensitivity_panel); see parameter_robustness_sweep for a finer "
+                "grid, top-k overlap, rank-movement and the real discrimination panel.",
+    }
+
+    time_tau_low = RPI_WEIGHTS["time_tau_years"] * (1 - factor)
+    time_tau_high = RPI_WEIGHTS["time_tau_years"] * (1 + factor)
+    time_tau_low_weights = copy.deepcopy(RPI_WEIGHTS)
+    time_tau_low_weights["time_tau_years"] = time_tau_low
+    time_tau_high_weights = copy.deepcopy(RPI_WEIGHTS)
+    time_tau_high_weights["time_tau_years"] = time_tau_high
+    time_tau_gen_low = _score_panel(panel, time_tau_low_weights)["generation"]
+    time_tau_gen_high = _score_panel(panel, time_tau_high_weights)["generation"]
+    varied["time_tau_years"] = {
+        "scaled_by": (1 - factor, 1 + factor), "low": time_tau_low, "high": time_tau_high,
+        "rank_correlation": _worst_rank_correlation(
+            _spearman(baseline_generation, time_tau_gen_low),
+            _spearman(baseline_generation, time_tau_gen_high)),
+        "note": "Correlated against rpi_generation on the fixed synthetic panel "
+                "(_rpi_sensitivity_panel); see parameter_robustness_sweep for a finer "
+                "grid, top-k overlap, rank-movement and the real discrimination panel.",
     }
 
     # --- host_decay: affects Factor E (rpi_generation), via ecological_opportunity's
@@ -2846,7 +3003,7 @@ def _worst_rank_correlation(*values: float) -> float:
 # compute_rpi's min(1.0, ...) clamp; scaling it down turned unknown into a penalty,
 # which is the exact failure host_rank_proximity's top-of-function guard exists to
 # prevent. Neither direction is a meaningful perturbation of an assumption.
-RPI_HOST_DECAY_NOT_PERTURBED: FrozenSet[str] = frozenset({"unknown_host_metadata"})
+RPI_HOST_DECAY_NOT_PERTURBED: FrozenSet[str] = frozenset({"unknown_host_metadata", "dead_end_spillover_host"})
 
 
 def _perturbed_host_decay(scale: float) -> Dict[str, float]:
@@ -2866,6 +3023,333 @@ def _perturbed_host_decay(scale: float) -> Dict[str, float]:
         else min(1.0, max(RPI_WEIGHTS["eco_floor"], value * scale))
         for key, value in RPI_WEIGHTS["host_decay"].items()
     }
+
+
+def _scaled_retention(scale: float) -> Dict[str, float]:
+    """RPI_WEIGHTS['retention_by_odd_segment'] scaled by `scale`, all three keys
+    uniformly -- same convention sensitivity_sweep already uses inline. No clamp: F
+    itself is bounded above by 1.0 downstream (RetentionFactorTest.test_bounded_
+    above_by_one), so an unclamped upward scale cannot push retention past its own
+    ceiling; it can only saturate it, which is itself part of what the sweep is
+    checking for."""
+    return {k: v * scale for k, v in RPI_WEIGHTS["retention_by_odd_segment"].items()}
+
+
+# ---------------------------------------------------------------------------
+# parameter_robustness_sweep -- Phase 14 extension (2026-09-23).
+#
+# A ROBUSTNESS AND SENSITIVITY ANALYSIS, not an optimization or "these are the best
+# values" proof. No ground-truth label set exists to optimize geo_d0_km,
+# time_tau_years, host_decay or retention_by_odd_segment against (PROJECT-STATE.md
+# limitation #6: 8 positives out of ~2,995 rows) -- so nothing here can show a value is
+# "best" in the sense of maximizing an objective. What it CAN honestly show: whether
+# ranking survives across a wide plausible range around each current default, using
+# two kinds of evidence that must never be reported as equivalent:
+#
+#   SYNTHETIC sensitivity testing: the fixed, hand-engineered _rpi_sensitivity_panel
+#   (18 candidates; see that function's docstring for the six geo/time-varying
+#   candidates added alongside the original twelve). Fast, fully reproducible,
+#   deliberately constructed to be sensitive to each parameter -- but not real data.
+#
+#   REAL discrimination testing: the actual a/b1/b2/c panel built from reference
+#   isolates by build_discrimination_panel, rescored under each grid point via the
+#   SAME compute_rpi() inputs captured once per case (score_candidate's
+#   `_rpi_recompute_kwargs`) -- so the expensive gate0-3/ViennaRNA pass runs ONCE per
+#   sweep call, not once per grid cell.
+#
+# Every returned entry is tagged "synthetic_fixed" or "real_discrimination_panel" at
+# the same top level sensitivity_sweep already uses for its own panel marker, so no
+# number here can be quoted without the reader seeing what it was measured on.
+# ---------------------------------------------------------------------------
+
+
+def _discrimination_panel_rpi_inputs(
+        reference: "prep.ReferenceData", seed: Optional[int] = None,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Builds and scores the real a/b1/b2/c discrimination panel ONCE -- gate0-3 plus
+    ViennaRNA (score_m_pack/score_m_pol), the expensive part of score_candidate -- and
+    returns, per group, each case's compute_rpi() keyword inputs
+    (`_rpi_recompute_kwargs`) rather than a finished row. parameter_robustness_sweep
+    then calls compute_rpi directly against these cached inputs under many different
+    RPI_WEIGHTS, which is cheap (pure arithmetic, no gates or ViennaRNA), instead of
+    re-running score_candidate's expensive half once per swept grid value.
+
+    Deliberately bypasses score_cases, which strips compute_rpi's raw inputs down to
+    the curated CSV-bound column set that _stage_report writes to JSON -- this
+    function exists only for the in-memory sweep below and never touches that
+    production output path, so nothing here can affect a committed pipeline artifact.
+
+    A case that fails gate0 (`junk_sequence`) never reaches compute_rpi and carries no
+    `_rpi_recompute_kwargs`; such cases are dropped here, same as score_cases dropping
+    their RPI columns to None.
+    """
+    if seed is None:
+        seed = RPI_DISCRIMINATION_SEED
+    precomputed = rd._build_precomputed(reference)
+    panel = build_discrimination_panel(reference, seed=seed)
+    args = _score_args()
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for group_name, cases in panel.items():
+        rows = []
+        for case in cases:
+            result = rd.score_candidate(case["candidate"], reference, precomputed, args)
+            kwargs = result.get("_rpi_recompute_kwargs")
+            if kwargs is None:
+                continue
+            rows.append({"label": case.get("label", case["candidate"].candidate_id),
+                         "rpi_recompute_kwargs": kwargs})
+        out[group_name] = rows
+    return out
+
+
+def _rescore_discrimination_inputs(
+        inputs: Dict[str, List[Dict[str, Any]]], weights: Dict[str, Any],
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Cheaply rescore _discrimination_panel_rpi_inputs' cached cases under `weights`
+    -- compute_rpi only, matching evaluate_pass_criterion's expected shape
+    (group_name -> rows carrying rpi_generation)."""
+    return {
+        group_name: [
+            {**row, **compute_rpi(weights=weights, **row["rpi_recompute_kwargs"])}
+            for row in rows
+        ]
+        for group_name, rows in inputs.items()
+    }
+
+
+def _rank_order_desc(labels: Sequence[str], values: Sequence[float]) -> List[str]:
+    """Labels sorted by value descending (most plausible first); ties broken by label
+    for a deterministic order independent of input ordering or sort stability."""
+    return [label for label, _ in sorted(
+        zip(labels, values), key=lambda pair: (-pair[1], pair[0]))]
+
+
+def _topk_overlap(baseline_order: Sequence[str], order: Sequence[str], k: int) -> float:
+    """Fraction of the baseline's top-k labels still present in the swept top-k --
+    answers whether the PRACTICALLY IMPORTANT candidates stay selected, which a global
+    rank correlation can look stable while hiding (a swap far from the top barely
+    moves Spearman's rho but a swap AT the top changes which candidates a reader
+    downstream actually acts on)."""
+    k = min(k, len(baseline_order), len(order))
+    if k == 0:
+        return float("nan")
+    return len(set(baseline_order[:k]) & set(order[:k])) / k
+
+
+def _one_parameter_curve(
+        panel: Sequence[Dict[str, Any]], param_name: str, grid: Sequence[float],
+        weights_at: "Callable[[float], Dict[str, Any]]", rank_by: str,
+        discrimination_inputs: Optional[Dict[str, List[Dict[str, Any]]]],
+) -> Dict[str, Any]:
+    """One parameter's one-at-a-time sweep: rank correlation, top-5/top-10 overlap and
+    per-candidate rank movement on the synthetic panel at every grid point, plus (when
+    `discrimination_inputs` is supplied) overall_ranking_supported on the real panel.
+
+    `rank_by` is "generation" or "retention" -- which compute_rpi column this
+    parameter actually scales (host_decay/geo_d0_km/time_tau_years feed
+    rpi_generation; retention_by_odd_segment/F feeds rpi_retention only, exactly as
+    sensitivity_sweep already distinguishes).
+    """
+    labels = [c["label"] for c in panel]
+    baseline = _score_panel(panel)[rank_by]
+    baseline_order = _rank_order_desc(labels, baseline)
+    baseline_rank = {label: i + 1 for i, label in enumerate(baseline_order)}
+
+    points = []
+    # label -> list of ranks observed across the WHOLE grid, for rank-movement.
+    rank_history: Dict[str, List[int]] = {label: [] for label in labels}
+    for value in grid:
+        table = weights_at(value)
+        scored = _score_panel(panel, table)[rank_by]
+        order = _rank_order_desc(labels, scored)
+        rank_at_value = {label: i + 1 for i, label in enumerate(order)}
+        for label in labels:
+            rank_history[label].append(rank_at_value[label])
+
+        point: Dict[str, Any] = {
+            param_name: value,
+            "rank_correlation_vs_default": _spearman(baseline, scored),
+            "top5_overlap_vs_default": _topk_overlap(baseline_order, order, 5),
+            "top10_overlap_vs_default": _topk_overlap(baseline_order, order, 10),
+        }
+        if discrimination_inputs is not None:
+            table_discrim = weights_at(value)
+            scored_groups = _rescore_discrimination_inputs(discrimination_inputs, table_discrim)
+            pass_result = evaluate_pass_criterion(scored_groups)
+            point["real_discrimination_panel"] = {
+                "overall_ranking_supported": pass_result["overall_ranking_supported"],
+                "b2_vs_random_met_expectation": pass_result["b2_vs_random"]["met_expectation"],
+                "b1_vs_b2_met_expectation": pass_result["b1_vs_b2"]["met_expectation"],
+            }
+        points.append(point)
+
+    rank_movement = {}
+    for label in labels:
+        history = rank_history[label]
+        base = baseline_rank[label]
+        rank_movement[label] = {
+            "baseline_rank": base,
+            "min_rank_across_sweep": min(history),
+            "max_rank_across_sweep": max(history),
+            # Positive = moved UP (toward rank 1, more plausible) at its best point in
+            # the sweep; positive = moved DOWN at its worst point. Both reported
+            # per-candidate, not just a global worst-case, because a stable global
+            # correlation can hide a large move for one candidate that matters.
+            "largest_upward_move": base - min(history),
+            "largest_downward_move": max(history) - base,
+        }
+    worst_mover_label = max(rank_movement, key=lambda l: max(
+        rank_movement[l]["largest_upward_move"], rank_movement[l]["largest_downward_move"]))
+
+    return {
+        "panel": "synthetic_fixed",
+        "panel_size": len(panel),
+        "grid": list(grid),
+        # geo_d0_km/time_tau_years are direct RPI_WEIGHTS keys; host_decay_scale/
+        # retention_f_scale are multipliers applied ON TOP of RPI_WEIGHTS['host_decay']
+        # / ['retention_by_odd_segment'] (no single scalar default exists for those two
+        # dicts), so their "no perturbation" point is scale = 1.0 by construction.
+        "default": RPI_WEIGHTS.get(param_name, 1.0),
+        "points": points,
+        "rank_movement_by_candidate": rank_movement,
+        "worst_mover": worst_mover_label,
+        "worst_mover_detail": rank_movement[worst_mover_label],
+    }
+
+
+def parameter_robustness_sweep(
+        reference: Optional["prep.ReferenceData"] = None,
+        d0_grid: Sequence[float] = (100.0, 250.0, 500.0, 750.0, 1090.0, 1500.0, 2000.0, 2500.0, 3000.0),
+        tau_grid: Sequence[float] = (5.0, 10.0, 15.0, 25.0, 40.0, 60.0, 90.0, 120.0, 150.0),
+        host_scale_grid: Sequence[float] = (0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0),
+        f_scale_grid: Sequence[float] = (0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0),
+        joint_scales: Sequence[float] = (0.7, 1.0, 1.3),
+        seed: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Robustness/sensitivity analysis for the four parameters this project cannot
+    derive from primary literature at full numeric precision: geo_d0_km (1090 km),
+    time_tau_years (25 yr), host_decay's ladder (1, 0.5, 0.25, 0.10 -- swept as a
+    single scale multiplier, matching _perturbed_host_decay's existing convention),
+    and retention_by_odd_segment/F (0.15 -- swept the same way).
+
+    NOT A CLAIM OF OPTIMALITY. See this section's module comment: with 8 positive
+    labels in the whole dataset, nothing can be fitted or optimized. This function
+    answers "does the ranking survive a wide plausible range", not "is this the best
+    value" -- the word "robust" belongs in any report of these results; "optimal" or
+    "best" does not.
+
+    `reference` is optional: pass a loaded ReferenceData to also run the real a/b1/b2/c
+    discrimination panel at every grid point (expensive ONCE, via
+    _discrimination_panel_rpi_inputs, then cheap per grid point); pass None to run the
+    synthetic-panel half only (fast, no `all_hanta/` data required).
+
+    JOINT SWEEP (added 2026-09-23 per review: one-at-a-time sweeps cannot expose a
+    parameter INTERACTION -- a plateau that holds for each parameter alone can vanish
+    when several shift together). All four parameters are varied simultaneously across
+    `joint_scales` (default +/-30% and the default itself) in a full factorial --
+    3**4 = 81 combinations by default -- against both panels. This is a MODEST joint
+    test (bounded, systematic combinations), not an exhaustive interaction search;
+    reported as such.
+    """
+    panel = _rpi_sensitivity_panel()
+
+    discrimination_inputs = (
+        _discrimination_panel_rpi_inputs(reference, seed=seed) if reference is not None else None)
+
+    def weights_geo(value: float) -> Dict[str, Any]:
+        table = copy.deepcopy(RPI_WEIGHTS)
+        table["geo_d0_km"] = value
+        return table
+
+    def weights_time(value: float) -> Dict[str, Any]:
+        table = copy.deepcopy(RPI_WEIGHTS)
+        table["time_tau_years"] = value
+        return table
+
+    def weights_host(scale: float) -> Dict[str, Any]:
+        table = copy.deepcopy(RPI_WEIGHTS)
+        table["host_decay"] = _perturbed_host_decay(scale)
+        return table
+
+    def weights_f(scale: float) -> Dict[str, Any]:
+        table = copy.deepcopy(RPI_WEIGHTS)
+        table["retention_by_odd_segment"] = _scaled_retention(scale)
+        return table
+
+    one_at_a_time = {
+        "geo_d0_km": _one_parameter_curve(
+            panel, "geo_d0_km", d0_grid, weights_geo, "generation", discrimination_inputs),
+        "time_tau_years": _one_parameter_curve(
+            panel, "time_tau_years", tau_grid, weights_time, "generation", discrimination_inputs),
+        "host_decay_scale": _one_parameter_curve(
+            panel, "host_decay_scale", host_scale_grid, weights_host, "generation", discrimination_inputs),
+        "retention_f_scale": _one_parameter_curve(
+            panel, "retention_f_scale", f_scale_grid, weights_f, "retention", discrimination_inputs),
+    }
+
+    # --- Joint sweep: all four together, modest full factorial.
+    baseline_generation = _score_panel(panel)["generation"]
+    labels = [c["label"] for c in panel]
+    joint_results = []
+    for d0_scale, tau_scale, host_scale, f_scale in itertools.product(joint_scales, repeat=4):
+        table = copy.deepcopy(RPI_WEIGHTS)
+        table["geo_d0_km"] = RPI_WEIGHTS["geo_d0_km"] * d0_scale
+        table["time_tau_years"] = RPI_WEIGHTS["time_tau_years"] * tau_scale
+        table["host_decay"] = _perturbed_host_decay(host_scale)
+        table["retention_by_odd_segment"] = _scaled_retention(f_scale)
+        scored_generation = _score_panel(panel, table)["generation"]
+        entry: Dict[str, Any] = {
+            "d0_scale": d0_scale, "tau_scale": tau_scale,
+            "host_scale": host_scale, "f_scale": f_scale,
+            "rank_correlation_vs_default": _spearman(baseline_generation, scored_generation),
+        }
+        if discrimination_inputs is not None:
+            scored_groups = _rescore_discrimination_inputs(discrimination_inputs, table)
+            pass_result = evaluate_pass_criterion(scored_groups)
+            entry["real_discrimination_panel"] = {
+                "overall_ranking_supported": pass_result["overall_ranking_supported"],
+            }
+        joint_results.append(entry)
+
+    correlations = [e["rank_correlation_vs_default"] for e in joint_results
+                    if not math.isnan(e["rank_correlation_vs_default"])]
+    worst_joint = min(joint_results, key=lambda e: (
+        e["rank_correlation_vs_default"] if not math.isnan(e["rank_correlation_vs_default"])
+        else float("inf")))
+    joint = {
+        "panel": "synthetic_fixed",
+        "scales_swept": list(joint_scales),
+        "n_combinations": len(joint_results),
+        "combinations": joint_results,
+        "min_rank_correlation": min(correlations) if correlations else float("nan"),
+        "max_rank_correlation": max(correlations) if correlations else float("nan"),
+        "worst_combination": worst_joint,
+    }
+    if discrimination_inputs is not None:
+        supported_count = sum(
+            1 for e in joint_results if e["real_discrimination_panel"]["overall_ranking_supported"])
+        joint["real_discrimination_panel_pass_fraction"] = supported_count / len(joint_results)
+
+    return {
+        "note": "ROBUSTNESS AND SENSITIVITY ANALYSIS -- not an optimization or proof "
+                "of optimal values. See parameter_robustness_sweep's own docstring: no "
+                "ground-truth label set exists to optimize these parameters against.",
+        "one_at_a_time": one_at_a_time,
+        "joint_sweep": joint,
+        "evidence_labels": {
+            "synthetic_fixed": "The fixed, hand-engineered 18-candidate "
+                                "_rpi_sensitivity_panel -- fast and fully reproducible, "
+                                "NOT real pipeline data.",
+            "real_discrimination_panel": "The actual a/b1/b2/c panel built from "
+                                          "reference isolates -- real data, but only "
+                                          "the pass/fail overall_ranking_supported "
+                                          "summary at each grid point, not a rank "
+                                          "correlation (the panel groups are not "
+                                          "individually rankable against a baseline "
+                                          "the way the synthetic panel is).",
+        },
+    }
+
 
 
 # The production pipeline carries exactly 8 supported_reassortment_candidate labels
@@ -3146,7 +3630,12 @@ def score_candidate(
     parent_isolates, isolate_basis = resolve_e_parent_isolates(
         gate1.implicated_species, reference.isolates, gate1, gate0.orf_proteins,
         known_isolates=candidate.known_segment_isolates)
-    result.update(compute_rpi(
+    structural_intact = not (
+        gate2a.tmis_conserved is False
+        or gate2a.ph_switch_conserved is False
+        or gate2a.waasa_intact is False
+    )
+    compute_rpi_kwargs = dict(
         implicated_species=gate1.implicated_species,
         isolates=reference.isolates,
         parent_isolates=parent_isolates,
@@ -3177,12 +3666,16 @@ def score_candidate(
         m_pack_status=m_pack_status,
         m_pol=m_pol_value,
         m_pol_status=m_pol_status,
-        structural_intact=not (
-            gate2a.tmis_conserved is False
-            or gate2a.ph_switch_conserved is False
-            or gate2a.waasa_intact is False
-        ),
-    ))
+        structural_intact=structural_intact,
+    )
+    result.update(compute_rpi(**compute_rpi_kwargs))
+    # Stashed compute_rpi() inputs, private to this module -- lets
+    # parameter_robustness_sweep RESCORE this exact case under many different
+    # RPI_WEIGHTS (different geo_d0_km/time_tau_years/host_decay/retention_by_odd_
+    # segment) by calling compute_rpi directly, instead of re-running gate0-3 and
+    # ViennaRNA (the expensive part of score_candidate) once per swept value. Not part
+    # of the documented result schema; no existing caller reads this key.
+    result["_rpi_recompute_kwargs"] = compute_rpi_kwargs
     return result
 
 
@@ -3880,7 +4373,7 @@ def _make_isolate(key, species, s_protein, m_protein, l_protein):
         concatenated_protein_aa=s_protein + m_protein + l_protein,
         segments_present=["S", "M", "L"], coding_complete_segments=["S", "M", "L"],
         triplet_status="coding_complete_triplet", has_complete_triplet=True,
-        is_lab_derived=False, is_vaccine_strain=False, has_nss_orf=False,
+        is_lab_derived=False, is_vaccine_strain=False, is_incidental_host=False, has_nss_orf=False,
         metadata_conflict=False, taxonomic_incongruence=False, cross_species_partners=[],
         kmer_cluster_id="", s_protein_accessions=[], m_protein_accessions=[],
         l_protein_accessions=[], all_accessions=["SACC", "MACC", "LACC"], warnings=[],
@@ -4494,6 +4987,64 @@ def _parent_map(*isolates: "prep.IsolateRecord") -> Dict[str, "prep.IsolateRecor
     return {isolate.species_name: isolate for isolate in isolates}
 
 
+class GeoTimeDecayTest(unittest.TestCase):
+    """geo_decay/time_decay in isolation, ahead of EcologicalOpportunityTest's
+    higher-level coverage through ecological_opportunity itself."""
+
+    FLOOR = RPI_WEIGHTS["eco_floor"]
+
+    def test_same_country_is_exactly_one(self):
+        self.assertEqual(geo_decay("USA", "USA", 1090.0, self.FLOOR), 1.0)
+
+    def test_missing_country_either_side_is_neutral(self):
+        self.assertEqual(geo_decay("", "USA", 1090.0, self.FLOOR), 1.0)
+        self.assertEqual(geo_decay("USA", "", 1090.0, self.FLOOR), 1.0)
+        self.assertEqual(geo_decay("", "", 1090.0, self.FLOOR), 1.0)
+
+    def test_nearby_countries_score_higher_than_distant_ones(self):
+        near = geo_decay("Belgium", "Germany", 1090.0, self.FLOOR)
+        far = geo_decay("Finland", "Guinea", 1090.0, self.FLOOR)
+        self.assertLess(far, near)
+        self.assertLess(far, 1.0)
+        self.assertLess(near, 1.0)
+
+    def test_very_distant_countries_are_floored_not_zero(self):
+        score = geo_decay("Finland", "Guinea", 1090.0, self.FLOOR)
+        self.assertEqual(score, self.FLOOR)
+        self.assertGreater(score, 0.0)
+
+    def test_smaller_d0_decays_faster(self):
+        wide = geo_decay("Belgium", "Germany", 2500.0, self.FLOOR)
+        narrow = geo_decay("Belgium", "Germany", 250.0, self.FLOOR)
+        self.assertLess(narrow, wide)
+
+    def test_unmapped_country_raises_rather_than_guesses(self):
+        with self.assertRaises(KeyError):
+            geo_decay("USA", "Wakanda", 1090.0, self.FLOOR)
+
+    def test_touching_spans_stay_at_one(self):
+        # Same tolerance the old inverse-gap formula had: a one-year gap between point
+        # samples still counts as overlapping.
+        self.assertEqual(time_decay((2001, 2001), (2002, 2002), 25.0, self.FLOOR), 1.0)
+        self.assertEqual(time_decay((2001, 2001), (2001, 2001), 25.0, self.FLOOR), 1.0)
+
+    def test_missing_span_either_side_is_neutral(self):
+        self.assertEqual(time_decay(None, (2001, 2001), 25.0, self.FLOOR), 1.0)
+        self.assertEqual(time_decay((2001, 2001), None, 25.0, self.FLOOR), 1.0)
+
+    def test_larger_gaps_score_lower_and_floor_holds(self):
+        near = time_decay((2001, 2001), (2010, 2010), 25.0, self.FLOOR)
+        far = time_decay((2001, 2001), (2200, 2200), 25.0, self.FLOOR)
+        self.assertLess(far, near)
+        self.assertEqual(far, self.FLOOR)
+        self.assertGreater(far, 0.0)
+
+    def test_smaller_tau_decays_faster(self):
+        wide = time_decay((2001, 2001), (2030, 2030), 100.0, self.FLOOR)
+        narrow = time_decay((2001, 2001), (2030, 2030), 10.0, self.FLOOR)
+        self.assertLess(narrow, wide)
+
+
 class EcologicalOpportunityTest(unittest.TestCase):
     """FIX (2026-08-30): ecological_opportunity now takes ONE isolate per implicated
     species (parent_isolates) instead of fanning out to every isolate of that species in
@@ -4604,6 +5155,17 @@ class EcologicalOpportunityTest(unittest.TestCase):
         to 'different_order' (0.01), the harshest value in the ladder."""
         a = _eco_isolate("A", "USA", "2001")
         b = _eco_isolate("B", "USA", "2001", host_order="", host_family="", host_name="")
+        result = ecological_opportunity(
+            ["A", "B"], [a, b], _parent_map(a, b), "actual_parents")
+        self.assertEqual(result["rpi_e_host"], 1.0)
+
+    def test_dead_end_spillover_host_stays_neutral(self):
+        """When an isolate is an incidental dead-end host (e.g. human), it serves as a proxy
+        for the local reservoir and does not carry its own sylvatic ecology. It must not
+        penalize the candidate as 'different_order'."""
+        a = _eco_isolate("A", "USA", "2001", host_name="Homo sapiens", host_order="Primates", host_family="Hominidae")
+        a.is_incidental_host = True
+        b = _eco_isolate("B", "USA", "2001", host_name="Rattus norvegicus")
         result = ecological_opportunity(
             ["A", "B"], [a, b], _parent_map(a, b), "actual_parents")
         self.assertEqual(result["rpi_e_host"], 1.0)
@@ -5112,7 +5674,7 @@ def _genomic_isolate(species: str, key_suffix: str, s_seq: str = "", m_seq: str 
         s_protein_aa="", m_protein_aa="", l_protein_aa="", concatenated_protein_aa="",
         segments_present=[], coding_complete_segments=[], triplet_status="",
         has_complete_triplet=False, is_lab_derived=lab, is_vaccine_strain=vaccine,
-        has_nss_orf=False, metadata_conflict=False, taxonomic_incongruence=False,
+        is_incidental_host=False, has_nss_orf=False, metadata_conflict=False, taxonomic_incongruence=False,
         cross_species_partners=[], kmer_cluster_id="", s_protein_accessions=[],
         m_protein_accessions=[], l_protein_accessions=[], all_accessions=[], warnings=[],
     )
@@ -6302,7 +6864,7 @@ class SensitivityAndRankTest(unittest.TestCase):
         stratum boundary."""
         report = sensitivity_sweep()
         for key in ("host_decay", "jeffreys_alpha", "retention_by_odd_segment",
-                    "stratum_identity_boundary"):
+                    "stratum_identity_boundary", "geo_d0_km", "time_tau_years"):
             self.assertIn(key, report["varied"], key)
 
     def test_sweep_reports_rank_correlation_against_baseline(self):
@@ -6339,7 +6901,7 @@ class SensitivityAndRankTest(unittest.TestCase):
         one perturbation direction for every parameter that actually varies scores."""
         report = sensitivity_sweep()
         for key in ("host_decay", "retention_by_odd_segment", "stratum_identity_boundary",
-                    "jeffreys_alpha"):
+                    "jeffreys_alpha", "geo_d0_km", "time_tau_years"):
             self.assertLess(report["varied"][key]["rank_correlation"], 1.0, key)
 
     def test_jeffreys_alpha_is_swept_through_the_panel_not_against_itself(self):
@@ -6572,6 +7134,83 @@ RPI_MPACK_TARGET_DYNAMIC_RANGE = 100.0
 # reported but not used.
 TAU_SPAN_LOW_PERCENTILE = 5.0
 TAU_SPAN_HIGH_PERCENTILE = 95.0
+
+
+class ParameterRobustnessSweepTest(unittest.TestCase):
+    """parameter_robustness_sweep, synthetic-panel half only (reference=None) --
+    fast, no all_hanta/ data required. The real-discrimination-panel half is exercised
+    manually (python rpi_core.py robustness-sweep), not in the unit suite, for the same
+    reason the real a/b1/b2/c panel is not rebuilt on every unittest run elsewhere in
+    this module: it needs a loaded reference snapshot outside this suite's scope."""
+
+    def test_marks_evidence_kinds_and_never_equates_them(self):
+        result = parameter_robustness_sweep(reference=None)
+        self.assertIn("synthetic_fixed", result["evidence_labels"])
+        self.assertIn("real_discrimination_panel", result["evidence_labels"])
+        for entry in result["one_at_a_time"].values():
+            self.assertEqual(entry["panel"], "synthetic_fixed")
+        self.assertEqual(result["joint_sweep"]["panel"], "synthetic_fixed")
+
+    def test_covers_all_four_swept_parameters(self):
+        result = parameter_robustness_sweep(reference=None)
+        for key in ("geo_d0_km", "time_tau_years", "host_decay_scale", "retention_f_scale"):
+            self.assertIn(key, result["one_at_a_time"], key)
+
+    def test_scoring_at_the_literal_default_reproduces_the_baseline_exactly(self):
+        """The grid points that equal the current RPI_WEIGHTS default (1090 km, 25
+        years, scale 1.0) must score identically to the unperturbed baseline -- if this
+        were ever not exactly 1.0 the sweep's own baseline would be internally
+        inconsistent."""
+        result = parameter_robustness_sweep(reference=None)
+        for param_name, default_value in (
+                ("geo_d0_km", 1090.0), ("time_tau_years", 25.0),
+                ("host_decay_scale", 1.0), ("retention_f_scale", 1.0)):
+            entry = result["one_at_a_time"][param_name]
+            at_default = [p for p in entry["points"] if p[param_name] == default_value]
+            self.assertEqual(len(at_default), 1, param_name)
+            self.assertEqual(at_default[0]["rank_correlation_vs_default"], 1.0, param_name)
+            self.assertEqual(at_default[0]["top5_overlap_vs_default"], 1.0, param_name)
+            self.assertEqual(at_default[0]["top10_overlap_vs_default"], 1.0, param_name)
+
+    def test_rank_movement_covers_every_panel_candidate(self):
+        result = parameter_robustness_sweep(reference=None)
+        panel_labels = {c["label"] for c in _rpi_sensitivity_panel()}
+        for param_name, entry in result["one_at_a_time"].items():
+            self.assertEqual(set(entry["rank_movement_by_candidate"]), panel_labels, param_name)
+            self.assertIn(entry["worst_mover"], panel_labels, param_name)
+
+    def test_geo_and_time_sweeps_are_not_tautological(self):
+        """Without the geo/time-varying M-R candidates in _rpi_sensitivity_panel, every
+        candidate would sit at country='USA', year='2001' and geo_d0_km/time_tau_years
+        could never reorder anything -- the exact tautology class this module's other
+        sweeps have already been fixed for twice (host_decay, jeffreys_alpha)."""
+        result = parameter_robustness_sweep(reference=None)
+        for param_name in ("geo_d0_km", "time_tau_years"):
+            corr = [p["rank_correlation_vs_default"]
+                   for p in result["one_at_a_time"][param_name]["points"]]
+            self.assertLess(min(corr), 1.0, param_name)
+
+    def test_joint_sweep_is_a_full_factorial_over_the_swept_scales(self):
+        result = parameter_robustness_sweep(reference=None, joint_scales=(0.7, 1.0, 1.3))
+        self.assertEqual(result["joint_sweep"]["n_combinations"], 3 ** 4)
+        self.assertEqual(result["joint_sweep"]["max_rank_correlation"], 1.0)
+        self.assertLessEqual(result["joint_sweep"]["min_rank_correlation"], 1.0)
+
+    def test_explicitly_disclaims_optimality(self):
+        """Task requirement (2026-09-23 review): report this as a robustness/
+        sensitivity analysis, never as proof the current defaults are optimal."""
+        note = parameter_robustness_sweep(reference=None)["note"].lower()
+        self.assertIn("robustness", note)
+        self.assertIn("not an optimization", note)
+
+    def test_plot_writes_a_nonempty_file(self):
+        result = parameter_robustness_sweep(reference=None, joint_scales=(0.7, 1.0, 1.3))
+        out = Path(tempfile.mkdtemp()) / "sweep_test.png"
+        self.addCleanup(lambda: out.unlink(missing_ok=True))
+        returned = plot_parameter_robustness_sweep(result, out)
+        self.assertEqual(returned, out)
+        self.assertTrue(out.exists())
+        self.assertGreater(out.stat().st_size, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -8577,7 +9216,7 @@ def _fixture_isolate(
         s_protein_aa="", m_protein_aa="", l_protein_aa="", concatenated_protein_aa="",
         segments_present=["S", "M", "L"], coding_complete_segments=["S", "M", "L"],
         triplet_status="coding_complete_triplet", has_complete_triplet=True,
-        is_lab_derived=lab, is_vaccine_strain=vaccine, has_nss_orf=False,
+        is_lab_derived=lab, is_vaccine_strain=vaccine, is_incidental_host=False, has_nss_orf=False,
         metadata_conflict=False, taxonomic_incongruence=False, cross_species_partners=[],
         kmer_cluster_id="", s_protein_accessions=[], m_protein_accessions=[],
         l_protein_accessions=[], all_accessions=[], warnings=[],
@@ -9693,13 +10332,99 @@ def _validate_main(argv=None) -> int:
 
 
 
+def plot_parameter_robustness_sweep(result: Dict[str, Any], output_path: Path) -> Path:
+    """Render parameter_robustness_sweep's output as a robustness/sensitivity figure --
+    NOT a proof of optimal values (see that function's docstring). Four panels for the
+    one-at-a-time sweeps (geo_d0_km, time_tau_years, host_decay_scale,
+    retention_f_scale), plus one panel for the joint sweep. Each one-at-a-time panel
+    plots, on the fixed SYNTHETIC sensitivity panel: Spearman rank correlation and
+    top-5/top-10 overlap against the current default, with the default marked by a
+    vertical dashed line; a red-shaded band marks any grid point where the REAL
+    a/b1/b2/c discrimination panel's overall_ranking_supported went False (if the
+    sweep was run with a reference and that evidence is present). The two kinds of
+    evidence are never combined into one line -- synthetic gives the continuous
+    curves, real gives only the pass/fail band, exactly the distinction
+    parameter_robustness_sweep's own `evidence_labels` documents.
+
+    Imports matplotlib lazily (same convention as figures.py) so importing rpi_core
+    does not require it for callers that never plot.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig = plt.figure(figsize=(13, 11))
+    grid = fig.add_gridspec(3, 2, height_ratios=[1, 1, 1.1])
+    panel_specs = [
+        ("geo_d0_km", "Geo d0 (km)", grid[0, 0]),
+        ("time_tau_years", "Time tau (years)", grid[0, 1]),
+        ("host_decay_scale", "Host decay scale (x default ladder)", grid[1, 0]),
+        ("retention_f_scale", "Retention F scale (x default 0.15)", grid[1, 1]),
+    ]
+    for param_name, xlabel, spec in panel_specs:
+        ax = fig.add_subplot(spec)
+        entry = result["one_at_a_time"][param_name]
+        xs = [p[param_name] for p in entry["points"]]
+        corr = [p["rank_correlation_vs_default"] for p in entry["points"]]
+        top5 = [p["top5_overlap_vs_default"] for p in entry["points"]]
+        top10 = [p["top10_overlap_vs_default"] for p in entry["points"]]
+        ax.plot(xs, corr, "o-", color="tab:blue", label="Spearman rank correlation")
+        ax.plot(xs, top5, "s--", color="tab:orange", label="Top-5 overlap")
+        ax.plot(xs, top10, "^--", color="tab:green", label="Top-10 overlap")
+        if entry["default"] is not None:
+            ax.axvline(entry["default"], color="black", linestyle=":", linewidth=1,
+                       label=f"current default ({entry['default']:g})")
+        for point in entry["points"]:
+            real = point.get("real_discrimination_panel")
+            if real is not None and not real["overall_ranking_supported"]:
+                ax.axvspan(point[param_name] - 0.02 * (max(xs) - min(xs)),
+                          point[param_name] + 0.02 * (max(xs) - min(xs)),
+                          color="red", alpha=0.15)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel("stability metric (1.0 = unchanged)")
+        ax.set_ylim(0, 1.05)
+        ax.set_title(f"{param_name} -- SYNTHETIC panel "
+                     f"(worst mover: {entry['worst_mover']})", fontsize=9)
+        ax.legend(fontsize=7, loc="lower center")
+        ax.grid(alpha=0.3)
+
+    ax_joint = fig.add_subplot(grid[2, :])
+    joint = result["joint_sweep"]
+    correlations = sorted(
+        e["rank_correlation_vs_default"] for e in joint["combinations"]
+        if not math.isnan(e["rank_correlation_vs_default"]))
+    ax_joint.hist(correlations, bins=20, color="tab:purple", alpha=0.7)
+    ax_joint.axvline(joint["min_rank_correlation"], color="red", linestyle="--",
+                     label=f"worst joint combo (rho={joint['min_rank_correlation']:.3f})")
+    title = (f"Joint sweep -- SYNTHETIC panel, {joint['n_combinations']} combinations "
+             f"of (geo_d0_km, time_tau_years, host_decay, F) at scales "
+             f"{joint['scales_swept']}")
+    if "real_discrimination_panel_pass_fraction" in joint:
+        title += (f"\nREAL discrimination panel: overall_ranking_supported held in "
+                  f"{joint['real_discrimination_panel_pass_fraction']:.0%} of combinations")
+    ax_joint.set_title(title, fontsize=9)
+    ax_joint.set_xlabel("Spearman rank correlation vs. all-defaults baseline")
+    ax_joint.set_ylabel("count of joint combinations")
+    ax_joint.legend(fontsize=8)
+    ax_joint.grid(alpha=0.3)
+
+    fig.suptitle("RPI parameter robustness and sensitivity analysis\n"
+                 "(robustness across a swept range, not a claim of optimal values)",
+                 fontsize=11, fontweight="bold")
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    return output_path
+
+
 ###############################################################################
 # pipeline.py -- single orchestrating entry point over the whole toolchain.
 ###############################################################################
 
 
 
-COMMANDS = ("run", "validate", "calibrate", "score")
+COMMANDS = ("run", "validate", "calibrate", "score", "robustness-sweep")
 
 
 class PipelineStageError(RuntimeError):
@@ -9818,7 +10543,55 @@ def _pipeline_main(argv: Optional[Sequence[str]] = None) -> int:
         return _calibration_main(rest)
     if command == "score":
         return _detector_main(rest)
+    if command == "robustness-sweep":
+        return _robustness_sweep_main(rest)
     return run(_parse_run_args(rest))
+
+
+def _parse_robustness_sweep_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(prog="pipeline.py robustness-sweep")
+    parser.add_argument("--reference-input", default=".",
+                        help="project root containing the output/ directory (Stage 1's "
+                             "reference snapshot) -- used only if --skip-real-panel is "
+                             "NOT passed")
+    parser.add_argument("--skip-real-panel", action="store_true",
+                        help="Run the synthetic-panel half only -- fast (seconds), no "
+                             "all_hanta/ reference snapshot required. Without this flag, "
+                             "also builds and rescores the real a/b1/b2/c discrimination "
+                             "panel once (~1 minute) and reports overall_ranking_supported "
+                             "at every grid point.")
+    parser.add_argument("--output", type=Path,
+                        default=Path("output") / "rpi_parameter_robustness_sweep.json")
+    parser.add_argument("--figure", type=Path,
+                        default=Path("output") / "figures" / "parameter_robustness_sweep.png")
+    parser.add_argument("--seed", type=int, default=None)
+    return parser.parse_args(argv)
+
+
+def _robustness_sweep_main(argv: Optional[Sequence[str]] = None) -> int:
+    args = _parse_robustness_sweep_args(argv)
+    reference = None
+    if not args.skip_real_panel:
+        reference = prep.load_reference_data(Path(args.reference_input) / "output")
+    result = parameter_robustness_sweep(reference=reference, seed=args.seed)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(
+        json.dumps(_json_safe(result), indent=2, default=str, allow_nan=False),
+        encoding="utf-8")
+    print(f"wrote {args.output}")
+    plot_parameter_robustness_sweep(result, args.figure)
+    print(f"wrote {args.figure}")
+    for param_name, entry in result["one_at_a_time"].items():
+        corr = [p["rank_correlation_vs_default"] for p in entry["points"]]
+        print(f"{param_name}: rank_correlation range [{min(corr):.3f}, {max(corr):.3f}], "
+              f"worst mover {entry['worst_mover']}")
+    joint = result["joint_sweep"]
+    print(f"joint sweep ({joint['n_combinations']} combos): rank_correlation range "
+          f"[{joint['min_rank_correlation']:.3f}, {joint['max_rank_correlation']:.3f}]")
+    if "real_discrimination_panel_pass_fraction" in joint:
+        print(f"real discrimination panel pass fraction: "
+              f"{joint['real_discrimination_panel_pass_fraction']:.0%}")
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -9965,6 +10738,12 @@ class MainDispatchTest(unittest.TestCase):
         with mock.patch(__name__ + "._detector_main", return_value=0) as fake_detector:
             exit_code = _pipeline_main(["score", "--reference-input", ".", "--candidate", "x"])
         fake_detector.assert_called_once_with(["--reference-input", ".", "--candidate", "x"])
+        self.assertEqual(exit_code, 0)
+
+    def test_robustness_sweep_command_passes_through_remaining_args(self):
+        with mock.patch(__name__ + "._robustness_sweep_main", return_value=0) as fake_sweep:
+            exit_code = _pipeline_main(["robustness-sweep", "--skip-real-panel"])
+        fake_sweep.assert_called_once_with(["--skip-real-panel"])
         self.assertEqual(exit_code, 0)
 
 

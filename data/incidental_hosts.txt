@@ -1,0 +1,6 @@
+# List of dead-end / incidental hosts for hantaviruses.
+# Isolates from these hosts are treated as proxies for the local reservoir-associated lineage
+# and do not carry their own sylvatic ecology for reassortment scoring.
+Homo sapiens
+Homo
+Saguinus bicolor

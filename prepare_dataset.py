@@ -754,6 +754,7 @@ class IsolateRecord:
     has_complete_triplet: bool
     is_lab_derived: bool
     is_vaccine_strain: bool
+    is_incidental_host: bool
     has_nss_orf: bool
     metadata_conflict: bool
     taxonomic_incongruence: bool
@@ -1088,7 +1089,11 @@ def load_reference_data(output_dir: Path) -> ReferenceData:
                 "directory before trusting downstream results.",
                 output_dir, snapshot_version, VERSION)
 
-    isolates = [IsolateRecord(**row) for row in json.loads(isolates_path.read_text(encoding="utf-8"))]
+    isolates_data = json.loads(isolates_path.read_text(encoding="utf-8"))
+    for r in isolates_data:
+        if "is_incidental_host" not in r:
+            r["is_incidental_host"] = False
+    isolates = [IsolateRecord(**row) for row in isolates_data]
     genomic_index: Dict[str, FastaRecord] = {}
     for row in json.loads(genomic_path.read_text(encoding="utf-8")):
         record = FastaRecord(**row)
@@ -1876,6 +1881,11 @@ def deduplicate_by_sequence_hash(records: Sequence[AccessionRecord]) -> List[Acc
 
 
 def build_isolate_records(accessions: Sequence[AccessionRecord]) -> List[IsolateRecord]:
+    incidental_hosts_file = Path(__file__).parent / "data" / "incidental_hosts.txt"
+    incidental_hosts = set()
+    if incidental_hosts_file.exists():
+        incidental_hosts = {line.strip() for line in incidental_hosts_file.read_text(encoding="utf-8").splitlines() if line.strip() and not line.startswith("#")}
+
     groups: DefaultDict[str, List[AccessionRecord]] = defaultdict(list)
     for record in accessions:
         groups[record.group_key].append(record)
@@ -1963,6 +1973,7 @@ def build_isolate_records(accessions: Sequence[AccessionRecord]) -> List[Isolate
             has_complete_triplet=len(coding_complete) == 3,
             is_lab_derived=any(r.is_lab_host for r in ordered),
             is_vaccine_strain=any(r.is_vaccine_strain for r in ordered),
+            is_incidental_host=pick("host_name") in incidental_hosts,
             has_nss_orf=any(r.has_nss_orf for r in ordered),
             metadata_conflict=metadata_conflict,
             # Within a group this is always False by construction (the group key contains
@@ -3429,7 +3440,7 @@ def _make_isolate(key: str, species: str, s_acc: str, m_acc: str, l_acc: str,
         concatenated_protein_aa="M" * 180,
         segments_present=["S", "M", "L"], coding_complete_segments=["S", "M", "L"],
         triplet_status="coding_complete_triplet", has_complete_triplet=True,
-        is_lab_derived=False, is_vaccine_strain=False, has_nss_orf=False,
+        is_lab_derived=False, is_vaccine_strain=False, is_incidental_host=False, has_nss_orf=False,
         metadata_conflict=False, taxonomic_incongruence=False, cross_species_partners=[],
         kmer_cluster_id="", s_protein_accessions=[], m_protein_accessions=[],
         l_protein_accessions=[], all_accessions=[s_acc, m_acc, l_acc], warnings=[],

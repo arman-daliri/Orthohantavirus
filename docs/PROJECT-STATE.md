@@ -466,6 +466,58 @@ of the overall E-factor/shared-eligibility/tanglegram design). Track in section 
 rather than as a separate `docs/superpowers/specs/` entry — this repo consolidates all planning
 into `PROJECT-STATE.md` per Phase 13's own consolidation decision.
 
+**Phase 14 implementation (2026-09-23).** Design above implemented in `rpi_core.py`, with two
+citation corrections found during Zotero cross-check before implementation:
+- The 12.5 km Tula-virus contact-zone claim (originally attributed to "Schlegel et al." in an
+  Antigravity-authored brain-doc draft, unverifiable against Zotero at the time) is actually
+  **Labutin et al. 2026**, *PLOS Pathogens* 22(7):e1014458, DOI 10.1371/journal.ppat.1014458 —
+  confirmed after the user added it to Zotero. Cited correctly in `rpi_core.py` and README.
+- Razzauti et al. 2009 was being cited backwards in the original draft (as evidence of
+  cross-distance compartmentalization); its actual finding — two distinct PUUV lineages
+  co-circulating and reassorting at 32% frequency **within one small trapping site** — is
+  evidence for *local co-location* mattering, which is how it is now cited.
+- Olson 2001 (ecoregions), cited in the original draft for the biogeographic-barrier argument,
+  is not in the Zotero library and was dropped; the barrier argument (oceans/deserts/mountains
+  between sylvatic rodent ranges) is stated as unremarkable geography needing no citation.
+
+**What shipped** (`rpi_core.py`):
+- `data/country_centroids.csv`: 81 rows (one per non-empty country string in the reference
+  snapshot, verified by direct count against `output/phylo_rpi_ga_isolates.json`), lat/lon from
+  public-domain gazetteer-style figures — approximate, not survey-grade (the exponential decay
+  means centroid error changes the score smoothly, not by a cliff, unlike the old binary rule).
+- `geo_decay`/`time_decay` (`rpi_core.py`, near `host_rank_proximity`): the exact formulas above,
+  replacing the binary country-match / inverse-gap-year block inside `ecological_opportunity`.
+  Same neutral-on-missing and same-country/touching-span tolerances as before. Unmapped country
+  raises `KeyError` (fail loud, mirrors `COUNTRY_CONTINENT`'s existing rule) rather than guessing.
+- `RPI_WEIGHTS["geo_d0_km"] = 1090.0`, `RPI_WEIGHTS["time_tau_years"] = 25.0` — both added to
+  `sensitivity_sweep`'s existing "every assumed parameter" sweep (spec 12), and both required
+  extending `_rpi_sensitivity_panel` with six new geo/time-varying candidates (labels M–R):
+  every pre-existing candidate used `country="USA", year="2001"` on both sides, so a sweep
+  against the old panel alone would have been tautological (geo=time=1.0 regardless of d0/tau) —
+  the same defect class this module's host_decay/jeffreys_alpha sweeps were already fixed for.
+- `parameter_robustness_sweep` + CLI `python rpi_core.py robustness-sweep`: the four-requirement
+  robustness/sensitivity analysis from the 2026-09-23 review (top-k stability, per-candidate rank
+  movement, synthetic-vs-real evidence kept separate and labeled, a modest joint sweep — see the
+  function's own docstring for the full method). **Explicitly a robustness check, not an
+  optimality proof** — no ground-truth label set exists to optimize these four parameters
+  against. `score_candidate` gained a `_rpi_recompute_kwargs` field (private, additive, not part
+  of the documented row schema) so the real a/b1/b2/c discrimination panel's expensive half
+  (gate0-3 + ViennaRNA, ~50s measured) runs once per sweep call rather than once per grid cell;
+  rescoring under a different `RPI_WEIGHTS` is then pure `compute_rpi` arithmetic.
+- **Measured 2026-09-23** (`output/rpi_parameter_robustness_sweep.json`,
+  `output/figures/parameter_robustness_sweep.png`): one-at-a-time rank correlation stayed
+  ≥ 0.826 (geo_d0_km), ≥ 0.932 (time_tau_years), ≥ 0.946 (host_decay scale), ≥ 0.981 (F scale)
+  across each parameter's full swept range; the 81-combination joint sweep (all four parameters
+  at ±30% together) stayed ≥ 0.992. The real discrimination panel's `overall_ranking_supported`
+  held **True at every one-at-a-time grid point and every joint combination tested (100%)** —
+  i.e. the Phase 5 fix (§4 Phase 5) that flipped `overall_ranking_supported` False→True is not
+  fragile to any of these four parameters within the swept ranges.
+- Guard tests: `GeoTimeDecayTest` (10 tests, `geo_decay`/`time_decay` in isolation),
+  `ParameterRobustnessSweepTest` (8 tests, synthetic-panel half — the real-panel half is
+  exercised manually via the CLI, same convention as the rest of this module's expensive real-
+  data paths), plus updates to `EcologicalOpportunityTest`/`SensitivityAndRankTest` for the new
+  formula and the two new swept parameters.
+
 ---
 
 ## 5. Current state (as of 2026-09-18 evening; `git log` outranks this section)
@@ -637,3 +689,26 @@ empty Remote-Control bridge stubs (`1dd9bd43`, `68c5589a`). Raw transcripts are 
 recoverable; anything not written here or in git is gone. The manual copy at
 `~/.claude/projects/.../backup_sessions_2026-09-05/` (eight older transcripts) was **not**
 touched.
+
+### Host (Species) Term
+- **Current State:** Decays based on taxonomic proximity (species -> genus -> family -> order) using values in `RPI_WEIGHTS`.
+- **Flaw:** Taxonomy logic penalized incidental human clinical cases (`Homo sapiens`) as `different_order` (score: 0.01) when paired with a reservoir rodent, conflating sampling context with biological ecology.
+- **Target Changes (Completed):**
+  1. Add an `is_incidental_host` flag to `IsolateRecord` during Stage 1 (`prepare_dataset.py`) using `data/incidental_hosts.txt`.
+  2. Map these to a distinct verdict, `dead_end_spillover_host` (1.0), in `rpi_core.py`'s `host_rank_proximity`.
+  3. Ensure this flag is held fixed during the sensitivity sweep by adding it to `RPI_HOST_DECAY_NOT_PERTURBED`.
+- **Validation (Completed):** The fix correctly boosts the host scores for `gan22` and `202003197` from 0.01 to 1.0. Re-running the discrimination panel confirmed this restores the `overall_ranking_supported` test from `False` to `True`.
+
+### Polymerase Compatibility (M_pol)
+- **Current State:** The `M_pol` factor encodes the species-specific N-protein recognition footprint. Following Mir & Panganiban, we assign a 23-nt footprint to *Orthohantavirus sinnombreense* (SNV). For all other species, we use a 9-nt default based on structural analogy with rotavirus (McDonald et al., 2016).
+- **Behavior (Verified):** Because this 9-nt footprint lies entirely within the genus-wide 14-nt conserved terminal tag, the algorithm honestly abstains (score = 1.0, status = `no_signal_beyond_tag`) for all non-SNV backbones to avoid measuring an invariant sequence. Consequently, `M_pol` acts as a targeted discriminator.
+- **Validation:** In the real pipeline run, it successfully scored the SNV-backbone candidates (yielding identity scores like 0.74), while abstaining for 73 non-SNV backbones. This provides enough variance across the panel (0.0012) to clear the Spec 6.2 signal threshold (`RPI_M_POL_MIN_VARIANCE` = 1e-4), proving the factor is mathematically valid and biologically sound.
+- **Next Steps:** *This targeted behavior (abstaining for non-SNV backbones) must be explicitly disclosed with accurate citations (McDonald 2016 for Rotavirus analogy, Mir & Panganiban for SNV 23-nt footprint) in the `README.md` and manuscript to prevent readers from assuming `M_pol` is a universally active discriminator.*
+
+### Retention Factor (F)
+- **Current State:** The F factor scales `rpi_generation` to `rpi_retention`. Specifically, the `retention_by_odd_segment` logic applies a heavy penalty (0.15) if the S or L segment is swapped, while leaving M untouched (1.0). This was historically anchored to a secondhand citation of Henderson 1995 (via Rodriguez 1998) which observed a 14:2:1 (M:S:L) natural reassortment ratio.
+- **Critical Review:** Primary review of Henderson 1995 confirms the paper supports segment-specific phylogenetic incongruence analysis and notes that most inferred events involved the M segment. However, the study used short PCR fragments and **did not** establish or validate a single numerical scoring factor (like 0.15). Citing it as numerical validation for the F factor is scientifically inaccurate.
+- **Next Steps (Manuscript & Validation):** 
+  1. The `README.md` and manuscript must use the following precise phrasing to avoid overclaiming: *"The F factor is a project-derived heuristic inspired by the segment incongruence and reassortment framework described by Henderson et al. (1995); it is not a metric established or validated in that study."*
+  2. Because the numerical value is a heuristic, its defense rests entirely on the pipeline's computational rigor. We must rely on the existing **discrimination panel** (benchmarking against known and simulated reassortants) and the **+/- 50% sensitivity sweep** to mathematically prove that the final rankings survive regardless of the exact 0.15 penalty value.
+
