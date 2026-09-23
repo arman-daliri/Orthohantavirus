@@ -1448,12 +1448,25 @@ def ecological_opportunity(
 
     Returns 1.0 (neutral) when fewer than two species are implicated: there is no
     co-infection requirement to test, so E must not penalise.
+
+    `rpi_e_unknown_components` (added 2026-09-23): a single comma-joined diagnostic
+    column -- e.g. "geo", "host,time", or "" -- naming which of host/geo/time landed
+    at their reported value because of MISSING metadata rather than a genuine match.
+    A neutral 1.0 means the same thing numerically whether it comes from "same
+    country" or "country unknown", by design (missing must not masquerade as
+    separation) -- but a reviewer auditing a specific row still needs to tell those
+    two cases apart, and one column is the minimum that lets them, without adding a
+    column per factor or changing what any score means. PURELY DESCRIPTIVE: computed
+    after `worst` is finalised, never fed back into rpi_e_total, rpi_generation, or
+    any other score -- Algorithm.py's GA fitness reads only rpi_generation and
+    explicitly whitelists which columns it keeps, so this column existing has zero
+    effect on the search.
     """
     table = _weights(weights)
     floor = table["eco_floor"]
     if len(implicated_species) < 2:
         return {"rpi_e_host": 1.0, "rpi_e_geo": 1.0, "rpi_e_time": 1.0, "rpi_e_total": 1.0,
-                "rpi_e_isolate_basis": isolate_basis}
+                "rpi_e_isolate_basis": isolate_basis, "rpi_e_unknown_components": ""}
 
     all_species_present = {isolate.species_name for isolate in isolates}
     wild_species_present = {
@@ -1461,6 +1474,7 @@ def ecological_opportunity(
         if not isolate.is_lab_derived and not isolate.is_vaccine_strain}
 
     worst = {"rpi_e_host": 1.0, "rpi_e_geo": 1.0, "rpi_e_time": 1.0}
+    unknown = {"rpi_e_host": False, "rpi_e_geo": False, "rpi_e_time": False}
     for index, species_a in enumerate(implicated_species):
         for species_b in implicated_species[index + 1:]:
             isolate_a = parent_isolates.get(species_a)
@@ -1475,25 +1489,41 @@ def ecological_opportunity(
                 #      isolates is lab- or vaccine-derived (so resolution correctly
                 #      found none): there is genuinely no wild population, so no
                 #      natural ecological route -- the host term takes the floor rather
-                #      than defaulting to full opportunity.
+                #      than defaulting to full opportunity. A genuine (negative)
+                #      signal, not missing data, so NOT marked unknown.
                 #  (b) the species does not appear in the reference AT ALL (novel, or
                 #      simply never sampled): that is unknown, not separated. Scoring
                 #      it as impossible would contradict gate3_check's own
                 #      "ecology_unknown" treatment of this exact situation and would
                 #      punish a candidate for lack of data rather than lack of
-                #      plausibility -- stay neutral and leave `worst` untouched.
+                #      plausibility -- stay neutral and leave `worst` untouched. No
+                #      host/geo/time comparison ran at all for this pair, so all three
+                #      are marked unknown.
                 for species, isolate in ((species_a, isolate_a), (species_b, isolate_b)):
                     if isolate is not None:
                         continue
                     if species not in all_species_present:
+                        unknown["rpi_e_host"] = True
+                        unknown["rpi_e_geo"] = True
+                        unknown["rpi_e_time"] = True
                         continue
                     if species not in wild_species_present:
                         worst["rpi_e_host"] = min(worst["rpi_e_host"], floor)
                 continue
 
-            host = table["host_decay"][host_rank_proximity(isolate_a, isolate_b)]
-            geo = geo_decay(isolate_a.country, isolate_b.country, table["geo_d0_km"], floor)
+            host_category = host_rank_proximity(isolate_a, isolate_b)
+            host = table["host_decay"][host_category]
+            if host_category == "unknown_host_metadata":
+                unknown["rpi_e_host"] = True
+
+            country_a, country_b = isolate_a.country, isolate_b.country
+            if not country_a or not country_b:
+                unknown["rpi_e_geo"] = True
+            geo = geo_decay(country_a, country_b, table["geo_d0_km"], floor)
+
             span_a, span_b = _year_span([isolate_a]), _year_span([isolate_b])
+            if span_a is None or span_b is None:
+                unknown["rpi_e_time"] = True
             time = time_decay(span_a, span_b, table["time_tau_years"], floor)
 
             worst["rpi_e_host"] = min(worst["rpi_e_host"], host)
@@ -1502,6 +1532,15 @@ def ecological_opportunity(
 
     worst["rpi_e_total"] = worst["rpi_e_host"] * worst["rpi_e_geo"] * worst["rpi_e_time"]
     worst["rpi_e_isolate_basis"] = isolate_basis
+    # Gated on worst[...] == 1.0: an "unknown" pair can only ever contribute exactly
+    # 1.0 (it is the neutral value by construction), and min() can only report 1.0 as
+    # the WORST across all pairs if every pair reached exactly 1.0 -- so if the final
+    # value is below 1.0, some other, fully-known pair set it, and the unknown flag
+    # (from a different, non-deciding pair) is not what produced the reported number.
+    worst["rpi_e_unknown_components"] = ",".join(
+        name for name in ("host", "geo", "time")
+        if unknown[f"rpi_e_{name}"] and worst[f"rpi_e_{name}"] == 1.0
+    )
     return worst
 
 
@@ -5169,6 +5208,76 @@ class EcologicalOpportunityTest(unittest.TestCase):
         result = ecological_opportunity(
             ["A", "B"], [a, b], _parent_map(a, b), "actual_parents")
         self.assertEqual(result["rpi_e_host"], 1.0)
+
+    def test_unknown_components_names_host_when_metadata_is_missing(self):
+        """The diagnostic column must distinguish 'neutral because unknown' from
+        'neutral because it genuinely matched' -- both score rpi_e_host = 1.0, but only
+        the missing-metadata case belongs in rpi_e_unknown_components."""
+        a = _eco_isolate("A", "USA", "2001")
+        b = _eco_isolate("B", "USA", "2001", host_order="", host_family="", host_name="")
+        result = ecological_opportunity(
+            ["A", "B"], [a, b], _parent_map(a, b), "actual_parents")
+        self.assertEqual(result["rpi_e_host"], 1.0)
+        self.assertIn("host", result["rpi_e_unknown_components"].split(","))
+
+    def test_unknown_components_names_geo_when_country_is_missing(self):
+        a = _eco_isolate("A", "", "2001")
+        b = _eco_isolate("B", "USA", "2001")
+        result = ecological_opportunity(
+            ["A", "B"], [a, b], _parent_map(a, b), "actual_parents")
+        self.assertEqual(result["rpi_e_geo"], 1.0)
+        self.assertIn("geo", result["rpi_e_unknown_components"].split(","))
+
+    def test_unknown_components_names_time_when_year_is_missing(self):
+        a = _eco_isolate("A", "USA", "")
+        b = _eco_isolate("B", "USA", "2001")
+        result = ecological_opportunity(
+            ["A", "B"], [a, b], _parent_map(a, b), "actual_parents")
+        self.assertEqual(result["rpi_e_time"], 1.0)
+        self.assertIn("time", result["rpi_e_unknown_components"].split(","))
+
+    def test_unknown_components_stays_empty_for_a_genuine_match(self):
+        """Same country, same species, overlapping years: rpi_e_total = 1.0 because
+        every factor genuinely matched, not because of missing data -- the diagnostic
+        column must stay empty, not flag a real result as uncertain."""
+        a = _eco_isolate("A", "USA", "2001")
+        b = _eco_isolate("B", "USA", "2001")
+        result = ecological_opportunity(
+            ["A", "B"], [a, b], _parent_map(a, b), "actual_parents")
+        self.assertEqual(result["rpi_e_total"], 1.0)
+        self.assertEqual(result["rpi_e_unknown_components"], "")
+
+    def test_unknown_components_omits_a_factor_that_a_known_pair_actually_decided(self):
+        """Three implicated species: A-B share a known, far-apart geography (drives geo
+        below 1.0); A-C has an unknown country. The reported rpi_e_geo comes from the
+        KNOWN A-B pair (the worst), so geo must NOT appear in unknown_components even
+        though some pair's country was missing -- the column describes what produced
+        the reported number, not merely 'was any metadata missing anywhere'."""
+        a = _eco_isolate("A", "USA", "2001")
+        b = _eco_isolate("B", "Chile", "2001")
+        c = _eco_isolate("C", "", "2001")
+        result = ecological_opportunity(
+            ["A", "B", "C"], [a, b, c], _parent_map(a, b, c), "actual_parents")
+        self.assertLess(result["rpi_e_geo"], 1.0)
+        self.assertNotIn("geo", result["rpi_e_unknown_components"].split(","))
+
+    def test_unknown_components_never_changes_the_score(self):
+        """Purely descriptive: two candidates identical except for whether their
+        missing-country neutrality is 'real' (both known, different-but-nearby
+        countries happening to score close to 1.0) vs 'unknown' must not differ in
+        rpi_e_total merely because one is flagged -- the flag is computed AFTER worst
+        is finalised and never written back into it."""
+        known_a = _eco_isolate("A", "USA", "2001")
+        known_b = _eco_isolate("B", "USA", "2001")
+        known = ecological_opportunity(
+            ["A", "B"], [known_a, known_b], _parent_map(known_a, known_b), "actual_parents")
+        unknown_a = _eco_isolate("A", "USA", "2001")
+        unknown_b = _eco_isolate("B", "", "2001")
+        unknown = ecological_opportunity(
+            ["A", "B"], [unknown_a, unknown_b], _parent_map(unknown_a, unknown_b),
+            "actual_parents")
+        self.assertEqual(known["rpi_e_total"], unknown["rpi_e_total"])
+        self.assertEqual(known["rpi_e_geo"], unknown["rpi_e_geo"])
 
     def test_single_implicated_species_returns_neutral_one(self):
         a = _eco_isolate("A", "USA", "2001")
