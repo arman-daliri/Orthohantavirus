@@ -968,6 +968,8 @@ def gate2_track_a(candidate_m_protein: str, implicated_species: List[str]) -> Ga
 
     ph_ok = True
     for _label, position in anchor["ph_switch"].items():
+        if position is None:
+            continue
         residue, aligned = find_aligned_residue(candidate_m_protein, ref_seq, position)
         ref_residue = ref_seq[position - 1]
         if not aligned or residue != ref_residue:
@@ -3077,6 +3079,18 @@ def _scaled_retention(scale: float) -> Dict[str, float]:
     return {k: v * scale for k, v in RPI_WEIGHTS["retention_by_odd_segment"].items()}
 
 
+def _weights_override(**overrides: Any) -> Dict[str, Any]:
+    """RPI_WEIGHTS with the given top-level keys replaced, one shallow copy. Safe
+    because every caller replaces a WHOLE key -- a new scalar, or a brand-new dict
+    from _perturbed_host_decay/_scaled_retention -- never mutates a nested dict of the
+    original RPI_WEIGHTS in place. Shared by parameter_robustness_sweep's four
+    one-at-a-time closures and its joint sweep, which used to hand-roll this same
+    dict(RPI_WEIGHTS)-plus-key-assignment sequence in five separate places."""
+    table = dict(RPI_WEIGHTS)
+    table.update(overrides)
+    return table
+
+
 # ---------------------------------------------------------------------------
 # parameter_robustness_sweep -- Phase 14 extension (2026-09-23).
 #
@@ -3312,30 +3326,17 @@ def parameter_robustness_sweep(
     baseline_generation = baseline_scored["generation"]
     baseline_retention = baseline_scored["retention"]
 
-    # RPI_WEIGHTS is never mutated in place below -- every perturbation REPLACES a
-    # top-level key with a new value (a new scalar, or a brand-new dict from
-    # _perturbed_host_decay/_scaled_retention) rather than editing a nested dict in
-    # place. A shallow copy of the top-level dict is therefore exactly as safe as
-    # copy.deepcopy here, at a fraction of the cost.
     def weights_geo(value: float) -> Dict[str, Any]:
-        table = dict(RPI_WEIGHTS)
-        table["geo_d0_km"] = value
-        return table
+        return _weights_override(geo_d0_km=value)
 
     def weights_time(value: float) -> Dict[str, Any]:
-        table = dict(RPI_WEIGHTS)
-        table["time_tau_years"] = value
-        return table
+        return _weights_override(time_tau_years=value)
 
     def weights_host(scale: float) -> Dict[str, Any]:
-        table = dict(RPI_WEIGHTS)
-        table["host_decay"] = _perturbed_host_decay(scale)
-        return table
+        return _weights_override(host_decay=_perturbed_host_decay(scale))
 
     def weights_f(scale: float) -> Dict[str, Any]:
-        table = dict(RPI_WEIGHTS)
-        table["retention_by_odd_segment"] = _scaled_retention(scale)
-        return table
+        return _weights_override(retention_by_odd_segment=_scaled_retention(scale))
 
     one_at_a_time = {
         "geo_d0_km": _one_parameter_curve(
@@ -3356,11 +3357,12 @@ def parameter_robustness_sweep(
     labels = [c["label"] for c in panel]
     joint_results = []
     for d0_scale, tau_scale, host_scale, f_scale in itertools.product(joint_scales, repeat=4):
-        table = dict(RPI_WEIGHTS)
-        table["geo_d0_km"] = RPI_WEIGHTS["geo_d0_km"] * d0_scale
-        table["time_tau_years"] = RPI_WEIGHTS["time_tau_years"] * tau_scale
-        table["host_decay"] = _perturbed_host_decay(host_scale)
-        table["retention_by_odd_segment"] = _scaled_retention(f_scale)
+        table = _weights_override(
+            geo_d0_km=RPI_WEIGHTS["geo_d0_km"] * d0_scale,
+            time_tau_years=RPI_WEIGHTS["time_tau_years"] * tau_scale,
+            host_decay=_perturbed_host_decay(host_scale),
+            retention_by_odd_segment=_scaled_retention(f_scale),
+        )
         scored_generation = _score_panel(panel, table)["generation"]
         entry: Dict[str, Any] = {
             "d0_scale": d0_scale, "tau_scale": tau_scale,
@@ -3868,6 +3870,13 @@ def _detector_main(argv=None) -> int:
     args.mafft_bin, args.iqtree_bin = mafft_bin, iqtree_bin
 
     rows = [score_candidate(c, reference, precomputed, args) for c in candidates]
+    # Drop private/internal fields (leading underscore, e.g. score_candidate's
+    # _rpi_recompute_kwargs) before they reach a shipped CSV -- those keys are
+    # documented as "not part of the documented result schema" and, in
+    # _rpi_recompute_kwargs's case, embed the full reference.isolates list, which must
+    # never land in a reviewer-facing artifact.
+    rows = [{key: value for key, value in row.items() if not key.startswith("_")}
+            for row in rows]
 
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -4333,6 +4342,22 @@ class Gate2TrackATest(unittest.TestCase):
         result = gate2_track_a("M" * 1100, ["Orthohantavirus seoulense"])
         self.assertTrue(result.structural_check_not_available)
         self.assertIsNone(result.waasa_intact)
+
+    def test_none_ph_switch_position_is_skipped_not_a_crash(self):
+        """Mirrors the tmis loop's existing `if position is None: continue` guard --
+        STRUCTURAL_ANCHORS already stores None for an uncitable tmis position
+        (hantanense's F900), proving a None position is a live, anticipated pattern in
+        this table, not just a tmis quirk. Before this guard, an anchor with a None
+        ph_switch position raised TypeError: unsupported operand type(s) for -:
+        'NoneType' and 'int' at `ref_seq[position - 1]`."""
+        species = "Orthohantavirus andesense"
+        anchor = copy.deepcopy(STRUCTURAL_ANCHORS[species])
+        first_label = next(iter(anchor["ph_switch"]))
+        anchor["ph_switch"][first_label] = None
+        with mock.patch.dict(STRUCTURAL_ANCHORS, {species: anchor}):
+            result = gate2_track_a(anchor["sequence"], [species])
+        self.assertFalse(result.structural_check_not_available)
+        self.assertTrue(result.ph_switch_conserved)
 
 
 class Gate2TrackBTest(unittest.TestCase):
@@ -4811,6 +4836,60 @@ class ParseArgsTest(unittest.TestCase):
     def test_requires_one_of_candidate_or_manifest(self):
         with self.assertRaises(SystemExit):
             parse_args(["--reference-input", "output", "--output", "output"])
+
+
+class DetectorMainCsvTest(unittest.TestCase):
+    """Assert on the row that SHIPS -- candidate_reassortment_table.csv, the file
+    _detector_main actually writes -- not on score_candidate's raw return dict.
+    Regression test for a real leak found by /code-review: score_candidate stashes a
+    private `_rpi_recompute_kwargs` key (embedding the full reference.isolates list)
+    onto its result for parameter_robustness_sweep's benefit; with no filtering, that
+    key -- and any other private/internal field a future change adds the same way --
+    would be written verbatim into this production CSV, exactly the "assert on the
+    row that ships, not the function that feeds it" defect class this project has
+    been bitten by before (docs/CLAUDE.md)."""
+
+    def _run_detector_main(self, fake_row: Dict[str, Any]) -> List[Dict[str, str]]:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            s_path, m_path, l_path = tmp_path / "s.fa", tmp_path / "m.fa", tmp_path / "l.fa"
+            _write_fasta(s_path, "s", "ACGT")
+            _write_fasta(m_path, "m", "TGCA")
+            _write_fasta(l_path, "l", "AATT")
+            output_dir = tmp_path / "output"
+
+            argv = ["--reference-input", str(tmp_path), "--output", str(output_dir),
+                    "--candidate", f"CAND1:{s_path},{m_path},{l_path}"]
+            with mock.patch.object(prep, "load_reference_data", return_value=mock.Mock()), \
+                 mock.patch.object(prep, "configure_logging"), \
+                 mock.patch(__name__ + "._build_precomputed", return_value={}), \
+                 mock.patch.object(ph, "resolve_binary", side_effect=lambda given, name: name), \
+                 mock.patch(__name__ + ".score_candidate", return_value=dict(fake_row)):
+                exit_code = _detector_main(argv)
+            self.assertEqual(exit_code, 0)
+            csv_path = output_dir / "candidate_reassortment_table.csv"
+            with csv_path.open(newline="", encoding="utf-8") as handle:
+                return list(csv.DictReader(handle))
+
+    def test_private_fields_never_reach_the_shipped_csv(self):
+        rows = self._run_detector_main({
+            "candidate_id": "CAND1", "verdict": "no_conflict",
+            "rpi_e_unknown_components": "geo",
+            "_rpi_recompute_kwargs": {"isolates": ["fake IsolateRecord objects here"]},
+        })
+        self.assertEqual(len(rows), 1)
+        self.assertNotIn("_rpi_recompute_kwargs", rows[0])
+        for key in rows[0]:
+            self.assertFalse(key.startswith("_"), key)
+
+    def test_ordinary_documented_columns_still_reach_the_shipped_csv(self):
+        """Guard the guard: the filter must remove ONLY private (leading-underscore)
+        fields, not accidentally swallow real columns like rpi_e_unknown_components."""
+        rows = self._run_detector_main({
+            "candidate_id": "CAND1", "verdict": "no_conflict",
+            "rpi_e_unknown_components": "geo",
+        })
+        self.assertEqual(rows[0]["rpi_e_unknown_components"], "geo")
 
 
 class EndToEndRealDataTest(unittest.TestCase):
@@ -8003,8 +8082,14 @@ def calibrate(reference: "prep.ReferenceData",
 
 def write_artifact(result: Dict[str, Any], path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
+    # default=str: the same fallback every other json.dumps(rd._json_safe(...)) call
+    # site in this module already pairs it with. _json_safe only normalises
+    # bool/float/int/dict/list/tuple; without this, a stray non-JSON-native value
+    # (a dataclass, Path, set, ...) crashes the write with no output at all rather
+    # than stringifying it.
     path.write_text(
-        json.dumps(rd._json_safe(result), indent=2, sort_keys=True, allow_nan=False) + "\n",
+        json.dumps(rd._json_safe(result), indent=2, sort_keys=True, allow_nan=False,
+                  default=str) + "\n",
         encoding="utf-8")
     return path
 
