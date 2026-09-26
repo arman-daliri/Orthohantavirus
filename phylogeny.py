@@ -1017,8 +1017,13 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
                         help="Minimum ultrafast bootstrap support to call a topology conflict supported")
     parser.add_argument("--phylo-seed", type=int, default=42,
                         help="Fixed IQ-TREE random seed, for reproducible trees")
-    parser.add_argument("--phylo-threads", type=int, default=max(1, (os.cpu_count() or 4) - 1),
-                        help="Threads for mafft and iqtree")
+    parser.add_argument("--phylo-threads", type=int, default=1,
+                        help="Threads per mafft/iqtree call. Defaults to 1 because IQ-TREE's "
+                             "multithreaded search is NOT reproducible even under a fixed "
+                             "--phylo-seed: two back-to-back runs of one 80-taxon alignment at "
+                             "-T 11 differed in topology (RF 10), while -T 1 was byte-identical. "
+                             "Raise it only if you accept irreproducible trees; scale throughput "
+                             "with --phylo-workers instead, which leaves each tree single-threaded.")
     parser.add_argument("--phylo-scope", choices=("species", "phylogroup", "both"), default="both",
                         help="species: within-species trees only. phylogroup: trees spanning "
                              "every species in a reservoir-host phylogroup (see prep.PHYLOGROUP), "
@@ -1396,6 +1401,33 @@ class ParseArgsPhyloWorkersTest(unittest.TestCase):
     def test_rejects_negative(self):
         with self.assertRaises(SystemExit):
             parse_args(["--phylo-workers", "-1"])
+
+
+class ParseArgsPhyloThreadsTest(unittest.TestCase):
+    """--phylo-threads must default to 1, and must NOT derive from os.cpu_count().
+
+    Measured 2026-09-25 on an 80-taxon alignment, same --seed 42, same binary, two
+    back-to-back runs: at -T 11 the two trees differed in topology (Robinson-Foulds
+    symmetric difference 10, max support delta 94); at -T 1 they were byte-identical.
+    IQ-TREE's multithreaded search is not seed-reproducible, so a cpu_count()-derived
+    default made results depend on the host's core count -- irreproducible between two
+    runs on one machine AND between machines. Parallelism belongs in --phylo-workers
+    (one single-threaded tree per worker), which does not affect any individual tree.
+    """
+
+    def test_defaults_to_one(self):
+        self.assertEqual(parse_args([]).phylo_threads, 1)
+
+    def test_default_ignores_cpu_count(self):
+        """The regression this guards: a cpu_count()-derived default silently changes
+        every tree when the pipeline moves to a machine with a different core count."""
+        for fake_cores in (1, 8, 64):
+            with mock.patch.object(os, "cpu_count", return_value=fake_cores):
+                self.assertEqual(parse_args([]).phylo_threads, 1)
+
+    def test_accepts_explicit_override(self):
+        """Still overridable -- a user who accepts nondeterminism for speed can opt in."""
+        self.assertEqual(parse_args(["--phylo-threads", "11"]).phylo_threads, 11)
 
 
 class GroupSubmissionOrderTest(unittest.TestCase):
