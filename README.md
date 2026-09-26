@@ -658,14 +658,14 @@ Run `rpi_core.py score --rpi-report` to write `rpi_validation_report.json` along
 python Algorithm.py --reference-input output --output output/ga_search
 python Algorithm.py --generations 300 --plateau 10000 --output output/ga_search_long
 python Algorithm.py --with-phylogeny --output output/ga_search   # gate4-confirm the winners (needs mafft/iqtree)
-python Algorithm.py --dump-scored --output output/ga_search      # also dump every scored triplet
+python Algorithm.py --no-dump-scored --output output/ga_search   # skip the all-scored dump (on by default)
 python -m unittest Algorithm                                     # full suite
 ```
 
 **Output.** The search runs both pool specs sequentially, writing per-pool subdirectories under `--output`:
 
 - `<output>/terminal_complete/seed_<N>.json` and `<output>/strict_both/seed_<N>.json` — per-pool run config, fitness log, and the top `--top` winners (default 10) with their full RPI row and gate4 confirmation status if `--with-phylogeny` was passed.
-- `<output>/terminal_complete/all_scored_seed_<N>.{jsonl,csv}` and the corresponding `strict_both/` files — written only with `--dump-scored`: every unique triplet the search scored, one row per triplet, with full RPI fields plus `fitness` and S/M/L donor isolate keys. Purely additive — scoring, selection, and every existing output are unchanged.
+- `<output>/terminal_complete/all_scored_seed_<N>.{jsonl,csv}` and the corresponding `strict_both/` files — written by default (opt out with `--no-dump-scored`): every unique triplet the search scored, one row per triplet, with full RPI fields plus `fitness` and S/M/L donor isolate keys. Purely additive — scoring, selection, and every existing output are unchanged.
 - `<output>/ga_pool_comparison.json` — side-by-side summary of both pool runs: pool sizes, generation counts, plateau-stop flags, best fitness, scoring-error counts, wall-clock times.
 
 **Runtime.** On the 16,028-record package, default settings (`--population 150 --generations 100 --plateau 20`) typically plateau-stop at generation ~21. Measured (with `--dump-scored`, both pools): ~7 min per pool, ~14 min total. The `--generations 300 --plateau 10000` long run takes ~25 min per pool. Gate4 winner confirmation (`--with-phylogeny`) adds ~328 min (~5.5 hr) for the 10-winner phase on Windows (same mafft+iqtree stack as Step 2), bringing the total to ~339 min (~5.7 hr) per pool. Measured gate4 verdicts (10 winners per pool, current run): terminal_complete pool — 1 `supported_reassortment_candidate`, 4 `weak_signal_low_bootstrap_support`, 5 `no_conflict`; strict_both pool — 3 `weak_signal_low_bootstrap_support`, 7 `no_conflict`. The `candidate_phylogenetics/` folder under each pool's output dir holds per-winner alignment and tree files.
@@ -689,7 +689,7 @@ python -m unittest Algorithm                                     # full suite
 | `ga_search/terminal_complete/seed_<N>.json` | Step 3 | Combinatorial-search run config, fitness log, and top winners for the terminal-complete pool, with gate4 confirmation status if `--with-phylogeny` was passed |
 | `ga_search/strict_both/seed_<N>.json` | Step 3 | Same, for the strict-both pool |
 | `ga_search/ga_pool_comparison.json` | Step 3 | Side-by-side run comparison across both pools (pool sizes, generations run, best fitness, wall seconds) |
-| `ga_search/*/all_scored_seed_<N>.{jsonl,csv}` | Step 3 (`--dump-scored`) | Every unique triplet the search evaluated — full RPI row plus `fitness` and S/M/L donor isolate keys |
+| `ga_search/*/all_scored_seed_<N>.{jsonl,csv}` | Step 3 (default; `--no-dump-scored` skips) | Every unique triplet the search evaluated — full RPI row plus `fitness` and S/M/L donor isolate keys |
 
 ---
 

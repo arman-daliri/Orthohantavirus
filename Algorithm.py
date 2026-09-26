@@ -386,7 +386,7 @@ def _run_one_pool(pool_name: str, pool: List[str], reference: Any, precomputed: 
     }
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--reference-input", default="output")
     parser.add_argument("--output", default="output/ga_search")
@@ -400,11 +400,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--top", type=int, default=10)
     parser.add_argument("--diversity", action="store_true")
     parser.add_argument("--with-phylogeny", action="store_true")
-    parser.add_argument("--dump-scored", action="store_true",
-                        help="write every unique triplet the search scored (not just "
-                             "the top --top winners) to "
-                             "all_scored_seed_<seed>.{jsonl,csv} in the per-pool output dir")
-    args = parser.parse_args(argv)
+    parser.add_argument("--dump-scored", action=argparse.BooleanOptionalAction, default=True,
+                        help="write every unique triplet the search scored (not just the top "
+                             "--top winners) to all_scored_seed_<seed>.{jsonl,csv} in the "
+                             "per-pool output dir. ON by default: without it a run keeps only "
+                             "its winners, so the thousands of triplets it scored -- the "
+                             "denominator every 'the GA found X' claim rests on -- are gone "
+                             "once the process exits, and no artifact records that they existed. "
+                             "Pass --no-dump-scored to skip the two ~400 KB files per pool.")
+    return parser
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    args = build_parser().parse_args(argv)
 
     ref_dir = Path(args.reference_input)
     reference = rc.prep.load_reference_data(ref_dir)
@@ -701,6 +709,29 @@ class ConfirmWinnersTest(unittest.TestCase):
             confirm_winners(oracle, winners, Path("/tmp/out"), with_phylogeny=True)
         self.assertEqual(captured_ids, ["ga-confirm-0", "ga-confirm-1", "ga-confirm-2"])
         self.assertEqual(len(set(captured_ids)), len(captured_ids))
+
+
+class DumpScoredDefaultTest(unittest.TestCase):
+    """--dump-scored is ON by default (changed 2026-09-26).
+
+    It used to be action="store_true", i.e. opt-in, and the documented Step 3b command
+    in README.md does not pass it -- so a full pipeline run wrote only its 10 winners
+    per pool and silently discarded the ~1400-1800 triplets it had actually scored.
+    That is not recoverable after the fact except by re-running the search.
+    BooleanOptionalAction keeps the old spelling working (scripts and README line 661
+    pass --dump-scored explicitly) while adding --no-dump-scored as the opt-out.
+    """
+
+    def test_on_by_default(self):
+        self.assertIs(build_parser().parse_args([]).dump_scored, True)
+
+    def test_explicit_flag_still_accepted(self):
+        """Backwards compatibility: --dump-scored must not become an unrecognized
+        argument, or every existing script and documented command that passes it breaks."""
+        self.assertIs(build_parser().parse_args(["--dump-scored"]).dump_scored, True)
+
+    def test_opt_out_available(self):
+        self.assertIs(build_parser().parse_args(["--no-dump-scored"]).dump_scored, False)
 
 
 class DumpScoredTableTest(unittest.TestCase):
