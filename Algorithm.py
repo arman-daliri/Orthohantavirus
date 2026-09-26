@@ -338,9 +338,8 @@ def _run_one_pool(pool_name: str, pool: List[str], reference: Any, precomputed: 
     wall_seconds = time.monotonic() - t0
     _check_no_total_scoring_failure(oracle)
 
-    if args.dump_scored:
-        jsonl_path, csv_path, n_scored = dump_scored_table(oracle, pool_out_dir, args.seed)
-        print(f"[{pool_name}] wrote {n_scored} scored triplet(s) to {jsonl_path} and {csv_path}")
+    jsonl_path, csv_path, n_scored = dump_scored_table(oracle, pool_out_dir, args.seed)
+    print(f"[{pool_name}] wrote {n_scored} scored triplet(s) to {jsonl_path} and {csv_path}")
 
     seen, winners = set(), []
     for triplet, value in result["final_population"]:
@@ -400,14 +399,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--top", type=int, default=10)
     parser.add_argument("--diversity", action="store_true")
     parser.add_argument("--with-phylogeny", action="store_true")
-    parser.add_argument("--dump-scored", action=argparse.BooleanOptionalAction, default=True,
-                        help="write every unique triplet the search scored (not just the top "
-                             "--top winners) to all_scored_seed_<seed>.{jsonl,csv} in the "
-                             "per-pool output dir. ON by default: without it a run keeps only "
-                             "its winners, so the thousands of triplets it scored -- the "
-                             "denominator every 'the GA found X' claim rests on -- are gone "
-                             "once the process exits, and no artifact records that they existed. "
-                             "Pass --no-dump-scored to skip the two ~400 KB files per pool.")
     return parser
 
 
@@ -711,34 +702,50 @@ class ConfirmWinnersTest(unittest.TestCase):
         self.assertEqual(len(set(captured_ids)), len(captured_ids))
 
 
-class DumpScoredDefaultTest(unittest.TestCase):
-    """--dump-scored is ON by default (changed 2026-09-26).
+class DumpScoredIsUnconditionalTest(unittest.TestCase):
+    """The all-scored dump is unconditional -- there is NO flag governing it (2026-09-26).
 
-    It used to be action="store_true", i.e. opt-in, and the documented Step 3b command
-    in README.md does not pass it -- so a full pipeline run wrote only its 10 winners
-    per pool and silently discarded the ~1400-1800 triplets it had actually scored.
-    That is not recoverable after the fact except by re-running the search.
-    BooleanOptionalAction keeps the old spelling working (scripts and README line 661
-    pass --dump-scored explicitly) while adding --no-dump-scored as the opt-out.
+    History: it was action="store_true" (opt-in), and README's documented Step 3b command
+    did not pass it, so the canonical run wrote only its 10 winners per pool and discarded
+    the 1366/1758 triplets it had scored -- the denominator every "the GA found X" claim
+    rests on, unrecoverable except by re-running the search. It was briefly made
+    default-on with a --no-dump-scored opt-out; the opt-out was then removed outright so
+    no invocation can produce a run whose search space went unrecorded.
+
+    These tests pin the ABSENCE of the knob. A future convenience flag would silently
+    reintroduce exactly the gap this removal closed.
     """
 
-    def test_on_by_default(self):
-        self.assertIs(build_parser().parse_args([]).dump_scored, True)
+    def test_no_dump_scored_knob_on_the_parser(self):
+        parsed = build_parser().parse_args([])
+        self.assertFalse(hasattr(parsed, "dump_scored"),
+                         "dump_scored must not be a parsed option -- the dump is unconditional")
 
-    def test_explicit_flag_still_accepted(self):
-        """Backwards compatibility: --dump-scored must not become an unrecognized
-        argument, or every existing script and documented command that passes it breaks."""
-        self.assertIs(build_parser().parse_args(["--dump-scored"]).dump_scored, True)
+    def test_old_opt_in_flag_is_rejected(self):
+        with self.assertRaises(SystemExit):
+            build_parser().parse_args(["--dump-scored"])
 
-    def test_opt_out_available(self):
-        self.assertIs(build_parser().parse_args(["--no-dump-scored"]).dump_scored, False)
+    def test_opt_out_flag_is_rejected(self):
+        with self.assertRaises(SystemExit):
+            build_parser().parse_args(["--no-dump-scored"])
+
+    def test_dump_call_site_is_not_guarded_by_a_condition(self):
+        """Guards the call site itself, not just the parser: re-adding `if args.<flag>:`
+        around dump_scored_table would restore the old behaviour while leaving every
+        parser-level test above still passing."""
+        import inspect
+        src = inspect.getsource(_run_one_pool)
+        call_line = next(l for l in src.splitlines() if "dump_scored_table(" in l)
+        self.assertEqual(call_line.strip().find("if "), -1,
+                         f"dump_scored_table call must be unconditional, got: {call_line.strip()}")
+        indent = len(call_line) - len(call_line.lstrip())
+        self.assertEqual(indent, 4, "call must sit at function-body level, not inside a block")
 
 
 class DumpScoredTableTest(unittest.TestCase):
-    """--dump-scored writes every unique scored triplet (not just winners) alongside
-    the existing seed_<N>.json output. Scoring, selection, and existing outputs must
-    stay unchanged -- this only adds a read of oracle.cache/oracle.rows after the
-    search is done."""
+    """Every unique scored triplet (not just winners) is written alongside the existing
+    seed_<N>.json output. Scoring, selection, and existing outputs must stay unchanged --
+    this only adds a read of oracle.cache/oracle.rows after the search is done."""
 
     def test_dump_file_exists_parses_and_row_count_matches_unique_triplets_scored(self):
         oracle = Oracle.__new__(Oracle)
