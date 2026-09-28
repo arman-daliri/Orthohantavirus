@@ -282,8 +282,20 @@ RPI_WEIGHTS: Dict[str, Any] = {
         "different_order": 0.01,
         # Neither isolate has any host taxonomy at all (host_name, host_family, and
         # host_order all empty). Unknown, not separated -- must not collapse to
-        # 'different_order'. See host_rank_proximity's top-of-function guard.
-        "unknown_host_metadata": 1.0,
+        # 'different_order' (0.01). See host_rank_proximity's top-of-function guard.
+        #
+        # Changed from 1.0 to 0.25 (2026-09-26). At 1.0 this tied with 'same_species',
+        # so "we don't know this pair's host relationship" scored identically to "these
+        # are the SAME host" -- the strongest possible claim, made from the least
+        # information. Population-level consequence, found by a from-scratch pipeline
+        # rerun: 53-80% of the GA search pool carry >=1 metadata-sparse isolate, so that
+        # tie was not a rare edge case but the single largest fitness tier in the search
+        # space, and the GA's generation-0 plateau (best-of-init never improved) traced
+        # straight to it. 0.25 is 'same_family' -- the literal middle rung of this
+        # five-level ladder, not a fitted or invented number -- so unknown metadata is
+        # still never assumed to be 'different_order', but is no longer assumed to be
+        # the best case either.
+        "unknown_host_metadata": 0.25,
         # Incidental spillover host (e.g. human clinical case) acting as proxy for reservoir.
         "dead_end_spillover_host": 1.0,
     },
@@ -1536,14 +1548,20 @@ def ecological_opportunity(
 
     worst["rpi_e_total"] = worst["rpi_e_host"] * worst["rpi_e_geo"] * worst["rpi_e_time"]
     worst["rpi_e_isolate_basis"] = isolate_basis
-    # Gated on worst[...] == 1.0: an "unknown" pair can only ever contribute exactly
-    # 1.0 (it is the neutral value by construction), and min() can only report 1.0 as
-    # the WORST across all pairs if every pair reached exactly 1.0 -- so if the final
-    # value is below 1.0, some other, fully-known pair set it, and the unknown flag
-    # (from a different, non-deciding pair) is not what produced the reported number.
+    # Gated on worst[...] == that factor's own unknown-sentinel value: an "unknown"
+    # pair can only ever contribute exactly that sentinel (it is the neutral value by
+    # construction for that factor), and min() can only report the sentinel as the
+    # WORST across all pairs if every pair reached exactly the sentinel -- so if the
+    # final value is anything else, some other, fully-known pair set it, and the
+    # unknown flag (from a different, non-deciding pair) is not what produced the
+    # reported number. Host's sentinel is table["host_decay"]["unknown_host_metadata"]
+    # (0.25 as of 2026-09-26, not 1.0 -- see that key's comment); geo/time's is 1.0
+    # unconditionally (geo_decay/time_decay both return 1.0 for missing metadata).
+    unknown_sentinel = {
+        "host": table["host_decay"]["unknown_host_metadata"], "geo": 1.0, "time": 1.0}
     worst["rpi_e_unknown_components"] = ",".join(
         name for name in ("host", "geo", "time")
-        if unknown[f"rpi_e_{name}"] and worst[f"rpi_e_{name}"] == 1.0
+        if unknown[f"rpi_e_{name}"] and worst[f"rpi_e_{name}"] == unknown_sentinel[name]
     )
     return worst
 
@@ -5306,12 +5324,16 @@ class EcologicalOpportunityTest(unittest.TestCase):
         host_family, and host_order all empty, as happens when resolve_host_taxonomy
         fails and no biosample host is available (prepare_dataset.py:1560-1565, flagged
         'missing_host') -- that is unknown, not separated. It must not fall through
-        to 'different_order' (0.01), the harshest value in the ladder."""
+        to 'different_order' (0.01), the harshest value in the ladder, AND (2026-09-26)
+        must not tie with 'same_species' (1.0), the harshest-on-the-other-side value --
+        an unscoreable pair is not the same claim as a confirmed same-species pair."""
         a = _eco_isolate("A", "USA", "2001")
         b = _eco_isolate("B", "USA", "2001", host_order="", host_family="", host_name="")
         result = ecological_opportunity(
             ["A", "B"], [a, b], _parent_map(a, b), "actual_parents")
-        self.assertEqual(result["rpi_e_host"], 1.0)
+        self.assertEqual(result["rpi_e_host"], RPI_WEIGHTS["host_decay"]["unknown_host_metadata"])
+        self.assertGreater(result["rpi_e_host"], RPI_WEIGHTS["host_decay"]["different_order"])
+        self.assertLess(result["rpi_e_host"], RPI_WEIGHTS["host_decay"]["same_species"])
 
     def test_dead_end_spillover_host_stays_neutral(self):
         """When an isolate is an incidental dead-end host (e.g. human), it serves as a proxy
@@ -5326,13 +5348,14 @@ class EcologicalOpportunityTest(unittest.TestCase):
 
     def test_unknown_components_names_host_when_metadata_is_missing(self):
         """The diagnostic column must distinguish 'neutral because unknown' from
-        'neutral because it genuinely matched' -- both score rpi_e_host = 1.0, but only
-        the missing-metadata case belongs in rpi_e_unknown_components."""
+        'neutral because it genuinely matched' -- rpi_e_host=1.0 for same_species
+        (genuinely matched) vs. rpi_e_host=unknown_host_metadata's own value (missing
+        metadata) -- only the latter belongs in rpi_e_unknown_components."""
         a = _eco_isolate("A", "USA", "2001")
         b = _eco_isolate("B", "USA", "2001", host_order="", host_family="", host_name="")
         result = ecological_opportunity(
             ["A", "B"], [a, b], _parent_map(a, b), "actual_parents")
-        self.assertEqual(result["rpi_e_host"], 1.0)
+        self.assertEqual(result["rpi_e_host"], RPI_WEIGHTS["host_decay"]["unknown_host_metadata"])
         self.assertIn("host", result["rpi_e_unknown_components"].split(","))
 
     def test_unknown_components_names_geo_when_country_is_missing(self):

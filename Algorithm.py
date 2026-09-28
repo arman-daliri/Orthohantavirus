@@ -112,8 +112,9 @@ class Oracle:
         self.cache[triplet] = value
         self.rows[triplet] = {k: row.get(k) for k in (
             "verdict", "rpi_generation", "rpi_retention", "rpi_e_total",
-            "rpi_e_isolate_basis", "rpi_m_pack", "rpi_m_pol", "rpi_k_stratum",
-            "gate1_pattern", "gate1_discordant_segment", "gate1_implicated_species")}
+            "rpi_e_isolate_basis", "rpi_e_unknown_components", "rpi_m_pack", "rpi_m_pol",
+            "rpi_k_stratum", "gate1_pattern", "gate1_discordant_segment",
+            "gate1_implicated_species")}
         return value
 
 
@@ -841,6 +842,17 @@ class OracleTest(unittest.TestCase):
         row = {"verdict": "junk_sequence", "rpi_generation": None}
         with mock.patch.object(rc, "score_candidate", return_value=row):
             self.assertEqual(oracle.score(("a", "b", "c")), 0.0)
+
+    def test_rpi_e_unknown_components_reaches_oracle_rows(self):
+        """rpi_core.py's rpi_e_unknown_components diagnostic (which winner's Factor E
+        hit a missing-metadata sentinel) must survive Oracle.score()'s field whitelist,
+        or it never reaches all_scored_seed_<N>.csv, seed_<N>.json's winners, or
+        figures.py's ga_winners_parents.csv -- the only places a reader could see it."""
+        oracle = self._oracle()
+        row = {"verdict": "no_conflict", "rpi_generation": 0.47, "rpi_e_unknown_components": "host,geo"}
+        with mock.patch.object(rc, "score_candidate", return_value=row):
+            oracle.score(("a", "b", "c"))
+        self.assertEqual(oracle.rows[("a", "b", "c")]["rpi_e_unknown_components"], "host,geo")
 
     def test_score_candidate_exception_scores_zero_and_is_recorded_not_raised(self):
         """An unattended multi-hour search must survive one bad triplet -- see errors

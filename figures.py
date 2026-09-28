@@ -359,7 +359,15 @@ def render_after_figures(ga_search_json: Path, output_dir: Path, data_dir: str =
         plt.close(fig)
         written.append(out_path)
 
-        row = {"candidate_id": candidate_id, "fitness": winner.get("fitness")}
+        # rpi_e_unknown_components (2026-09-26): comma-joined subset of {host,geo,time}
+        # whose Factor E term hit a "missing metadata" neutral sentinel rather than a
+        # measured value, for THIS winner's actual parent pair. Surfaced here, not just
+        # in the raw all_scored dump, because this is the file a reader opens to see
+        # who a winner's donors are -- a winner whose fitness rests partly on unscored
+        # metadata should say so at the point where that fitness is being read, not only
+        # in a 1000+-row CSV three steps upstream.
+        row = {"candidate_id": candidate_id, "fitness": winner.get("fitness"),
+              "rpi_e_unknown_components": winner.get("rpi_e_unknown_components") or ""}
         for segment, donor_key in zip(SEGMENTS, triplet):
             meta = parent_metadata(donor_key, by_key)
             for field in ("isolate_key", "species", "country", "host"):
@@ -592,6 +600,39 @@ class RenderBeforeFiguresFilenameCollisionTest(unittest.TestCase):
             self.assertEqual(len(set(written)), 2)
             for path in written:
                 self.assertTrue(path.exists())
+
+
+class RenderAfterFiguresUnknownComponentsColumnTest(unittest.TestCase):
+    """ga_winners_parents.csv must carry rpi_e_unknown_components (2026-09-26) so a
+    reader of THIS file -- the one that names a winner's actual donors -- can see
+    whether that winner's fitness rests partly on a missing-metadata sentinel rather
+    than a measured value, without having to cross-reference the all_scored dump.
+    Isolated from real output/ data (empty load_ingest, no tree paths) so this checks
+    the CSV-writing logic only, not tree rendering."""
+
+    def test_column_present_and_carries_the_winner_flag(self):
+        import tempfile
+        from unittest import mock
+
+        winners = [
+            {"triplet": ["s1", "m1", "l1"], "fitness": 0.4716981132,
+             "rpi_e_unknown_components": "host,geo"},
+            {"triplet": ["s2", "m2", "l2"], "fitness": 0.01,
+             "rpi_e_unknown_components": ""},
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            ga_json = tmp_path / "seed.json"
+            ga_json.write_text(json.dumps({"winners": winners}), encoding="utf-8")
+            out_dir = tmp_path / "after"
+            with mock.patch("figures.load_ingest", return_value=[]), \
+                 mock.patch("figures.tree_paths_by_isolate_from_table", return_value={}):
+                _written, table_path = render_after_figures(ga_json, out_dir, data_dir=str(tmp_path))
+            with table_path.open(newline="", encoding="utf-8") as fh:
+                rows = list(csv.DictReader(fh))
+            self.assertIn("rpi_e_unknown_components", rows[0])
+            self.assertEqual(rows[0]["rpi_e_unknown_components"], "host,geo")
+            self.assertEqual(rows[1]["rpi_e_unknown_components"], "")
 
 
 class RenderBeforeFiguresIntegrationTest(unittest.TestCase):
