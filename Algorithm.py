@@ -293,12 +293,19 @@ def _resolve_isolate_segments(isolate: Any, reference: Any) -> List[Tuple[str, s
     accession, or an accession absent from genomic_index (e.g. CDS-only coverage), is
     silently omitted here -- callers count the gap themselves, matching confirm_winners'
     "don't let one missing lookup kill the whole run" posture.
+
+    Falls back to the version-stripped base accession, same as every other genomic_index
+    lookup in the codebase (rpi_core.py's genomic_sequences_by_segment and three other
+    call sites) -- an isolate's s/m/l_accession field can carry a different NCBI version
+    suffix than the FASTA record genomic_index indexed it under.
     """
     resolved = []
     for segment, accession_field in (
             ("S", "s_accession"), ("M", "m_accession"), ("L", "l_accession")):
         accession = getattr(isolate, accession_field, "")
-        fasta_record = reference.genomic_index.get(accession) if accession else None
+        fasta_record = (reference.genomic_index.get(accession)
+                        or reference.genomic_index.get(rc.prep.accession_base(accession))
+                        ) if accession else None
         if fasta_record is not None:
             resolved.append((segment, accession, fasta_record.sequence))
     return resolved
@@ -331,19 +338,23 @@ def write_winner_sequences(reference: Any, winners: List[Dict[str, Any]], output
     build per-group sequences.fasta.
     """
     by_key = {isolate.isolate_key: isolate for isolate in reference.isolates}
+    resolved_cache: Dict[str, Dict[str, Tuple[str, str]]] = {}
     records: List[Tuple[str, str]] = []
     missing = 0
     for idx, winner in enumerate(winners):
         triplet = winner["triplet"]
         for segment, isolate_key in zip(("S", "M", "L"), triplet):
-            isolate = by_key.get(isolate_key)
-            resolved = {s: (acc, seq) for s, acc, seq in
-                       _resolve_isolate_segments(isolate, reference)} if isolate else {}
+            if isolate_key not in resolved_cache:
+                isolate = by_key.get(isolate_key)
+                resolved_cache[isolate_key] = {s: (acc, seq) for s, acc, seq in
+                    _resolve_isolate_segments(isolate, reference)} if isolate else {}
+            resolved = resolved_cache[isolate_key]
             if segment not in resolved:
                 missing += 1
                 continue
             accession, sequence = resolved[segment]
-            header = f"winner{idx:02d}_{segment}|{isolate_key}|{accession}|{isolate.species_name}"
+            species = by_key[isolate_key].species_name
+            header = f"winner{idx:02d}_{segment}|{isolate_key}|{accession}|{species}"
             records.append((header, sequence))
 
     fasta_path = _write_fasta(records, output_dir, f"winner_sequences_seed_{seed}.fasta")
@@ -886,6 +897,28 @@ class DumpScoredTableTest(unittest.TestCase):
                 csv_rows = list(csv.DictReader(f))
             self.assertEqual(len(csv_rows), 3)
             self.assertEqual(csv_rows[0]["fitness"], "0.5")
+
+
+class ResolveIsolateSegmentsAccessionBaseTest(unittest.TestCase):
+    """2026-09-30 /code-review finding: an isolate's s/m/l_accession field can carry a
+    different NCBI version suffix than the FASTA record genomic_index indexed it under
+    -- every other genomic_index lookup in the codebase (rpi_core.py's
+    genomic_sequences_by_segment and three other call sites) falls back to the
+    version-stripped base accession for exactly this reason. _resolve_isolate_segments
+    must do the same, or an isolate that resolves everywhere else in the pipeline
+    silently counts as 'missing' here."""
+
+    def test_falls_back_to_version_stripped_accession(self):
+        from unittest.mock import Mock
+        isolate = Mock(s_accession="NC_077669.2", m_accession="", l_accession="")
+        # load_reference_data dual-keys genomic_index on a FASTA record's own accession
+        # (.1, the version actually deposited) AND its base -- never on the isolate's
+        # accession field's version (.2) directly. Only the base key is shared ground.
+        record = Mock(sequence="ACGT")
+        genomic_index = {"NC_077669.1": record, "NC_077669": record}
+        reference = Mock(genomic_index=genomic_index)
+        resolved = _resolve_isolate_segments(isolate, reference)
+        self.assertEqual(resolved, [("S", "NC_077669.2", "ACGT")])
 
 
 class WriteWinnerSequencesTest(unittest.TestCase):
