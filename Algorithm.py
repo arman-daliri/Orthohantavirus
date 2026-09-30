@@ -287,6 +287,51 @@ def dump_scored_table(oracle: "Oracle", output_dir: Path, seed: int) -> Tuple[Pa
     return jsonl_path, csv_path, len(records)
 
 
+def write_winner_sequences(reference: Any, winners: List[Dict[str, Any]], output_dir: Path,
+                           seed: int) -> Tuple[Path, int]:
+    """Write each winner's actual S/M/L segment sequences to a single multi-FASTA,
+    winner_sequences_seed_<seed>.fasta.
+
+    Winners (and every row in all_scored_seed_<seed>) carry isolate_keys, not sequence
+    data -- see dump_scored_table's docstring for why: the same few hundred reference
+    isolates get reused across thousands of scored triplets, so inlining sequence data
+    into every scored row would mean re-serializing the same segment over and over. This
+    is the one place actual sequence data joins the GA's output, and it only resolves the
+    (small) winners list, not the full scored table.
+
+    Looks up each winner's isolate_key -> accession (via reference.isolates) -> sequence
+    (via reference.genomic_index), matching the same two-hop lookup phylogeny.py uses to
+    build per-group sequences.fasta. A donor whose accession has no genomic sequence
+    indexed (e.g. CDS-only coverage) is skipped for that segment and counted, not raised
+    -- the same "don't let one missing lookup kill the whole run" posture as
+    confirm_winners' per-winner exception handling.
+    """
+    by_key = {isolate.isolate_key: isolate for isolate in reference.isolates}
+    records: List[Tuple[str, str]] = []
+    missing = 0
+    for idx, winner in enumerate(winners):
+        triplet = winner["triplet"]
+        for segment, isolate_key, accession_field in zip(
+                ("S", "M", "L"), triplet, ("s_accession", "m_accession", "l_accession")):
+            isolate = by_key.get(isolate_key)
+            accession = getattr(isolate, accession_field, "") if isolate else ""
+            fasta_record = reference.genomic_index.get(accession) if accession else None
+            if fasta_record is None:
+                missing += 1
+                continue
+            species = isolate.species_name if isolate else ""
+            header = f"winner{idx:02d}_{segment}|{isolate_key}|{accession}|{species}"
+            records.append((header, fasta_record.sequence))
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    fasta_path = output_dir / f"winner_sequences_seed_{seed}.fasta"
+    with fasta_path.open("w", encoding="utf-8") as f:
+        for header, sequence in records:
+            f.write(f">{header}\n{sequence}\n")
+    return fasta_path, missing
+
+
 # Fixed declaration order -- the pool file is the contract the GA consumes.
 # The reserved-calibration exclusion is applied at load time (same semantics as today).
 _POOL_SPECS: List[Tuple[str, str]] = [
@@ -352,6 +397,12 @@ def _run_one_pool(pool_name: str, pool: List[str], reference: Any, precomputed: 
         if len(winners) >= args.top:
             break
     confirmation = confirm_winners(oracle, winners, pool_out_dir, args.with_phylogeny)
+
+    fasta_path, missing_sequences = write_winner_sequences(
+        reference, winners, pool_out_dir, args.seed)
+    print(f"[{pool_name}] wrote {len(winners)} winner(s)' sequences to {fasta_path}"
+          + (f" ({missing_sequences} segment(s) had no sequence available)"
+             if missing_sequences else ""))
 
     payload = {"config": vars(args), "pool_name": pool_name,
                "calibration_reserved_excluded": len(reserved),
@@ -782,6 +833,59 @@ class DumpScoredTableTest(unittest.TestCase):
                 csv_rows = list(csv.DictReader(f))
             self.assertEqual(len(csv_rows), 3)
             self.assertEqual(csv_rows[0]["fitness"], "0.5")
+
+
+class WriteWinnerSequencesTest(unittest.TestCase):
+    """Winners carry isolate_keys, not sequence data (see dump_scored_table); this is
+    the one place actual FASTA sequences join the GA's output, resolved from the
+    reference snapshot's isolates + genomic_index by the same two-hop lookup
+    phylogeny.py uses to build sequences.fasta."""
+
+    def _reference(self):
+        from unittest.mock import Mock
+        isolate_a = Mock(isolate_key="iso-a", species_name="Orthohantavirus puumalaense",
+                         s_accession="ACC_A_S", m_accession="ACC_A_M", l_accession="ACC_A_L")
+        isolate_b = Mock(isolate_key="iso-b", species_name="Orthohantavirus tulaense",
+                         s_accession="ACC_B_S", m_accession="ACC_B_M", l_accession="ACC_B_L")
+        genomic_index = {
+            "ACC_A_S": Mock(sequence="AAAA"), "ACC_A_M": Mock(sequence="MMMM"),
+            "ACC_A_L": Mock(sequence="LLLL"), "ACC_B_S": Mock(sequence="AAAA2"),
+            # ACC_B_M and ACC_B_L deliberately absent -- the missing-sequence case.
+        }
+        return Mock(isolates=[isolate_a, isolate_b], genomic_index=genomic_index)
+
+    def test_writes_one_fasta_record_per_segment_per_winner(self):
+        winners = [{"triplet": ["iso-a", "iso-a", "iso-a"], "fitness": 0.5}]
+        with tempfile.TemporaryDirectory() as tmp:
+            fasta_path, missing = write_winner_sequences(
+                self._reference(), winners, Path(tmp), seed=99)
+            self.assertEqual(missing, 0)
+            text = fasta_path.read_text(encoding="utf-8")
+            self.assertEqual(text.count(">"), 3)
+            self.assertIn(">winner00_S|iso-a|ACC_A_S|Orthohantavirus puumalaense\nAAAA\n", text)
+            self.assertIn(">winner00_M|iso-a|ACC_A_M|Orthohantavirus puumalaense\nMMMM\n", text)
+            self.assertIn(">winner00_L|iso-a|ACC_A_L|Orthohantavirus puumalaense\nLLLL\n", text)
+
+    def test_missing_genomic_sequence_is_counted_not_raised(self):
+        winners = [{"triplet": ["iso-b", "iso-b", "iso-b"], "fitness": 0.3}]
+        with tempfile.TemporaryDirectory() as tmp:
+            fasta_path, missing = write_winner_sequences(
+                self._reference(), winners, Path(tmp), seed=99)
+            # M and L accessions aren't in genomic_index; only S resolves.
+            self.assertEqual(missing, 2)
+            text = fasta_path.read_text(encoding="utf-8")
+            self.assertEqual(text.count(">"), 1)
+            self.assertIn(">winner00_S|iso-b|ACC_B_S|Orthohantavirus tulaense\nAAAA2\n", text)
+
+    def test_multiple_winners_get_distinct_indices_in_headers(self):
+        winners = [{"triplet": ["iso-a", "iso-a", "iso-a"], "fitness": 0.5},
+                  {"triplet": ["iso-a", "iso-a", "iso-a"], "fitness": 0.4}]
+        with tempfile.TemporaryDirectory() as tmp:
+            fasta_path, _missing = write_winner_sequences(
+                self._reference(), winners, Path(tmp), seed=99)
+            text = fasta_path.read_text(encoding="utf-8")
+            self.assertIn("winner00_S", text)
+            self.assertIn("winner01_S", text)
 
 
 class TotalScoringFailureGuardTest(unittest.TestCase):
