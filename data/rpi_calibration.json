@@ -98,6 +98,34 @@
     "mechanism": "ViennaRNA Python bindings",
     "version": "2.7.2"
   },
+  "imputed_fallbacks": {
+    "geo": {
+      "max": 1.0,
+      "mean": 0.23203501031838106,
+      "median": 0.05058920407446357,
+      "min": 0.01,
+      "n": 726,
+      "p25": 0.01,
+      "p5": 0.01,
+      "p75": 0.14322703263197242,
+      "p95": 1.0,
+      "sd": 0.3644384410164499
+    },
+    "m_pack_median": 0.6644598337068401,
+    "note": "Medians RPI_WEIGHTS pins as the no-signal fallback for M_pack (no_parental_sequence/undefined_energy) and Factor E's geo/time (missing country/year) -- so a candidate with unmeasurable data scores a typical measured value, not 1.0, the most favourable value a multiplicative factor can take. m_pack_median is this same calibrate() call's discrimination.m_pack_under_chosen_form.median (756 cognate/non-cognate folds over this panel's 42 isolates); geo_median/time_median are computed fresh by compute_geo_time_fallback_medians over this panel's cross-species pairs with BOTH sides known (pairs with either side missing are excluded, not just floored, since including them would impute the fallback from other fallbacks). M_pol is NOT imputed here -- see RPI_WEIGHTS['m_pol_weakly_supported'] and the README.",
+    "time": {
+      "max": 1.0,
+      "mean": 0.7624866049909086,
+      "median": 0.7866278610665535,
+      "min": 0.3395955256449391,
+      "n": 693,
+      "p25": 0.6440364210831414,
+      "p5": 0.43171052342907973,
+      "p75": 0.9231163463866358,
+      "p95": 1.0,
+      "sd": 0.17666746988222976
+    }
+  },
   "panel": {
     "cognate_folds": 252,
     "eligible_after_ws4_exclusion": 302,

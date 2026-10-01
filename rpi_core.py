@@ -318,6 +318,17 @@ RPI_WEIGHTS: Dict[str, Any] = {
     #       an order-of-magnitude of "several decades", not the exact value.
     "geo_d0_km": 1090.0,
     "time_tau_years": 25.0,
+    # Missing-metadata fallback for geo/time (2026-10 decision), DERIVED (not chosen)
+    # from data/rpi_calibration.json -> imputed_fallbacks: the median geo_decay/
+    # time_decay value over the pinned 42-isolate calibration panel's cross-species
+    # pairs whose country (resp. year span) is known on BOTH sides (n=726 geo pairs,
+    # n=693 time pairs; see compute_geo_time_fallback_medians). Replaces the prior
+    # unconditional 1.0 -- a pair with unknown geography/timing is not evidence of
+    # perfect ecological co-location, the most favourable value this multiplicative
+    # factor can take, any more than unknown_host_metadata (above) is evidence of
+    # being the same species. Reproduce with `python rpi_core.py calibrate`.
+    "geo_unknown_fallback": 0.05058920407446357,
+    "time_unknown_fallback": 0.7866278610665535,
     # Floors keeping every factor strictly positive. See the no-literal-zeros rule.
     "eco_floor": 0.01,
     # Generation -> retention shift, normalised to M = 1.0.
@@ -366,6 +377,27 @@ RPI_WEIGHTS: Dict[str, Any] = {
     # RPI_PANHANDLE_WINDOW_NT without re-running rpi_calibration.py would silently
     # score against a tau measured at a different window than the one folding.
     "m_pack_window_nt": 50,
+    # M_pack's missing-signal fallback (no_parental_sequence / undefined_energy),
+    # DERIVED (not chosen) from data/rpi_calibration.json ->
+    # discrimination.m_pack_under_chosen_form.median: the measured M_pack distribution
+    # over the SAME 756 cognate/non-cognate folds m_pack_tau is derived from. Replaces
+    # the prior unconditional 1.0 for the same reason geo_unknown_fallback/
+    # time_unknown_fallback do (see those keys): an unfoldable duplex is not evidence
+    # of a perfect packaging match. A genuinely MEASURED M_pack of 1.0 (ddG <= 0, ~38%
+    # of the panel) is a real value and is NEVER replaced -- score_m_pack only returns
+    # this constant on its "no_parental_sequence"/"undefined_energy" paths, never on
+    # "scored". Reproduce with `python rpi_core.py calibrate`.
+    "m_pack_unknown_fallback": 0.6644598337068401,
+    # M_pol is NOT imputed. Its "no_signal_beyond_tag" status (the genus-9-vs-SNV-23
+    # footprint falling entirely inside the invariant 14-nt tag for every backbone
+    # except O. sinnombreense) is near-universal in this dataset -- measured on the WS4
+    # panel, only SNV-backbone candidates (3 of 12) ever reach "scored"; see the README's
+    # Factor-generation limitations list. A median computed from 3 SNV-only observations
+    # would not be a defensible calibration the way M_pack's 756-fold panel is, so M_pol
+    # is left at its existing 1.0 fallback and documented as weakly supported (its
+    # rpi_m_pol_status column already names which rows this applies to) rather than
+    # imputed from too little data.
+    "m_pol_weakly_supported": True,
 }
 
 
@@ -1532,15 +1564,28 @@ def ecological_opportunity(
             if host_category == "unknown_host_metadata":
                 unknown["rpi_e_host"] = True
 
+            # Missing country/year is imputed from table["geo_unknown_fallback"] /
+            # ["time_unknown_fallback"] (2026-10, the calibration panel's own median),
+            # NOT computed via geo_decay/time_decay: both of those functions return 1.0
+            # for a missing side, which would make "we don't know" indistinguishable
+            # from "confirmed same country" / "confirmed overlapping years" -- the same
+            # host_decay['unknown_host_metadata'] defect, now fixed here too. A pair
+            # with BOTH sides known still goes through the real decay function, even
+            # when that genuinely returns 1.0 (same country, overlapping years) -- that
+            # 1.0 is a measurement, not a fallback.
             country_a, country_b = isolate_a.country, isolate_b.country
             if not country_a or not country_b:
                 unknown["rpi_e_geo"] = True
-            geo = geo_decay(country_a, country_b, table["geo_d0_km"], floor)
+                geo = table["geo_unknown_fallback"]
+            else:
+                geo = geo_decay(country_a, country_b, table["geo_d0_km"], floor)
 
             span_a, span_b = _year_span([isolate_a]), _year_span([isolate_b])
             if span_a is None or span_b is None:
                 unknown["rpi_e_time"] = True
-            time = time_decay(span_a, span_b, table["time_tau_years"], floor)
+                time = table["time_unknown_fallback"]
+            else:
+                time = time_decay(span_a, span_b, table["time_tau_years"], floor)
 
             worst["rpi_e_host"] = min(worst["rpi_e_host"], host)
             worst["rpi_e_geo"] = min(worst["rpi_e_geo"], geo)
@@ -1556,12 +1601,20 @@ def ecological_opportunity(
     # flag, deliberately: the unknown pair could have scored lower had it been measured,
     # so the reported number still rests partly on missing metadata. The flag therefore
     # means "may rest on missing metadata", not "was decided by missing metadata". It is
-    # descriptive only and never changes a score. Host's sentinel is
-    # table["host_decay"]["unknown_host_metadata"] (0.25 as of 2026-09-26, not 1.0 -- see
-    # that key's comment); geo/time's is 1.0 unconditionally (geo_decay/time_decay both
-    # return 1.0 for missing metadata).
+    # descriptive only and never changes a score. Each sentinel is that factor's own
+    # imputed-fallback constant (2026-10): host = table["host_decay"]
+    # ["unknown_host_metadata"] (0.25), geo = table["geo_unknown_fallback"], time =
+    # table["time_unknown_fallback"] -- NOT 1.0, since missing metadata is no longer
+    # imputed as 1.0 for any of the three. Does NOT cover the separate "species entirely
+    # absent from the reference" path above (all_species_present check): that path marks
+    # unknown[...] True but leaves `worst` untouched at its 1.0 initial value by design
+    # (pre-dating this change -- see that block's own comment), so this gate will not
+    # flag a pair whose ONLY unknown contribution came from that path. Documented, not
+    # fixed here -- out of scope for the missing-single-field imputation this gate
+    # otherwise covers.
     unknown_sentinel = {
-        "host": table["host_decay"]["unknown_host_metadata"], "geo": 1.0, "time": 1.0}
+        "host": table["host_decay"]["unknown_host_metadata"],
+        "geo": table["geo_unknown_fallback"], "time": table["time_unknown_fallback"]}
     worst["rpi_e_unknown_components"] = ",".join(
         name for name in ("host", "geo", "time")
         if unknown[f"rpi_e_{name}"] and worst[f"rpi_e_{name}"] == unknown_sentinel[name]
@@ -2108,16 +2161,23 @@ def score_m_pack(
 
     Returns (value, status). Status is one of:
       "scored"               -- at least one candidate-vs-backbone-consensus duplex pair
-                                was folded successfully.
+                                was folded successfully. value may legitimately BE 1.0
+                                here (ddG <= 0 saturates, ~38% of the calibration panel)
+                                -- that is a measurement, never replaced.
       "no_parental_sequence" -- the donor/backbone species could not be determined
                                 unambiguously (rpi_species_assignment), or neither has
                                 a usable wild reference sequence for the relevant
-                                segment (species_consensus_panhandle_window).
+                                segment (species_consensus_panhandle_window). value is
+                                table["m_pack_unknown_fallback"] (2026-10, the measured
+                                panel's own median -- see that key's comment), NOT 1.0:
+                                an unfoldable duplex is not evidence of a perfect match.
       "undefined_energy"     -- ViennaRNA (or boltzmann_compatibility, N4) could not
                                 produce a usable ddG for ANY pair -- caught here and
                                 logged via the status, per the global "log and continue"
-                                constraint. compute_rpi floors m_pack at `eco_floor`
-                                regardless, so this never propagates a fabricated value.
+                                constraint. value is table["m_pack_unknown_fallback"],
+                                same reasoning as "no_parental_sequence" above.
+                                compute_rpi floors m_pack at `eco_floor` regardless, so
+                                this never propagates a fabricated value below the floor.
       "fixed_constant"       -- reserved for a future m_pack_variance_check analogous to
                                 m_pol_variance_check; not produced by this function. The
                                 WS3.1 calibration measured real, if small, signal
@@ -2147,7 +2207,7 @@ def score_m_pack(
     table = _weights(weights)
     donor_species, backbone_species = rpi_species_assignment(gate1, odd_segment)
     if not donor_species or not backbone_species:
-        return 1.0, "no_parental_sequence"
+        return table["m_pack_unknown_fallback"], "no_parental_sequence"
 
     candidate_genomic = {
         "S": candidate.s_genomic, "M": candidate.m_genomic, "L": candidate.l_genomic}
@@ -2197,13 +2257,14 @@ def score_m_pack(
                 continue
 
     if not ddgs:
-        return (1.0, "undefined_energy") if undefined_energy else (1.0, "no_parental_sequence")
+        status = "undefined_energy" if undefined_energy else "no_parental_sequence"
+        return table["m_pack_unknown_fallback"], status
 
     mean_ddg = float(np.mean(ddgs))
     try:
         value = boltzmann_compatibility(mean_ddg, 0.0, rt=table["m_pack_tau"])
     except ValueError:
-        return 1.0, "undefined_energy"
+        return table["m_pack_unknown_fallback"], "undefined_energy"
     return value, "scored"
 
 
@@ -2285,7 +2346,7 @@ def retention_factor(odd_segment: str, structural_intact: bool,
 # Tag identifying which revision of RPI_WEIGHTS produced a given rpi_* row -- not itself
 # a weight, so it lives at module scope rather than inside RPI_WEIGHTS. Bump this any
 # time RPI_WEIGHTS changes so historical output rows remain attributable.
-RPI_WEIGHTS_VERSION = "2026-08-29.1"
+RPI_WEIGHTS_VERSION = "2026-10-01.1"
 
 # Emitted as the rpi_k_stratum_provisional column on every row.
 #
@@ -2365,8 +2426,16 @@ def compute_rpi(
     row.update({
         "rpi_m_pack": round(m_pack, 4),
         "rpi_m_pack_status": m_pack_status,
+        # "measured" only for "scored" (includes a genuine ddG<=0 saturated 1.0);
+        # "imputed_median" for the no_parental_sequence/undefined_energy fallback, which
+        # is table["m_pack_unknown_fallback"], not 1.0, as of 2026-10 -- see that key.
+        "rpi_m_pack_value_source": "measured" if m_pack_status == "scored" else "imputed_median",
         "rpi_m_pol": round(m_pol, 4),
         "rpi_m_pol_status": m_pol_status,
+        # M_pol is NOT imputed (see RPI_WEIGHTS["m_pol_weakly_supported"] and the
+        # README): "weakly_supported" rather than "imputed_median" for its fallback,
+        # since the value is still the unconditional 1.0, not a measured substitute.
+        "rpi_m_pol_value_source": "measured" if m_pol_status == "scored" else "weakly_supported",
         "rpi_k_stratum": stratum,
         # Explicit honesty marker -- see RPI_K_STRATUM_PROVISIONAL. Without it a reader
         # would take rpi_k_stratum for a real parental-divergence stratification.
@@ -5128,6 +5197,21 @@ class ConstellationPriorTest(unittest.TestCase):
         with self.assertRaises(KeyError):
             constellation_prior("intermediate")
 
+    def test_k_values_unchanged_by_fallback_changes(self):
+        """Proof: the 2026-10 median-fallback changes touched ecological_opportunity
+        and score_m_pack only -- K (constellation_prior) input counts must be
+        unchanged from the published spec values {close: M12/S12/L1, distant: M11/S0/L0}."""
+        self.assertEqual(
+            RPI_WEIGHTS["constellation_counts"]["close"], {"M": 12, "S": 12, "L": 1})
+        self.assertEqual(
+            RPI_WEIGHTS["constellation_counts"]["distant"], {"M": 11, "S": 0, "L": 0})
+        # Derived priors must still reflect those counts (M==S for close by symmetry)
+        close = constellation_prior("close")
+        self.assertAlmostEqual(close["M"], close["S"], places=9)
+        distant = constellation_prior("distant")
+        self.assertGreater(distant["M"], distant["S"])
+        self.assertGreater(distant["M"], distant["L"])
+
 
 class DivergenceStratumTest(unittest.TestCase):
     def test_rodriguez_within_species_pair_is_close(self):
@@ -5366,7 +5450,7 @@ class EcologicalOpportunityTest(unittest.TestCase):
         b = _eco_isolate("B", "USA", "2001")
         result = ecological_opportunity(
             ["A", "B"], [a, b], _parent_map(a, b), "actual_parents")
-        self.assertEqual(result["rpi_e_geo"], 1.0)
+        self.assertEqual(result["rpi_e_geo"], RPI_WEIGHTS["geo_unknown_fallback"])
         self.assertIn("geo", result["rpi_e_unknown_components"].split(","))
 
     def test_unknown_components_names_time_when_year_is_missing(self):
@@ -5374,7 +5458,7 @@ class EcologicalOpportunityTest(unittest.TestCase):
         b = _eco_isolate("B", "USA", "2001")
         result = ecological_opportunity(
             ["A", "B"], [a, b], _parent_map(a, b), "actual_parents")
-        self.assertEqual(result["rpi_e_time"], 1.0)
+        self.assertEqual(result["rpi_e_time"], RPI_WEIGHTS["time_unknown_fallback"])
         self.assertIn("time", result["rpi_e_unknown_components"].split(","))
 
     def test_unknown_components_stays_empty_for_a_genuine_match(self):
@@ -5402,12 +5486,12 @@ class EcologicalOpportunityTest(unittest.TestCase):
         self.assertLess(result["rpi_e_geo"], 1.0)
         self.assertNotIn("geo", result["rpi_e_unknown_components"].split(","))
 
-    def test_unknown_components_never_changes_the_score(self):
-        """Purely descriptive: two candidates identical except for whether their
-        missing-country neutrality is 'real' (both known, different-but-nearby
-        countries happening to score close to 1.0) vs 'unknown' must not differ in
-        rpi_e_total merely because one is flagged -- the flag is computed AFTER worst
-        is finalised and never written back into it."""
+    def test_unknown_components_flag_is_descriptive_not_a_score_override(self):
+        """The unknown_components flag is computed AFTER worst is finalized from the
+        actual scored values and never written back into the score. Missing-country geo
+        uses the calibrated fallback (not 1.0); the flag then reflects which factor drove
+        it -- not the other way around. Scores correctly differ between measured and
+        imputed cases."""
         known_a = _eco_isolate("A", "USA", "2001")
         known_b = _eco_isolate("B", "USA", "2001")
         known = ecological_opportunity(
@@ -5417,8 +5501,14 @@ class EcologicalOpportunityTest(unittest.TestCase):
         unknown = ecological_opportunity(
             ["A", "B"], [unknown_a, unknown_b], _parent_map(unknown_a, unknown_b),
             "actual_parents")
-        self.assertEqual(known["rpi_e_total"], unknown["rpi_e_total"])
-        self.assertEqual(known["rpi_e_geo"], unknown["rpi_e_geo"])
+        # Known same-country pair: measured 1.0, no flag
+        self.assertEqual(known["rpi_e_geo"], 1.0)
+        self.assertEqual(known["rpi_e_unknown_components"], "")
+        # Missing-country pair: calibrated fallback (< 1.0), geo flag set
+        self.assertEqual(unknown["rpi_e_geo"], RPI_WEIGHTS["geo_unknown_fallback"])
+        self.assertIn("geo", unknown["rpi_e_unknown_components"].split(","))
+        # Scores correctly differ: imputed fallback is not the same as measured 1.0
+        self.assertNotEqual(known["rpi_e_geo"], unknown["rpi_e_geo"])
 
     def test_single_implicated_species_returns_neutral_one(self):
         a = _eco_isolate("A", "USA", "2001")
@@ -6107,7 +6197,7 @@ class ScoreMPackTest(unittest.TestCase):
         value, status = score_m_pack(candidate, reference, gate1, "M",
                                      weights=self._weights())
         self.assertEqual(status, "no_parental_sequence")
-        self.assertEqual(value, 1.0)
+        self.assertEqual(value, RPI_WEIGHTS["m_pack_unknown_fallback"])
 
     def test_no_parental_sequence_when_species_has_no_reference_sequence(self):
         reference = _genomic_reference([], {})
@@ -6121,7 +6211,7 @@ class ScoreMPackTest(unittest.TestCase):
         value, status = score_m_pack(candidate, reference, gate1, "M",
                                      weights=self._weights())
         self.assertEqual(status, "no_parental_sequence")
-        self.assertEqual(value, 1.0)
+        self.assertEqual(value, RPI_WEIGHTS["m_pack_unknown_fallback"])
 
     def test_undefined_energy_status_on_a_non_finite_ddg(self):
         """N4: boltzmann_compatibility raises ValueError on a non-finite ddG rather
@@ -6138,7 +6228,24 @@ class ScoreMPackTest(unittest.TestCase):
             value, status = score_m_pack(candidate, reference, gate1, "M",
                                          weights=self._weights())
         self.assertEqual(status, "undefined_energy")
-        self.assertEqual(value, 1.0)
+        self.assertEqual(value, RPI_WEIGHTS["m_pack_unknown_fallback"])
+
+    def test_scored_saturated_value_is_measurement_not_fallback(self):
+        """Proof: when score_m_pack successfully folds a candidate whose panhandle
+        matches the backbone consensus (ddG <= 0, Boltzmann weight saturates at 1.0),
+        the returned status is 'scored' and the value is the measured 1.0 -- not the
+        m_pack_unknown_fallback. A measured perfect match must never be silently
+        replaced by the imputed median."""
+        reference, gate1 = self._reference_and_gate1()
+        candidate = CandidateInput(
+            candidate_id="C1",
+            s_genomic=_tagged_seq("AA", "TT"), m_genomic=_tagged_seq("AA", "TT"),
+            l_genomic=_tagged_seq("AA", "TT"))
+        value, status = score_m_pack(candidate, reference, gate1, "M",
+                                     weights=self._weights())
+        self.assertEqual(status, "scored")
+        self.assertNotEqual(value, RPI_WEIGHTS["m_pack_unknown_fallback"])
+        self.assertGreater(value, RPI_WEIGHTS["m_pack_unknown_fallback"])
 
     def test_never_produces_a_literal_zero_or_a_value_above_one(self):
         """Property this function must preserve regardless of status: compute_rpi's
@@ -8068,6 +8175,41 @@ def choose_rescaling(values: Sequence[float],
 RPI_CALIBRATION_SCHEMA_VERSION = 1
 
 
+def compute_geo_time_fallback_medians(
+        panel_isolates: Sequence["prep.IsolateRecord"],
+        weights: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Median geo_decay/time_decay over every cross-species pair in `panel_isolates`
+    whose country (resp. year span) is known on BOTH sides -- the same calibration panel
+    data/rpi_calibration.json already pins for M_pack, reused here so Factor E's
+    missing-metadata fallback is imputed from the same auditable, WS4-disjoint source
+    rather than a sample of whichever GA pool happens to be loaded (2026-10 decision,
+    see the design conversation this function implements).
+
+    A pair where EITHER side's country (or year) is missing is excluded from the
+    distribution entirely -- including it would mean imputing the unknown-metadata
+    fallback FROM other unknown-metadata pairs, which defeats the point. Same-country
+    (or overlapping-year) pairs ARE included: geo_decay/time_decay return 1.0 for those
+    too, but that 1.0 is a genuine measurement (two known locations happen to be the
+    same/nearby), not a fallback -- see ecological_opportunity's own unknown-tracking,
+    which makes exactly this same distinction.
+
+    Returns {"geo": {...}, "time": {...}}, each a _summarise()-shaped dict plus "n".
+    """
+    table = _weights(weights)
+    floor = table["eco_floor"]
+    geo_values: List[float] = []
+    time_values: List[float] = []
+    for a, b in itertools.combinations(sorted(panel_isolates, key=lambda i: i.isolate_key), 2):
+        if a.species_name == b.species_name:
+            continue
+        if a.country and b.country:
+            geo_values.append(geo_decay(a.country, b.country, table["geo_d0_km"], floor))
+        span_a, span_b = _year_span([a]), _year_span([b])
+        if span_a is not None and span_b is not None:
+            time_values.append(time_decay(span_a, span_b, table["time_tau_years"], floor))
+    return {"geo": _summarise(geo_values), "time": _summarise(time_values)}
+
+
 def calibrate(reference: "prep.ReferenceData",
               window_nt: int = rd.RPI_PANHANDLE_WINDOW_NT,
               seed: int = RPI_CALIBRATION_SEED,
@@ -8088,6 +8230,9 @@ def calibrate(reference: "prep.ReferenceData",
     # here -- those groups do not exist yet.
     consumed = sorted({o["focal_isolate_key"] for o in observations}
                       | {o["partner_isolate_key"] for o in observations})
+    panel_isolates = [i for i in reference.isolates if i.isolate_key in set(consumed)]
+    geo_time_fallbacks = compute_geo_time_fallback_medians(panel_isolates)
+    discrimination_result = assess_discrimination(observations, rescaling)
 
     return {
         "schema_version": RPI_CALIBRATION_SCHEMA_VERSION,
@@ -8101,7 +8246,7 @@ def calibrate(reference: "prep.ReferenceData",
         "ddg": _summarise(ddg),
         "bimodality": assessment,
         "rescaling": rescaling,
-        "discrimination": assess_discrimination(observations, rescaling),
+        "discrimination": discrimination_result,
         "reserved_for_calibration": {
             "note": "WS4's b1/b2/random group builders MUST exclude these isolate keys. "
                     "tau is derived from this panel's ddG span, so any overlap would tune "
@@ -8113,6 +8258,24 @@ def calibrate(reference: "prep.ReferenceData",
             "tau_4_86_superseded": "D13's provisional tau ~= 4.86 was derived from a "
                                    "ddG span of 22.4 measured before the N = 50 window "
                                    "was chosen. This artifact supersedes it.",
+        },
+        "imputed_fallbacks": {
+            "note": "Medians RPI_WEIGHTS pins as the no-signal fallback for M_pack "
+                    "(no_parental_sequence/undefined_energy) and Factor E's geo/time "
+                    "(missing country/year) -- so a candidate with unmeasurable data "
+                    "scores a typical measured value, not 1.0, the most favourable value "
+                    "a multiplicative factor can take. m_pack_median is this same "
+                    "calibrate() call's discrimination.m_pack_under_chosen_form.median "
+                    "(756 cognate/non-cognate folds over this panel's 42 isolates); "
+                    "geo_median/time_median are computed fresh by "
+                    "compute_geo_time_fallback_medians over this panel's cross-species "
+                    "pairs with BOTH sides known (pairs with either side missing are "
+                    "excluded, not just floored, since including them would impute the "
+                    "fallback from other fallbacks). M_pol is NOT imputed here -- see "
+                    "RPI_WEIGHTS['m_pol_weakly_supported'] and the README.",
+            "m_pack_median": discrimination_result["m_pack_under_chosen_form"]["median"],
+            "geo": geo_time_fallbacks["geo"],
+            "time": geo_time_fallbacks["time"],
         },
     }
 
