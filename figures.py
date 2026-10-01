@@ -637,7 +637,8 @@ def _species_short(leaf_name: str) -> str:
 
 def _prune_to_species_representatives(tree: "Bio.Phylo.BaseTree.Tree") -> "Bio.Phylo.BaseTree.Tree":
     """Prune tree in place: keep only the alphabetically first isolate per species,
-    then rename surviving tips to the short species name. Returns the same tree."""
+    then rename surviving tips to the short species name. Returns the same tree.
+    The caller must capture any pre-prune counts (e.g. n_isolates) BEFORE this call."""
     from collections import defaultdict
     by_species: Dict[str, List[str]] = defaultdict(list)
     for tip in tree.get_terminals():
@@ -682,7 +683,7 @@ def render_phylogroup_overview(output_dir: Path, data_dir: str = "output",
 
     for g in groups:
         raw = load_tree_relabeled(g / segment / "tree.treefile")
-        n_isolates = len(raw.get_terminals())
+        n_isolates = len(raw.get_terminals())  # must be captured before prune (raw is mutated)
         condensed = _prune_to_species_representatives(raw)
         panel_items.append((g.name, condensed, n_isolates))
 
@@ -722,6 +723,16 @@ def render_phylogroup_overview(output_dir: Path, data_dir: str = "output",
     fig.savefig(combined_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     written.append(combined_path)
+
+    meta_path = output_dir / f"phylogroup_overview_{segment}.json"
+    panel_meta = [
+        {"group": g_name, "n_species": len(tree.get_terminals()), "n_isolates": n_iso}
+        for g_name, tree, n_iso in panel_items
+    ]
+    meta_path.write_text(
+        json.dumps({"segment": segment, "panels": panel_meta}, indent=2),
+        encoding="utf-8")
+    written.append(meta_path)
 
     return written
 
@@ -1148,6 +1159,15 @@ class PhylogroupOverviewTest(unittest.TestCase):
                  "I3": "t2|Orthohantavirus dobravaense|d"})
             out = root / "out"
             written = render_phylogroup_overview(out, data_dir=str(root), segment="S")
-            self.assertEqual(len(written), 1)
-            self.assertTrue(written[0].exists())
-            self.assertIn("overview", written[0].name)
+            self.assertEqual(len(written), 2)
+            png_path, meta_path = written
+            self.assertTrue(png_path.exists())
+            self.assertIn("overview", png_path.name)
+            # Assert the shipped metadata (isolate count before prune, species count after)
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            self.assertEqual(len(meta["panels"]), 1)
+            panel = meta["panels"][0]
+            self.assertEqual(panel["n_isolates"], 4,
+                             "n_isolates must be the pre-prune raw count")
+            self.assertEqual(panel["n_species"], 3,
+                             "n_species must be the post-prune species count")
