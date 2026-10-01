@@ -77,6 +77,29 @@ def default_candidate_factory(reference: Any) -> Callable[[str, Dict[str, Any]],
     return lambda candidate_id, sources: factory(candidate_id, reference, sources)
 
 
+def neutral_factors(row: Dict[str, Any]) -> str:
+    """Which RPI factors in this row are a neutral fallback rather than a measured value,
+    as ';'-joined 'Factor:reason' entries, or '' when E, M_pack and M_pol were all
+    measured. Derived only from fields rpi_core.py already computed -- descriptive, never
+    read by scoring or selection.
+
+    A bare 1.0 does not say which it is: M_pack and M_pol return 1.0 both when scored
+    (M_pack saturates at exactly 1.0 for ~38% of calibration observations) and when they
+    fall back (no_parental_sequence, no_signal_beyond_tag, undefined_energy). Only the
+    status distinguishes them. K is not listed: it is a prior, never a neutral 1, and
+    every row carries rpi_k_stratum_provisional instead.
+    """
+    parts = []
+    unknown_e = row.get("rpi_e_unknown_components")
+    if unknown_e:
+        parts.append("E:" + str(unknown_e).replace(",", "+"))
+    for name, key in (("M_pack", "rpi_m_pack_status"), ("M_pol", "rpi_m_pol_status")):
+        status = row.get(key)
+        if status and status != "scored":
+            parts.append(f"{name}:{status}")
+    return ";".join(parts)
+
+
 class Oracle:
     def __init__(self, reference: Any, precomputed: Any, args: Any,
                  candidate_factory: Optional[Callable[[str, Dict[str, Any]], Any]] = None):
@@ -112,9 +135,11 @@ class Oracle:
         self.cache[triplet] = value
         self.rows[triplet] = {k: row.get(k) for k in (
             "verdict", "rpi_generation", "rpi_retention", "rpi_e_total",
-            "rpi_e_isolate_basis", "rpi_e_unknown_components", "rpi_m_pack", "rpi_m_pol",
-            "rpi_k_stratum", "gate1_pattern", "gate1_discordant_segment",
+            "rpi_e_isolate_basis", "rpi_e_unknown_components", "rpi_m_pack",
+            "rpi_m_pack_status", "rpi_m_pol", "rpi_m_pol_status", "rpi_k_stratum",
+            "rpi_k_stratum_provisional", "gate1_pattern", "gate1_discordant_segment",
             "gate1_implicated_species")}
+        self.rows[triplet]["rpi_neutral_factors"] = neutral_factors(row)
         return value
 
 
@@ -1093,6 +1118,38 @@ class OracleTest(unittest.TestCase):
         with mock.patch.object(rc, "score_candidate", return_value=row):
             oracle.score(("a", "b", "c"))
         self.assertEqual(oracle.rows[("a", "b", "c")]["rpi_e_unknown_components"], "host,geo")
+
+    def test_factor_statuses_and_neutral_summary_reach_oracle_rows(self):
+        """A neutral 1.0 from a missing-data fallback must be distinguishable from a
+        measured value in the GA outputs, for every factor. The statuses rpi_core.py
+        already computes (M_pack, M_pol) and K's provisional marker must survive the
+        field whitelist, and rpi_neutral_factors summarises which factors are not
+        measured. Purely descriptive: the returned fitness must be unchanged."""
+        oracle = self._oracle()
+        row = {"verdict": "no_conflict", "rpi_generation": 0.47, "rpi_m_pack": 1.0,
+               "rpi_m_pack_status": "no_parental_sequence", "rpi_m_pol": 1.0,
+               "rpi_m_pol_status": "no_signal_beyond_tag", "rpi_k_stratum": "close",
+               "rpi_k_stratum_provisional": True, "rpi_e_unknown_components": "host,geo"}
+        with mock.patch.object(rc, "score_candidate", return_value=row):
+            value = oracle.score(("a", "b", "c"))
+        self.assertEqual(value, 0.47)
+        stored = oracle.rows[("a", "b", "c")]
+        self.assertEqual(stored["rpi_m_pack_status"], "no_parental_sequence")
+        self.assertEqual(stored["rpi_m_pol_status"], "no_signal_beyond_tag")
+        self.assertIs(stored["rpi_k_stratum_provisional"], True)
+        self.assertEqual(stored["rpi_neutral_factors"],
+                         "E:host+geo;M_pack:no_parental_sequence;M_pol:no_signal_beyond_tag")
+
+    def test_neutral_factors_is_empty_when_every_factor_was_measured(self):
+        self.assertEqual(neutral_factors({
+            "rpi_e_unknown_components": "", "rpi_m_pack_status": "scored",
+            "rpi_m_pol_status": "scored"}), "")
+
+    def test_neutral_factors_does_not_count_a_scored_one_as_neutral(self):
+        """A measured M_pack of exactly 1.0 (saturated, status 'scored') is a real value."""
+        self.assertEqual(neutral_factors({
+            "rpi_m_pack": 1.0, "rpi_m_pack_status": "scored",
+            "rpi_m_pol_status": "no_signal_beyond_tag"}), "M_pol:no_signal_beyond_tag")
 
     def test_score_candidate_exception_scores_zero_and_is_recorded_not_raised(self):
         """An unattended multi-hour search must survive one bad triplet -- see errors

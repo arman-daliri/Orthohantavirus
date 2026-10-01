@@ -367,7 +367,8 @@ def render_after_figures(ga_search_json: Path, output_dir: Path, data_dir: str =
         # metadata should say so at the point where that fitness is being read, not only
         # in a 1000+-row CSV three steps upstream.
         row = {"candidate_id": candidate_id, "fitness": winner.get("fitness"),
-              "rpi_e_unknown_components": winner.get("rpi_e_unknown_components") or ""}
+              "rpi_e_unknown_components": winner.get("rpi_e_unknown_components") or "",
+              "rpi_neutral_factors": winner.get("rpi_neutral_factors") or ""}
         for segment, donor_key in zip(SEGMENTS, triplet):
             meta = parent_metadata(donor_key, by_key)
             for field in ("isolate_key", "species", "country", "host"):
@@ -872,7 +873,8 @@ class RenderAfterFiguresUnknownComponentsColumnTest(unittest.TestCase):
 
         winners = [
             {"triplet": ["s1", "m1", "l1"], "fitness": 0.4716981132,
-             "rpi_e_unknown_components": "host,geo"},
+             "rpi_e_unknown_components": "host,geo",
+             "rpi_neutral_factors": "E:host+geo;M_pol:no_signal_beyond_tag"},
             {"triplet": ["s2", "m2", "l2"], "fitness": 0.01,
              "rpi_e_unknown_components": ""},
         ]
@@ -889,6 +891,8 @@ class RenderAfterFiguresUnknownComponentsColumnTest(unittest.TestCase):
             self.assertIn("rpi_e_unknown_components", rows[0])
             self.assertEqual(rows[0]["rpi_e_unknown_components"], "host,geo")
             self.assertEqual(rows[1]["rpi_e_unknown_components"], "")
+            self.assertEqual(rows[0]["rpi_neutral_factors"], "E:host+geo;M_pol:no_signal_beyond_tag")
+            self.assertEqual(rows[1]["rpi_neutral_factors"], "")
 
 
 class RenderBeforeFiguresIntegrationTest(unittest.TestCase):
