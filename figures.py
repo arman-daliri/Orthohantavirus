@@ -615,6 +615,129 @@ def render_tree_figures(output_dir: Path, data_dir: str = "output", fmt: str = "
 
 
 # ============================================================================
+# PHYLOGROUP OVERVIEW — species-condensed cladogram per host family
+# ============================================================================
+
+_PHYLOGROUP_LABELS = {
+    "arvicolinae_borne": "Arvicolinae-borne (voles, lemmings)",
+    "murinae_borne": "Murinae-borne (Old World rats & mice)",
+    "sigmodontinae_borne": "Sigmodontinae-borne (New World rats & mice)",
+    "soricomorpha_borne": "Soricomorpha-borne (shrews & moles)",
+}
+
+
+def _species_short(leaf_name: str) -> str:
+    """'t2|Orthohantavirus puumalaense|foo' -> 'puumalaense'; falls back to full name."""
+    parts = leaf_name.split("|")
+    if len(parts) >= 2:
+        words = parts[1].split()
+        return words[-1] if words else leaf_name
+    return leaf_name
+
+
+def _prune_to_species_representatives(tree: "Bio.Phylo.BaseTree.Tree") -> "Bio.Phylo.BaseTree.Tree":
+    """Return a deep copy of tree with all but one representative per species pruned.
+    The kept representative is the alphabetically first isolate_key per species."""
+    import copy
+    from collections import defaultdict
+    t = copy.deepcopy(tree)
+    by_species: Dict[str, List[str]] = defaultdict(list)
+    for tip in t.get_terminals():
+        by_species[_species_short(tip.name)].append(tip.name)
+    to_prune = []
+    for names in by_species.values():
+        to_prune.extend(sorted(names)[1:])  # keep sorted-first; remove the rest
+    for name in to_prune:
+        t.prune(name)
+    # Rename surviving tips to the short species name for readability
+    for tip in t.get_terminals():
+        tip.name = _species_short(tip.name)
+    return t
+
+
+def render_phylogroup_overview(output_dir: Path, data_dir: str = "output",
+                               segment: str = "S") -> List[Path]:
+    """One figure per phylogroup showing the species-condensed cladogram (one
+    representative per species, labelled by short species name), plus a combined
+    2×2 panel figure. Reads committed trees under output/phylogenetics_phylogroup/;
+    raises FileNotFoundError if the directory is absent."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    phylogroup_dir = Path(data_dir) / "phylogenetics_phylogroup"
+    if not phylogroup_dir.is_dir():
+        raise FileNotFoundError(
+            f"phylogroup output directory not found: {phylogroup_dir}\n"
+            f"Run phylogeny.py (Stage 2) first.")
+
+    groups = sorted(p for p in phylogroup_dir.iterdir()
+                    if p.is_dir()
+                    and (p / "labels.json").exists()
+                    and (p / segment / "tree.treefile").exists())
+    if not groups:
+        raise FileNotFoundError(
+            f"no {segment}-segment trees found under {phylogroup_dir}")
+
+    written: List[Path] = []
+    panel_items: List[Tuple[str, "Bio.Phylo.BaseTree.Tree", int]] = []
+
+    for g in groups:
+        raw = load_tree_relabeled(g / segment / "tree.treefile")
+        n_isolates = len(raw.get_terminals())
+        condensed = _prune_to_species_representatives(raw)
+        panel_items.append((g.name, condensed, n_isolates))
+
+    # Combined 2×2 figure
+    n_panels = len(panel_items)
+    ncols = 2
+    nrows = (n_panels + ncols - 1) // ncols
+    fig, axes = plt.subplots(nrows, ncols, figsize=(12, 5 * nrows))
+    import numpy as _np
+    axes_flat = list(axes.flat) if isinstance(axes, _np.ndarray) else [axes]
+
+    for idx, (g_name, tree, n_iso) in enumerate(panel_items):
+        ax = axes_flat[idx]
+        tip_pos = draw_cladogram(ax, tree.root)
+        n_species = len(tip_pos)
+        host_label = _PHYLOGROUP_LABELS.get(g_name, g_name.replace("_", " "))
+        ax.set_title(f"{host_label}\n"
+                     f"{n_species} species · {n_iso} isolates · {segment}-segment IQ-TREE",
+                     fontsize=8, pad=6)
+        ax.set_xlabel("substitutions/site", fontsize=7)
+        # Label each tip
+        x_positions = _x_positions(tree.root)
+        y_positions, tips = _layout(tree.root)
+        x_max = max(x_positions.values()) if x_positions else 1.0
+        for tip in tips:
+            cx = x_positions[id(tip)]
+            cy = y_positions[id(tip)]
+            ax.text(cx + x_max * 0.01, cy, tip.name,
+                    fontsize=6, va="center", ha="left")
+        # Extra right margin for labels
+        ax.set_xlim(right=x_max * 1.55)
+
+    # Hide unused panels (if panel count is odd)
+    for idx in range(n_panels, len(axes_flat)):
+        axes_flat[idx].set_visible(False)
+
+    fig.suptitle(
+        f"Orthohantavirus species-condensed phylogenies by host family "
+        f"({segment} segment, one representative per species)",
+        fontsize=10, y=1.01)
+    fig.tight_layout()
+    combined_path = output_dir / f"phylogroup_overview_{segment}.png"
+    fig.savefig(combined_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    written.append(combined_path)
+
+    return written
+
+
+# ============================================================================
 # CLI
 # ============================================================================
 
@@ -646,9 +769,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     trees.add_argument("--group", default=None,
                        help="only this group directory name, e.g. orthohantavirus_tulaense")
 
+    overview = sub.add_parser("overview",
+                               help="species-condensed phylogroup overview: one representative "
+                                    "per species per host family, coloured cladogram")
+    overview.add_argument("--input", default="output",
+                          help="Stage 2 output directory containing phylogenetics_phylogroup/")
+    overview.add_argument("--output", default="output/figures/overview")
+    overview.add_argument("--segment", choices=("S", "M", "L"), default="S",
+                          help="which segment's tree to draw (default: S)")
+
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
+    if args.command == "overview":
+        written = render_phylogroup_overview(Path(args.output), args.input, args.segment)
+        print(f"wrote {len(written)} file(s) to {args.output}")
+        return 0
     if args.command == "trees":
         written = render_tree_figures(Path(args.output), args.input, args.format, args.group)
         print(f"wrote {len(written)} file(s) to {args.output}")
@@ -971,3 +1107,58 @@ class TreeTanglegramTest(unittest.TestCase):
         right = Phylo.read(io.StringIO("((a:1,b:1):1,d:1);"), "newick")
         fig, shared = draw_tanglegram(left, right, "S", "M", "t")
         self.assertEqual(shared, 2)
+
+
+class PhylogroupOverviewTest(unittest.TestCase):
+    def _write_phylogroup(self, root: Path, group_name: str,
+                          newick: str, labels: Dict[str, str]) -> None:
+        g = root / "phylogenetics_phylogroup" / group_name
+        seg = g / "S"
+        seg.mkdir(parents=True)
+        (seg / "tree.treefile").write_text(newick, encoding="utf-8")
+        (g / "labels.json").write_text(
+            json.dumps(labels), encoding="utf-8")
+
+    def test_species_short_parses_isolate_key(self):
+        self.assertEqual(
+            _species_short("t2|Orthohantavirus puumalaense|foo bar"),
+            "puumalaense")
+
+    def test_species_short_falls_back_for_bare_name(self):
+        self.assertEqual(_species_short("bare"), "bare")
+
+    def test_prune_keeps_one_per_species(self):
+        from Bio.Phylo.BaseTree import Tree, Clade
+        # Build tree directly: two puumalaense tips, one hantanense, one tulaense
+        def tip(name): return Clade(branch_length=0.1, name=name)
+        root = Clade(clades=[
+            Clade(branch_length=0.1, clades=[
+                tip("t2|Orthohantavirus puumalaense|iso1"),
+                tip("t2|Orthohantavirus puumalaense|iso2"),
+            ]),
+            Clade(branch_length=0.1, clades=[
+                tip("t2|Orthohantavirus hantanense|iso3"),
+                tip("t2|Orthohantavirus tulaense|iso4"),
+            ]),
+        ])
+        tree = Tree(root=root)
+        condensed = _prune_to_species_representatives(tree)
+        tip_names = {t.name for t in condensed.get_terminals()}
+        self.assertEqual(tip_names, {"puumalaense", "hantanense", "tulaense"})
+
+    def test_render_phylogroup_overview_writes_combined_png(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_phylogroup(
+                root, "murinae_borne",
+                "((I0:0.1,I1:0.1):0.1,(I2:0.1,I3:0.1):0.1);",
+                {"I0": "t2|Orthohantavirus hantanense|a",
+                 "I1": "t2|Orthohantavirus hantanense|b",
+                 "I2": "t2|Orthohantavirus seoulense|c",
+                 "I3": "t2|Orthohantavirus dobravaense|d"})
+            out = root / "out"
+            written = render_phylogroup_overview(out, data_dir=str(root), segment="S")
+            self.assertEqual(len(written), 1)
+            self.assertTrue(written[0].exists())
+            self.assertIn("overview", written[0].name)
