@@ -95,7 +95,7 @@ def neutral_factors(row: Dict[str, Any]) -> str:
         parts.append("E:" + str(unknown_e).replace(",", "+"))
     for name, key in (("M_pack", "rpi_m_pack_status"), ("M_pol", "rpi_m_pol_status")):
         status = row.get(key)
-        if status and status != "scored":
+        if status not in (None, "scored"):
             parts.append(f"{name}:{status}")
     return ";".join(parts)
 
@@ -1114,7 +1114,16 @@ class OracleTest(unittest.TestCase):
         row = {"verdict": "no_conflict", "rpi_generation": 0.47, "rpi_e_unknown_components": "host,geo"}
         with mock.patch.object(rc, "score_candidate", return_value=row):
             oracle.score(("a", "b", "c"))
+        # Intermediate: field survived the whitelist into oracle.rows
         self.assertEqual(oracle.rows[("a", "b", "c")]["rpi_e_unknown_components"], "host,geo")
+        # Primary: field reaches the shipped CSV and JSONL (dump_scored_table field-selection)
+        with tempfile.TemporaryDirectory() as tmp:
+            jsonl_path, csv_path, _ = dump_scored_table(oracle, Path(tmp), seed=1)
+            jsonl_row = json.loads(jsonl_path.read_text(encoding="utf-8").splitlines()[0])
+            self.assertEqual(jsonl_row["rpi_e_unknown_components"], "host,geo")
+            with csv_path.open(encoding="utf-8", newline="") as f:
+                csv_row = next(csv.DictReader(f))
+            self.assertEqual(csv_row["rpi_e_unknown_components"], "host,geo")
 
     def test_factor_statuses_and_neutral_summary_reach_oracle_rows(self):
         """A neutral 1.0 from a missing-data fallback must be distinguishable from a
@@ -1130,12 +1139,33 @@ class OracleTest(unittest.TestCase):
         with mock.patch.object(rc, "score_candidate", return_value=row):
             value = oracle.score(("a", "b", "c"))
         self.assertEqual(value, 0.47)
+        # Intermediate: fields survived the whitelist into oracle.rows
         stored = oracle.rows[("a", "b", "c")]
         self.assertEqual(stored["rpi_m_pack_status"], "no_parental_sequence")
         self.assertEqual(stored["rpi_m_pol_status"], "no_signal_beyond_tag")
         self.assertIs(stored["rpi_k_stratum_provisional"], True)
         self.assertEqual(stored["rpi_neutral_factors"],
                          "E:host+geo;M_pack:no_parental_sequence;M_pol:no_signal_beyond_tag")
+        # Primary: all status fields and neutral summary reach the shipped CSV and JSONL
+        with tempfile.TemporaryDirectory() as tmp:
+            jsonl_path, csv_path, _ = dump_scored_table(oracle, Path(tmp), seed=1)
+            jsonl_row = json.loads(jsonl_path.read_text(encoding="utf-8").splitlines()[0])
+            for field in ("rpi_m_pack_status", "rpi_m_pol_status",
+                          "rpi_k_stratum_provisional", "rpi_neutral_factors",
+                          "rpi_e_unknown_components"):
+                self.assertIn(field, jsonl_row, msg=f"{field} missing from JSONL")
+            self.assertEqual(jsonl_row["rpi_m_pack_status"], "no_parental_sequence")
+            self.assertEqual(jsonl_row["rpi_neutral_factors"],
+                             "E:host+geo;M_pack:no_parental_sequence;M_pol:no_signal_beyond_tag")
+            with csv_path.open(encoding="utf-8", newline="") as f:
+                csv_row = next(csv.DictReader(f))
+            for field in ("rpi_m_pack_status", "rpi_m_pol_status",
+                          "rpi_k_stratum_provisional", "rpi_neutral_factors",
+                          "rpi_e_unknown_components"):
+                self.assertIn(field, csv_row, msg=f"{field} missing from CSV header")
+            self.assertEqual(csv_row["rpi_m_pack_status"], "no_parental_sequence")
+            self.assertEqual(csv_row["rpi_neutral_factors"],
+                             "E:host+geo;M_pack:no_parental_sequence;M_pol:no_signal_beyond_tag")
 
     def test_neutral_factors_is_empty_when_every_factor_was_measured(self):
         self.assertEqual(neutral_factors({
@@ -1147,6 +1177,11 @@ class OracleTest(unittest.TestCase):
         self.assertEqual(neutral_factors({
             "rpi_m_pack": 1.0, "rpi_m_pack_status": "scored",
             "rpi_m_pol_status": "no_signal_beyond_tag"}), "M_pol:no_signal_beyond_tag")
+
+    def test_neutral_factors_absent_status_key_is_not_treated_as_neutral(self):
+        """A row that lacks rpi_m_pack_status entirely (e.g. from an older rpi_core version)
+        must not appear in the neutral-factors summary — absence is not the same as 'fallback'."""
+        self.assertEqual(neutral_factors({"rpi_m_pol_status": "scored"}), "")
 
     def test_score_candidate_exception_scores_zero_and_is_recorded_not_raised(self):
         """An unattended multi-hour search must survive one bad triplet -- see errors
