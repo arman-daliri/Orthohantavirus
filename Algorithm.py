@@ -481,8 +481,7 @@ def _run_one_pool(pool_name: str, pool: List[str], reference: Any, precomputed: 
                         **oracle.rows.get(triplet, {})})
         if len(winners) >= args.top:
             break
-    confirmation = confirm_winners(oracle, winners, pool_out_dir, args.with_phylogeny)
-
+    # FASTA outputs are written before gate4 so a phylogeny failure never prevents them.
     fasta_path, missing_sequences = write_winner_sequences(
         reference, winners, pool_out_dir, args.seed)
     print(f"[{pool_name}] wrote {len(winners)} winner(s)' sequences to {fasta_path}"
@@ -492,6 +491,8 @@ def _run_one_pool(pool_name: str, pool: List[str], reference: Any, precomputed: 
     pool_fasta_path, pool_missing = write_pool_sequences(reference, pool, pool_out_dir, args.seed)
     print(f"[{pool_name}] wrote {len(pool)} pool isolate(s)' sequences to {pool_fasta_path}"
           + (f" ({pool_missing} segment(s) had no sequence available)" if pool_missing else ""))
+
+    confirmation = confirm_winners(oracle, winners, pool_out_dir, args.with_phylogeny)
 
     payload = {"config": vars(args), "pool_name": pool_name,
                "calibration_reserved_excluded": len(reserved),

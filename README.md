@@ -695,8 +695,8 @@ python -m unittest Algorithm                                     # full suite
 | `ga_search/strict_both/seed_<N>.json` | Step 3 | Same, for the strict-both pool |
 | `ga_search/ga_pool_comparison.json` | Step 3 | Side-by-side run comparison across both pools (pool sizes, generations run, best fitness, wall seconds) |
 | `ga_search/*/all_scored_seed_<N>.{jsonl,csv}` | Step 3 (always) | Every unique triplet the search evaluated — full RPI row plus `fitness` and S/M/L donor isolate keys |
-| `ga_search/*/winner_sequences_seed_<N>.fasta` | Step 3 (always) | Actual S/M/L segment nucleotide sequences for the top `--top` winners only, resolved from the reference snapshot's `genomic_index` |
-| `ga_search/*/pool_sequences_seed_<N>.fasta` | Step 3 (always) | Same, for every isolate in the pool — one record per isolate per segment, covering every isolate that could appear in `all_scored_seed_<N>.csv` |
+| `ga_search/*/winner_sequences_seed_<N>.fasta` | Step 3 (before gate4) | Actual S/M/L segment nucleotide sequences for the top `--top` winners only, resolved from the reference snapshot's `genomic_index`; written before phylogeny confirmation so a gate4 failure does not prevent sequence export |
+| `ga_search/*/pool_sequences_seed_<N>.fasta` | Step 3 (before gate4) | Same, for every isolate in the pool — one record per isolate per segment, covering every isolate that could appear in `all_scored_seed_<N>.csv` |
 
 ---
 
