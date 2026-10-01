@@ -88,6 +88,10 @@ def neutral_factors(row: Dict[str, Any]) -> str:
     fall back (no_parental_sequence, no_signal_beyond_tag, undefined_energy). Only the
     status distinguishes them. K is not listed: it is a prior, never a neutral 1, and
     every row carries rpi_k_stratum_provisional instead.
+
+    Absent status keys (None) are NOT listed here -- use missing_status_keys() for those.
+    Absence means the key was not emitted by rpi_core, which is distinct from a known
+    explicit fallback and must not be reported as either neutral or scored.
     """
     parts = []
     unknown_e = row.get("rpi_e_unknown_components")
@@ -98,6 +102,19 @@ def neutral_factors(row: Dict[str, Any]) -> str:
         if status not in (None, "scored"):
             parts.append(f"{name}:{status}")
     return ";".join(parts)
+
+
+def missing_status_keys(row: Dict[str, Any]) -> str:
+    """Comma-joined factor names whose status key is absent from the row (value is None
+    because the key was never set, not because a fallback was applied). An absent key is
+    a data-quality gap -- the factor's scoring state is unknown -- and must not be
+    silently treated as either 'scored' or 'neutral'. Returns '' when all status keys are
+    present."""
+    missing = []
+    for name, key in (("M_pack", "rpi_m_pack_status"), ("M_pol", "rpi_m_pol_status")):
+        if row.get(key) is None:
+            missing.append(name)
+    return ",".join(missing)
 
 
 class Oracle:
@@ -143,6 +160,7 @@ class Oracle:
             "gate1_implicated_species")}
         self.rows[triplet]["score_state"] = "junk_sequence" if junk else "scored"
         self.rows[triplet]["rpi_neutral_factors"] = neutral_factors(row)
+        self.rows[triplet]["rpi_missing_status_keys"] = missing_status_keys(row)
         return value
 
 
@@ -1217,6 +1235,27 @@ class OracleTest(unittest.TestCase):
         """A row that lacks rpi_m_pack_status entirely (e.g. from an older rpi_core version)
         must not appear in the neutral-factors summary — absence is not the same as 'fallback'."""
         self.assertEqual(neutral_factors({"rpi_m_pol_status": "scored"}), "")
+
+    def test_missing_status_keys_lists_absent_keys(self):
+        self.assertEqual(
+            missing_status_keys({"rpi_m_pol_status": "scored"}), "M_pack")
+
+    def test_missing_status_keys_empty_when_all_present(self):
+        self.assertEqual(
+            missing_status_keys({"rpi_m_pack_status": "scored",
+                                  "rpi_m_pol_status": "no_signal_beyond_tag"}), "")
+
+    def test_missing_status_keys_reached_csv(self):
+        """rpi_missing_status_keys must survive the field whitelist into the shipped CSV."""
+        oracle = self._oracle()
+        row = {"verdict": "no_conflict", "rpi_generation": 0.5}  # no status keys
+        with mock.patch.object(rc, "score_candidate", return_value=row):
+            oracle.score(("a", "b", "c"))
+        with tempfile.TemporaryDirectory() as tmp:
+            _, csv_path, _ = dump_scored_table(oracle, Path(tmp), seed=1)
+            with csv_path.open(encoding="utf-8", newline="") as f:
+                csv_row = next(csv.DictReader(f))
+        self.assertEqual(csv_row["rpi_missing_status_keys"], "M_pack,M_pol")
 
     def test_score_candidate_exception_scores_zero_and_is_recorded_not_raised(self):
         """An unattended multi-hour search must survive one bad triplet -- see errors
