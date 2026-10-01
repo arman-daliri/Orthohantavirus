@@ -40,3 +40,10 @@ output/validation/candidate_phylogenetics/
 # specific timing; not a research artifact.
 output/*_stdout.txt
 output/*_stderr.txt
+
+# run_main.sh writes STATUS.log to the project root on every run.
+STATUS.log
+
+# run_main.sh archives output/ to a sibling directory outside the repo.
+# Adding the pattern here covers the case where someone runs it from inside the repo.
+_pipeline_archive/
