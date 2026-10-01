@@ -590,24 +590,27 @@ def render_tree_figures(output_dir: Path, data_dir: str = "output", fmt: str = "
         out_dir.mkdir(parents=True, exist_ok=True)
         pdf_path = out_dir / f"{group_dir.name}.pdf"
         pdf = None
-        for left_seg, right_seg in SEGMENT_PAIRS:
-            if left_seg not in trees or right_seg not in trees:
-                logging.info("skip %s %s-%s: segment tree missing", group_dir.name, left_seg, right_seg)
-                continue
-            fig, _shared = draw_tanglegram(trees[left_seg], trees[right_seg], left_seg, right_seg,
-                                           f"{group_dir.name} ({scope})")
-            if fmt == "pdf":
-                if pdf is None:
-                    pdf = PdfPages(pdf_path)
-                pdf.savefig(fig)
-            else:
-                path = out_dir / f"{group_dir.name}_{left_seg}-{right_seg}.png"
-                fig.savefig(path, dpi=100)
-                written.append(path)
-            plt.close(fig)
-        if pdf is not None:
-            pdf.close()
-            written.append(pdf_path)
+        try:
+            for left_seg, right_seg in SEGMENT_PAIRS:
+                if left_seg not in trees or right_seg not in trees:
+                    logging.info("skip %s %s-%s: segment tree missing", group_dir.name, left_seg, right_seg)
+                    continue
+                fig, _shared = draw_tanglegram(trees[left_seg], trees[right_seg], left_seg, right_seg,
+                                               f"{group_dir.name} ({scope})")
+                if fmt == "pdf":
+                    if pdf is None:
+                        pdf = PdfPages(pdf_path)
+                    pdf.savefig(fig)
+                else:
+                    path = out_dir / f"{group_dir.name}_{left_seg}-{right_seg}.png"
+                    fig.savefig(path, dpi=100)
+                    written.append(path)
+                plt.close(fig)
+        finally:
+            if pdf is not None:
+                pdf.close()
+                if pdf_path.exists() and pdf_path.stat().st_size > 0:
+                    written.append(pdf_path)
     return written
 
 
