@@ -384,6 +384,251 @@ def render_after_figures(ga_search_json: Path, output_dir: Path, data_dir: str =
 
 
 # ============================================================================
+# TREES panel: every group's S/M/L trees as pairwise tanglegrams. Display only -- no
+# reassortment calls, no highlighting, no distances. Reads the committed tree files.
+# ============================================================================
+
+SEGMENT_PAIRS = (("S", "M"), ("M", "L"), ("S", "L"))
+TREE_WIDTH_IN = 5.0
+LINK_WIDTH_IN = 2.0
+ROW_HEIGHT_IN = 0.11
+LABEL_FONT_PT = 6.0
+TREE_COLOR = "#444444"
+LINK_COLOR = "#7a8794"
+
+
+def short_tip_label(isolate_key: str) -> str:
+    """Drops the leading 'tier|species|' fields of an isolate_key; display only."""
+    return isolate_key.split("|", 2)[-1]
+
+
+def order_by_reference(clade: "Bio.Phylo.BaseTree.Clade", ref_y: Dict[str, float]) -> None:
+    """Reorders children (in place) so each clade sits near the mean position its tips
+    have in a reference tree -- fewer crossing lines in the tanglegram. Changes drawing
+    order only; the tree's topology and branch lengths are untouched."""
+    neutral = (len(ref_y) - 1) / 2.0
+    mean_y: Dict[int, float] = {}
+
+    def walk(c) -> Tuple[float, int]:
+        if c.is_terminal():
+            if c.name in ref_y:
+                mean_y[id(c)] = ref_y[c.name]
+                return ref_y[c.name], 1
+            mean_y[id(c)] = neutral
+            return 0.0, 0
+        total, count = 0.0, 0
+        for child in c.clades:
+            child_total, child_count = walk(child)
+            total += child_total
+            count += child_count
+        mean_y[id(c)] = total / count if count else neutral
+        return total, count
+
+    walk(clade)
+    for c in clade.find_clades(order="level"):
+        if not c.is_terminal():
+            c.clades.sort(key=lambda child: mean_y[id(child)])
+
+
+def _ordered_positions(clade: "Bio.Phylo.BaseTree.Clade") -> Tuple[Dict[int, float], List["Bio.Phylo.BaseTree.Clade"]]:
+    """Like _layout but keeps the clade order as given (no ladderize)."""
+    tips = clade.get_terminals()
+    y: Dict[int, float] = {id(t): float(i) for i, t in enumerate(tips)}
+
+    def assign(c):
+        if c.is_terminal():
+            return y[id(c)]
+        ys = [assign(child) for child in c.clades]
+        y[id(c)] = sum(ys) / len(ys)
+        return y[id(c)]
+
+    assign(clade)
+    return y, tips
+
+
+def _scale_bar_length(max_depth: float) -> float:
+    import math
+    target = max_depth / 4.0
+    if target <= 0:
+        return 0.0
+    exponent = math.floor(math.log10(target))
+    for mult in (5, 2, 1):
+        if mult * 10 ** exponent <= target:
+            return mult * 10 ** exponent
+    return 10 ** exponent
+
+
+def _draw_tree_side(ax, clade, y, x_offset: float, mirrored: bool, max_depth_override: Optional[float] = None):
+    """Draws one tree into `ax` (axes in inches). Returns ({tip_name: (tip_x, y)},
+    max_depth). Tips of a tree run ragged by branch length; mirrored=True flips it so
+    its tips face left."""
+    from matplotlib.collections import LineCollection
+    x = _x_positions(clade)
+    max_depth = max(x.values()) if x else 0.0
+    scale = TREE_WIDTH_IN / max_depth if max_depth > 0 else 0.0
+
+    def fx(depth: float) -> float:
+        offset = depth * scale
+        return x_offset + (TREE_WIDTH_IN - offset if mirrored else offset)
+
+    segments = []
+
+    def walk(c):
+        if c.is_terminal():
+            return
+        child_ys = [y[id(child)] for child in c.clades]
+        segments.append(((fx(x[id(c)]), min(child_ys)), (fx(x[id(c)]), max(child_ys))))
+        for child in c.clades:
+            segments.append(((fx(x[id(c)]), y[id(child)]), (fx(x[id(child)]), y[id(child)])))
+            walk(child)
+
+    walk(clade)
+    ax.add_collection(LineCollection(segments, colors=TREE_COLOR, linewidths=0.5))
+    tip_pos = {t.name: (fx(x[id(t)]), y[id(t)]) for t in clade.get_terminals()}
+    return tip_pos, max_depth
+
+
+def draw_tanglegram(left_tree, right_tree, left_name: str, right_name: str, title: str):
+    """One figure: left tree (tips facing right) and right tree (mirrored), the tip
+    labels between them, and a thin line joining each isolate present in both trees.
+    The only things drawn are the trees as written by IQ-TREE and those joins."""
+    import copy as _copy
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.collections import LineCollection
+
+    left = _copy.deepcopy(left_tree.root)
+    right = _copy.deepcopy(right_tree.root)
+    left.ladderize()
+    left_y, left_tips = _ordered_positions(left)
+    left_pos_by_name = {t.name: left_y[id(t)] for t in left_tips}
+    order_by_reference(right, left_pos_by_name)
+    right_y, right_tips = _ordered_positions(right)
+
+    n_rows = max(len(left_tips), len(right_tips))
+    label_chars = max((len(short_tip_label(t.name or "")) for t in left_tips + right_tips), default=0)
+    label_in = label_chars * LABEL_FONT_PT * 0.55 / 72.0
+    fig_w = 2 * TREE_WIDTH_IN + 2 * label_in + LINK_WIDTH_IN + 0.6
+    fig_h = max(4.0, n_rows * ROW_HEIGHT_IN + 2.2)
+
+    fig = plt.figure(figsize=(fig_w, fig_h))
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(0, fig_w)
+    ax.set_ylim(n_rows + 3.2, -2.5)
+    ax.axis("off")
+
+    left_x0 = 0.3
+    right_x0 = fig_w - 0.3 - TREE_WIDTH_IN
+    left_pos, left_depth = _draw_tree_side(ax, left, left_y, left_x0, mirrored=False)
+    right_pos, right_depth = _draw_tree_side(ax, right, right_y, right_x0, mirrored=True)
+
+    left_label_x = left_x0 + TREE_WIDTH_IN + 0.05
+    right_label_x = right_x0 - 0.05
+    leaders, links = [], []
+    for name, (tx, ty) in left_pos.items():
+        leaders.append(((tx, ty), (left_label_x - 0.02, ty)))
+        ax.text(left_label_x, ty, short_tip_label(name), fontsize=LABEL_FONT_PT,
+                va="center", ha="left")
+    for name, (tx, ty) in right_pos.items():
+        leaders.append(((tx, ty), (right_label_x + 0.02, ty)))
+        ax.text(right_label_x, ty, short_tip_label(name), fontsize=LABEL_FONT_PT,
+                va="center", ha="right")
+    shared = [n for n in left_pos if n in right_pos]
+    for name in shared:
+        links.append(((left_label_x + label_in + 0.05, left_pos[name][1]),
+                      (right_label_x - label_in - 0.05, right_pos[name][1])))
+    ax.add_collection(LineCollection(leaders, colors="#cccccc", linewidths=0.3,
+                                     linestyles="dotted"))
+    ax.add_collection(LineCollection(links, colors=LINK_COLOR, linewidths=0.4, alpha=0.7))
+
+    bar_y = n_rows + 0.8
+    for x0, mirrored, depth in ((left_x0, False, left_depth), (right_x0, True, right_depth)):
+        bar = _scale_bar_length(depth)
+        if bar > 0 and depth > 0:
+            width = bar / depth * TREE_WIDTH_IN
+            start = x0 + TREE_WIDTH_IN - width if mirrored else x0
+            ax.plot([start, start + width], [bar_y, bar_y], color="black", lw=1)
+            ax.text(start + width / 2, bar_y + 0.5, f"{bar:g} subst./site", ha="center",
+                    va="top", fontsize=7)
+    ax.text(left_x0, -1.6, f"{left_name} segment", fontsize=10, fontweight="bold", va="center")
+    ax.text(fig_w - 0.3, -1.6, f"{right_name} segment", fontsize=10, fontweight="bold",
+            va="center", ha="right")
+    ax.text(fig_w / 2, -1.6, title, fontsize=9, ha="center", va="center")
+    ax.text(fig_w / 2, -0.7,
+            f"{len(left_tips)} tips | {len(right_tips)} tips | {len(shared)} shared (joined by lines)",
+            fontsize=7, ha="center", va="center", color="#555555")
+    ax.text(fig_w / 2, n_rows + 2.7,
+            "IQ-TREE output, unrooted (no outgroup), drawn from the file's basal node. Each tree is "
+            "scaled to the same drawn width; see scale bars. Right-hand tree order rearranged to "
+            "reduce line crossings.",
+            fontsize=6, ha="center", va="center", color="#555555")
+    return fig, len(shared)
+
+
+def discover_tree_groups(data_dir: str = "output") -> List[Tuple[str, Path]]:
+    """[(scope_label, group_dir)] for every group under output/phylogenetics*/ that has a
+    labels.json and at least one segment tree on disk."""
+    found = []
+    for scope in ("phylogenetics", "phylogenetics_phylogroup"):
+        scope_dir = Path(data_dir) / scope
+        if not scope_dir.is_dir():
+            continue
+        for group_dir in sorted(p for p in scope_dir.iterdir() if p.is_dir()):
+            if (group_dir / "labels.json").exists() and any(
+                    (group_dir / seg / "tree.treefile").exists() for seg in SEGMENTS):
+                found.append((scope, group_dir))
+    return found
+
+
+def render_tree_figures(output_dir: Path, data_dir: str = "output", fmt: str = "pdf",
+                        only_group: Optional[str] = None) -> List[Path]:
+    """One multi-page PDF per group (pages S-M, M-L, S-L), or one PNG per pair with
+    fmt='png'. A pair is skipped, with a logged note, if either segment's tree is missing."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_pdf import PdfPages
+
+    if fmt not in ("pdf", "png"):
+        raise ValueError(f"fmt must be 'pdf' or 'png', got {fmt!r}")
+    written: List[Path] = []
+    for scope, group_dir in discover_tree_groups(data_dir):
+        if only_group and group_dir.name != only_group:
+            continue
+        trees = {}
+        for seg in SEGMENTS:
+            tree_path = group_dir / seg / "tree.treefile"
+            if tree_path.exists():
+                trees[seg] = load_tree_relabeled(tree_path)
+        out_dir = Path(output_dir) / scope
+        out_dir.mkdir(parents=True, exist_ok=True)
+        pdf = PdfPages(out_dir / f"{group_dir.name}.pdf") if fmt == "pdf" else None
+        pages = 0
+        for left_seg, right_seg in SEGMENT_PAIRS:
+            if left_seg not in trees or right_seg not in trees:
+                logging.info("skip %s %s-%s: segment tree missing", group_dir.name, left_seg, right_seg)
+                continue
+            fig, _shared = draw_tanglegram(trees[left_seg], trees[right_seg], left_seg, right_seg,
+                                           f"{group_dir.name} ({scope})")
+            if pdf is not None:
+                pdf.savefig(fig)
+            else:
+                path = out_dir / f"{group_dir.name}_{left_seg}-{right_seg}.png"
+                fig.savefig(path, dpi=100)
+                written.append(path)
+            plt.close(fig)
+            pages += 1
+        if pdf is not None:
+            pdf.close()
+            if pages:
+                written.append(out_dir / f"{group_dir.name}.pdf")
+            else:
+                (out_dir / f"{group_dir.name}.pdf").unlink()
+    return written
+
+
+# ============================================================================
 # CLI
 # ============================================================================
 
@@ -406,9 +651,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     after.add_argument("--output", default="output/figures/after")
     after.add_argument("--min-tips", type=int, default=DEFAULT_MIN_TIPS)
 
+    trees = sub.add_parser("trees", help="every group's S/M/L trees as tanglegram pairs "
+                                         "(display only, no interpretation)")
+    trees.add_argument("--input", default="output",
+                       help="Stage 2 output directory containing phylogenetics*/")
+    trees.add_argument("--output", default="output/figures/trees")
+    trees.add_argument("--format", choices=("pdf", "png"), default="pdf")
+    trees.add_argument("--group", default=None,
+                       help="only this group directory name, e.g. orthohantavirus_tulaense")
+
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
+    if args.command == "trees":
+        written = render_tree_figures(Path(args.output), args.input, args.format, args.group)
+        print(f"wrote {len(written)} file(s) to {args.output}")
+        return 0
     if args.command == "before":
         written = render_before_figures(Path(args.output), args.input, min_tips=args.min_tips)
         print(f"wrote {len(written)} figure(s) to {args.output}")
@@ -651,3 +909,65 @@ class RenderBeforeFiguresIntegrationTest(unittest.TestCase):
             for path in written:
                 self.assertTrue(path.exists())
                 self.assertGreater(path.stat().st_size, 1000)
+
+
+class TreeTanglegramTest(unittest.TestCase):
+    """The trees panel is display-only: it must draw every tip of both trees, join only
+    isolates present in both, and never alter topology or branch lengths."""
+
+    def _write_group(self, root: Path, newicks: Dict[str, str]) -> Path:
+        group = root / "phylogenetics" / "grp"
+        for seg, newick in newicks.items():
+            (group / seg).mkdir(parents=True)
+            (group / seg / "tree.treefile").write_text(newick, encoding="utf-8")
+        (group / "labels.json").write_text(json.dumps(
+            {"I0": "t2|sp|a", "I1": "t2|sp|b", "I2": "t2|sp|c", "I3": "t2|sp|d"}), encoding="utf-8")
+        return group
+
+    def test_order_by_reference_keeps_topology_and_tips(self):
+        import io
+        from Bio import Phylo
+        tree = Phylo.read(io.StringIO("((a:1,b:1):1,(c:1,d:1):1);"), "newick")
+        before = sorted(t.name for t in tree.get_terminals())
+        order_by_reference(tree.root, {"c": 0.0, "d": 1.0, "a": 2.0, "b": 3.0})
+        self.assertEqual([t.name for t in tree.get_terminals()], ["c", "d", "a", "b"])
+        self.assertEqual(sorted(t.name for t in tree.get_terminals()), before)
+        self.assertAlmostEqual(tree.total_branch_length(), 6.0)
+
+    def test_short_tip_label_drops_tier_and_species(self):
+        self.assertEqual(short_tip_label("t1|Orthohantavirus x|SAMN1|name"), "SAMN1|name")
+        self.assertEqual(short_tip_label("t2|Orthohantavirus x|name"), "name")
+
+    def test_pdf_has_three_pages_and_png_has_three_files(self):
+        import re
+        import tempfile
+        newicks = {"S": "((I0:0.1,I1:0.1):0.1,(I2:0.1,I3:0.1):0.1);",
+                   "M": "((I0:0.2,I2:0.1):0.1,(I1:0.1,I3:0.3):0.1);",
+                   "L": "((I0:0.1,I3:0.1):0.1,(I1:0.1,I2:0.1):0.1);"}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_group(root, newicks)
+            pdfs = render_tree_figures(root / "out", data_dir=str(root), fmt="pdf")
+            self.assertEqual(len(pdfs), 1)
+            self.assertGreater(pdfs[0].stat().st_size, 1000)
+            self.assertEqual(len(re.findall(rb"/Type\s*/Page(?!s)", pdfs[0].read_bytes())), 3)
+            pngs = render_tree_figures(root / "png", data_dir=str(root), fmt="png")
+            self.assertEqual(len(pngs), 3)
+
+    def test_pair_with_missing_segment_tree_is_skipped_not_raised(self):
+        import tempfile
+        newicks = {"S": "((I0:0.1,I1:0.1):0.1,(I2:0.1,I3:0.1):0.1);",
+                   "M": "((I0:0.2,I2:0.1):0.1,(I1:0.1,I3:0.3):0.1);"}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_group(root, newicks)
+            pngs = render_tree_figures(root / "png", data_dir=str(root), fmt="png")
+            self.assertEqual([p.name for p in pngs], ["grp_S-M.png"])
+
+    def test_only_isolates_in_both_trees_are_joined(self):
+        import io
+        from Bio import Phylo
+        left = Phylo.read(io.StringIO("((a:1,b:1):1,c:1);"), "newick")
+        right = Phylo.read(io.StringIO("((a:1,b:1):1,d:1);"), "newick")
+        fig, shared = draw_tanglegram(left, right, "S", "M", "t")
+        self.assertEqual(shared, 2)
