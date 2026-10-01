@@ -946,6 +946,23 @@ class ResolveIsolateSegmentsAccessionBaseTest(unittest.TestCase):
         self.assertEqual(resolved, [("S", "NC_077669.2", "ACGT")])
 
 
+def _fasta_reference_fixture():
+    """Shared fixture for WriteWinnerSequencesTest and WritePoolSequencesTest.
+    iso-a has all three segments in genomic_index; iso-b has only S (M and L absent --
+    the missing-sequence case both test classes exercise)."""
+    from unittest.mock import Mock
+    isolate_a = Mock(isolate_key="iso-a", species_name="Orthohantavirus puumalaense",
+                     s_accession="ACC_A_S", m_accession="ACC_A_M", l_accession="ACC_A_L")
+    isolate_b = Mock(isolate_key="iso-b", species_name="Orthohantavirus tulaense",
+                     s_accession="ACC_B_S", m_accession="ACC_B_M", l_accession="ACC_B_L")
+    genomic_index = {
+        "ACC_A_S": Mock(sequence="AAAA"), "ACC_A_M": Mock(sequence="MMMM"),
+        "ACC_A_L": Mock(sequence="LLLL"), "ACC_B_S": Mock(sequence="AAAA2"),
+        # ACC_B_M and ACC_B_L deliberately absent -- the missing-sequence case.
+    }
+    return Mock(isolates=[isolate_a, isolate_b], genomic_index=genomic_index)
+
+
 class WriteWinnerSequencesTest(unittest.TestCase):
     """Winners carry isolate_keys, not sequence data (see dump_scored_table); this is
     the one place actual FASTA sequences join the GA's output, resolved from the
@@ -953,17 +970,7 @@ class WriteWinnerSequencesTest(unittest.TestCase):
     phylogeny.py uses to build sequences.fasta."""
 
     def _reference(self):
-        from unittest.mock import Mock
-        isolate_a = Mock(isolate_key="iso-a", species_name="Orthohantavirus puumalaense",
-                         s_accession="ACC_A_S", m_accession="ACC_A_M", l_accession="ACC_A_L")
-        isolate_b = Mock(isolate_key="iso-b", species_name="Orthohantavirus tulaense",
-                         s_accession="ACC_B_S", m_accession="ACC_B_M", l_accession="ACC_B_L")
-        genomic_index = {
-            "ACC_A_S": Mock(sequence="AAAA"), "ACC_A_M": Mock(sequence="MMMM"),
-            "ACC_A_L": Mock(sequence="LLLL"), "ACC_B_S": Mock(sequence="AAAA2"),
-            # ACC_B_M and ACC_B_L deliberately absent -- the missing-sequence case.
-        }
-        return Mock(isolates=[isolate_a, isolate_b], genomic_index=genomic_index)
+        return _fasta_reference_fixture()
 
     def test_writes_one_fasta_record_per_segment_per_winner(self):
         winners = [{"triplet": ["iso-a", "iso-a", "iso-a"], "fitness": 0.5}]
@@ -1005,17 +1012,7 @@ class WritePoolSequencesTest(unittest.TestCase):
     is a few hundred isolates, not the thousands of triplet rows built from it)."""
 
     def _reference(self):
-        from unittest.mock import Mock
-        isolate_a = Mock(isolate_key="iso-a", species_name="Orthohantavirus puumalaense",
-                         s_accession="ACC_A_S", m_accession="ACC_A_M", l_accession="ACC_A_L")
-        isolate_b = Mock(isolate_key="iso-b", species_name="Orthohantavirus tulaense",
-                         s_accession="ACC_B_S", m_accession="ACC_B_M", l_accession="ACC_B_L")
-        genomic_index = {
-            "ACC_A_S": Mock(sequence="AAAA"), "ACC_A_M": Mock(sequence="MMMM"),
-            "ACC_A_L": Mock(sequence="LLLL"), "ACC_B_S": Mock(sequence="AAAA2"),
-            # ACC_B_M and ACC_B_L deliberately absent -- the missing-sequence case.
-        }
-        return Mock(isolates=[isolate_a, isolate_b], genomic_index=genomic_index)
+        return _fasta_reference_fixture()
 
     def test_writes_one_record_per_isolate_per_resolved_segment(self):
         with tempfile.TemporaryDirectory() as tmp:

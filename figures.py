@@ -119,10 +119,12 @@ def local_neighborhood(tree: "Bio.Phylo.BaseTree.Tree", target_name: str,
 # module never does)
 # ============================================================================
 
-def _layout(clade: "Bio.Phylo.BaseTree.Clade") -> Tuple[Dict[int, float], List["Bio.Phylo.BaseTree.Clade"]]:
-    clade.ladderize()
+def _layout(clade: "Bio.Phylo.BaseTree.Clade",
+            ladderize: bool = True) -> Tuple[Dict[int, float], List["Bio.Phylo.BaseTree.Clade"]]:
+    if ladderize:
+        clade.ladderize()
     tips = clade.get_terminals()
-    y: Dict[int, float] = {id(t): i for i, t in enumerate(tips)}
+    y: Dict[int, float] = {id(t): float(i) for i, t in enumerate(tips)}
 
     def assign(c):
         if c.is_terminal():
@@ -431,22 +433,6 @@ def order_by_reference(clade: "Bio.Phylo.BaseTree.Clade", ref_y: Dict[str, float
             c.clades.sort(key=lambda child: mean_y[id(child)])
 
 
-def _ordered_positions(clade: "Bio.Phylo.BaseTree.Clade") -> Tuple[Dict[int, float], List["Bio.Phylo.BaseTree.Clade"]]:
-    """Like _layout but keeps the clade order as given (no ladderize)."""
-    tips = clade.get_terminals()
-    y: Dict[int, float] = {id(t): float(i) for i, t in enumerate(tips)}
-
-    def assign(c):
-        if c.is_terminal():
-            return y[id(c)]
-        ys = [assign(child) for child in c.clades]
-        y[id(c)] = sum(ys) / len(ys)
-        return y[id(c)]
-
-    assign(clade)
-    return y, tips
-
-
 def _scale_bar_length(max_depth: float) -> float:
     import math
     target = max_depth / 4.0
@@ -456,10 +442,9 @@ def _scale_bar_length(max_depth: float) -> float:
     for mult in (5, 2, 1):
         if mult * 10 ** exponent <= target:
             return mult * 10 ** exponent
-    return 10 ** exponent
 
 
-def _draw_tree_side(ax, clade, y, x_offset: float, mirrored: bool, max_depth_override: Optional[float] = None):
+def _draw_tree_side(ax, clade, y, x_offset: float, mirrored: bool):
     """Draws one tree into `ax` (axes in inches). Returns ({tip_name: (tip_x, y)},
     max_depth). Tips of a tree run ragged by branch length; mirrored=True flips it so
     its tips face left."""
@@ -501,11 +486,10 @@ def draw_tanglegram(left_tree, right_tree, left_name: str, right_name: str, titl
 
     left = _copy.deepcopy(left_tree.root)
     right = _copy.deepcopy(right_tree.root)
-    left.ladderize()
-    left_y, left_tips = _ordered_positions(left)
+    left_y, left_tips = _layout(left)
     left_pos_by_name = {t.name: left_y[id(t)] for t in left_tips}
     order_by_reference(right, left_pos_by_name)
-    right_y, right_tips = _ordered_positions(right)
+    right_y, right_tips = _layout(right, ladderize=False)
 
     n_rows = max(len(left_tips), len(right_tips))
     label_chars = max((len(short_tip_label(t.name or "")) for t in left_tips + right_tips), default=0)
