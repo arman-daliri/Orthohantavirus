@@ -603,28 +603,26 @@ def render_tree_figures(output_dir: Path, data_dir: str = "output", fmt: str = "
                 trees[seg] = load_tree_relabeled(tree_path)
         out_dir = Path(output_dir) / scope
         out_dir.mkdir(parents=True, exist_ok=True)
-        pdf = PdfPages(out_dir / f"{group_dir.name}.pdf") if fmt == "pdf" else None
-        pages = 0
+        pdf_path = out_dir / f"{group_dir.name}.pdf"
+        pdf = None
         for left_seg, right_seg in SEGMENT_PAIRS:
             if left_seg not in trees or right_seg not in trees:
                 logging.info("skip %s %s-%s: segment tree missing", group_dir.name, left_seg, right_seg)
                 continue
             fig, _shared = draw_tanglegram(trees[left_seg], trees[right_seg], left_seg, right_seg,
                                            f"{group_dir.name} ({scope})")
-            if pdf is not None:
+            if fmt == "pdf":
+                if pdf is None:
+                    pdf = PdfPages(pdf_path)
                 pdf.savefig(fig)
             else:
                 path = out_dir / f"{group_dir.name}_{left_seg}-{right_seg}.png"
                 fig.savefig(path, dpi=100)
                 written.append(path)
             plt.close(fig)
-            pages += 1
         if pdf is not None:
             pdf.close()
-            if pages:
-                written.append(out_dir / f"{group_dir.name}.pdf")
-            else:
-                (out_dir / f"{group_dir.name}.pdf").unlink()
+            written.append(pdf_path)
     return written
 
 
@@ -963,6 +961,17 @@ class TreeTanglegramTest(unittest.TestCase):
             self._write_group(root, newicks)
             pngs = render_tree_figures(root / "png", data_dir=str(root), fmt="png")
             self.assertEqual([p.name for p in pngs], ["grp_S-M.png"])
+
+    def test_group_with_a_single_segment_tree_writes_nothing_and_does_not_raise_for_pdf(self):
+        """/code-review finding: PdfPages was opened before any page existed, so a group
+        with only one segment tree (no drawable pair) crashed the whole run on unlink."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write_group(root, {"S": "((I0:0.1,I1:0.1):0.1,(I2:0.1,I3:0.1):0.1);"})
+            written = render_tree_figures(root / "out", data_dir=str(root), fmt="pdf")
+            self.assertEqual(written, [])
+            self.assertFalse((root / "out" / "phylogenetics" / "grp.pdf").exists())
 
     def test_only_isolates_in_both_trees_are_joined(self):
         import io
