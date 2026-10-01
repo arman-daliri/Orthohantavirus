@@ -137,6 +137,14 @@ class Oracle:
     def score(self, triplet: Triplet) -> float:
         if triplet in self.cache:
             return self.cache[triplet]
+        # Three segments from the same species cannot be a reassortment candidate:
+        # no inter-species segment transfer is possible. Skip full scoring and record
+        # the reason so the CSV audit trail explains the zero rather than hiding it.
+        if len({self.by_key[k].species_name for k in triplet}) == 1:
+            self.cache[triplet] = 0.0
+            self.rows[triplet] = {"verdict": "single_species_triplet",
+                                  "score_state": "single_species_triplet"}
+            return 0.0
         sources = {"S": self.by_key[triplet[0]], "M": self.by_key[triplet[1]],
                    "L": self.by_key[triplet[2]]}
         try:
@@ -1136,7 +1144,8 @@ class TotalScoringFailureGuardTest(unittest.TestCase):
 class OracleTest(unittest.TestCase):
     def _oracle(self):
         from types import SimpleNamespace as NS
-        reference = NS(isolates=[NS(isolate_key=k, has_complete_triplet=True,
+        reference = NS(isolates=[NS(isolate_key=k, species_name=f"Sp_{k}",
+                                    has_complete_triplet=True,
                                     is_lab_derived=False, is_vaccine_strain=False)
                                  for k in ("a", "b", "c")])
         oracle = Oracle(reference, precomputed={}, args=object(),
@@ -1292,8 +1301,10 @@ class OracleTest(unittest.TestCase):
         returning both in final_population; only the good triplet should pass the filter."""
         from types import SimpleNamespace as NS
         from unittest.mock import patch
-        # Reference must have all six isolate keys so Oracle.by_key lookup succeeds
-        reference = NS(isolates=[NS(isolate_key=k) for k in ("a", "b", "c", "d", "e", "f")])
+        # Reference must have all six isolate keys so Oracle.by_key lookup succeeds.
+        # species_name must differ within each triplet so the single-species guard doesn't fire.
+        reference = NS(isolates=[NS(isolate_key=k, species_name=f"Sp_{k}")
+                                 for k in ("a", "b", "c", "d", "e", "f")])
         args = NS(seed=1, population=4, generations=2, mutation_rate=0.0,
                   tournament_size=2, elitism=1, plateau=50, diversity=0.0,
                   top=5, with_phylogeny=False)
@@ -1345,6 +1356,26 @@ class OracleTest(unittest.TestCase):
             oracle.score(("a", "b", "c"))
         self.assertEqual(spy.call_count, 1)
         self.assertEqual(len(oracle.errors), 1)
+
+    def test_single_species_triplet_scores_zero_without_calling_scorer(self):
+        """Three segments from the same species cannot reassort; Oracle must short-circuit
+        to 0.0 before the expensive score_candidate call and record score_state so the
+        CSV audit trail explains the zero."""
+        from types import SimpleNamespace as NS
+        reference = NS(isolates=[NS(isolate_key=k, species_name="Orthohantavirus hantanense")
+                                 for k in ("a", "b", "c")])
+        oracle = Oracle(reference, precomputed={}, args=object(),
+                        candidate_factory=lambda cid, sources: None)
+        with mock.patch.object(rc, "score_candidate") as spy:
+            value = oracle.score(("a", "b", "c"))
+        spy.assert_not_called()
+        self.assertEqual(value, 0.0)
+        self.assertEqual(oracle.rows[("a", "b", "c")]["score_state"], "single_species_triplet")
+        self.assertEqual(oracle.rows[("a", "b", "c")]["verdict"], "single_species_triplet")
+        # Memoized: second call does not re-enter the guard
+        value2 = oracle.score(("a", "b", "c"))
+        self.assertEqual(value2, 0.0)
+        spy.assert_not_called()
 
 
 if __name__ == "__main__":
