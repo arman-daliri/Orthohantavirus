@@ -1548,15 +1548,18 @@ def ecological_opportunity(
 
     worst["rpi_e_total"] = worst["rpi_e_host"] * worst["rpi_e_geo"] * worst["rpi_e_time"]
     worst["rpi_e_isolate_basis"] = isolate_basis
-    # Gated on worst[...] == that factor's own unknown-sentinel value: an "unknown"
-    # pair can only ever contribute exactly that sentinel (it is the neutral value by
-    # construction for that factor), and min() can only report the sentinel as the
-    # WORST across all pairs if every pair reached exactly the sentinel -- so if the
-    # final value is anything else, some other, fully-known pair set it, and the
-    # unknown flag (from a different, non-deciding pair) is not what produced the
-    # reported number. Host's sentinel is table["host_decay"]["unknown_host_metadata"]
-    # (0.25 as of 2026-09-26, not 1.0 -- see that key's comment); geo/time's is 1.0
-    # unconditionally (geo_decay/time_decay both return 1.0 for missing metadata).
+    # A factor is flagged unknown when some pair had missing metadata for it AND the
+    # final minimum equals that factor's own unknown-sentinel value. Equal-to-sentinel
+    # means no measured pair scored strictly BELOW the sentinel; if one did, that
+    # measured value set the number and the flag is dropped. A measured pair that TIES
+    # the sentinel (e.g. a genuine same_family host pair, also 0.25) does not clear the
+    # flag, deliberately: the unknown pair could have scored lower had it been measured,
+    # so the reported number still rests partly on missing metadata. The flag therefore
+    # means "may rest on missing metadata", not "was decided by missing metadata". It is
+    # descriptive only and never changes a score. Host's sentinel is
+    # table["host_decay"]["unknown_host_metadata"] (0.25 as of 2026-09-26, not 1.0 -- see
+    # that key's comment); geo/time's is 1.0 unconditionally (geo_decay/time_decay both
+    # return 1.0 for missing metadata).
     unknown_sentinel = {
         "host": table["host_decay"]["unknown_host_metadata"], "geo": 1.0, "time": 1.0}
     worst["rpi_e_unknown_components"] = ",".join(
