@@ -135,7 +135,7 @@
     "total_folds": 1008,
     "wild_full_length_terminally_complete": 314,
     "window_nt": 50,
-    "ws4_reserved_accessions": 96
+    "ws4_reserved_accessions": 97
   },
   "provisional": {
     "tau_4_86_superseded": "D13's provisional tau ~= 4.86 was derived from a ddG span of 22.4 measured before the N = 50 window was chosen. This artifact supersedes it."

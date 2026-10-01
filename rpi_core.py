@@ -9524,6 +9524,35 @@ class ReservedCalibrationIsolateKeysTest(unittest.TestCase):
         self.assertTrue(reserved.isdisjoint({i.isolate_key for i in pool}))
 
 
+class CalibrationArtifactFreshnessTest(unittest.TestCase):
+    """data/rpi_calibration.json is pinned, so it can go stale silently when the WS4
+    validation panel changes. A rerun's --recalibrate then 'changes' the artifact
+    (panel.ws4_reserved_accessions 96 -> 97) and looks like nondeterminism when it is
+    really a stale committed file. This fails loudly instead, and re-asserts the
+    disjointness guarantee the artifact exists to provide."""
+
+    def _reference(self):
+        if not (Path("output") / "phylo_rpi_ga_isolates.json").exists():
+            self.skipTest("output/ reference snapshot not present -- run prepare_dataset.py first")
+        return prep.load_reference_data(Path("output"))
+
+    def test_recorded_ws4_count_matches_the_live_ws4_panel(self):
+        reference = self._reference()
+        artifact = json.loads(Path("data/rpi_calibration.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            artifact["panel"]["ws4_reserved_accessions"], len(ws4_reserved_accessions(reference)),
+            "data/rpi_calibration.json is stale against the live WS4 panel -- "
+            "re-run `python rpi_core.py calibrate` and commit the result")
+
+    def test_calibration_panel_is_disjoint_from_the_live_ws4_panel(self):
+        reference = self._reference()
+        reserved = ws4_reserved_accessions(reference)
+        by_key = {i.isolate_key: i for i in reference.isolates}
+        touching = [k for k in reserved_calibration_isolate_keys()
+                    if _isolate_touches(reference, by_key[k], reserved)]
+        self.assertEqual(touching, [])
+
+
 class StrictMergedPoolTest(unittest.TestCase):
     """strict_merged_pool is the GA-search pool: BOTH completeness rulers must pass.
     usable_pool itself stays untouched (it still feeds the validation/discrimination
