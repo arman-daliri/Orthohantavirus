@@ -636,23 +636,18 @@ def _species_short(leaf_name: str) -> str:
 
 
 def _prune_to_species_representatives(tree: "Bio.Phylo.BaseTree.Tree") -> "Bio.Phylo.BaseTree.Tree":
-    """Return a deep copy of tree with all but one representative per species pruned.
-    The kept representative is the alphabetically first isolate_key per species."""
-    import copy
+    """Prune tree in place: keep only the alphabetically first isolate per species,
+    then rename surviving tips to the short species name. Returns the same tree."""
     from collections import defaultdict
-    t = copy.deepcopy(tree)
     by_species: Dict[str, List[str]] = defaultdict(list)
-    for tip in t.get_terminals():
+    for tip in tree.get_terminals():
         by_species[_species_short(tip.name)].append(tip.name)
-    to_prune = []
-    for names in by_species.values():
-        to_prune.extend(sorted(names)[1:])  # keep sorted-first; remove the rest
+    to_prune = [n for names in by_species.values() for n in sorted(names)[1:]]
     for name in to_prune:
-        t.prune(name)
-    # Rename surviving tips to the short species name for readability
-    for tip in t.get_terminals():
+        tree.prune(name)
+    for tip in tree.get_terminals():
         tip.name = _species_short(tip.name)
-    return t
+    return tree
 
 
 def render_phylogroup_overview(output_dir: Path, data_dir: str = "output",
@@ -708,16 +703,10 @@ def render_phylogroup_overview(output_dir: Path, data_dir: str = "output",
                      f"{n_species} species · {n_iso} isolates · {segment}-segment IQ-TREE",
                      fontsize=8, pad=6)
         ax.set_xlabel("substitutions/site", fontsize=7)
-        # Label each tip
-        x_positions = _x_positions(tree.root)
-        y_positions, tips = _layout(tree.root)
-        x_max = max(x_positions.values()) if x_positions else 1.0
-        for tip in tips:
-            cx = x_positions[id(tip)]
-            cy = y_positions[id(tip)]
-            ax.text(cx + x_max * 0.01, cy, tip.name,
-                    fontsize=6, va="center", ha="left")
-        # Extra right margin for labels
+        # tip_pos from draw_cladogram already has {name: (cx, cy)} — no re-traversal needed
+        x_max = max(cx for cx, cy in tip_pos.values()) if tip_pos else 1.0
+        for name, (cx, cy) in tip_pos.items():
+            ax.text(cx + x_max * 0.01, cy, name, fontsize=6, va="center", ha="left")
         ax.set_xlim(right=x_max * 1.55)
 
     # Hide unused panels (if panel count is odd)

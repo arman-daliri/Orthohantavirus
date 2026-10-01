@@ -77,6 +77,9 @@ def default_candidate_factory(reference: Any) -> Callable[[str, Dict[str, Any]],
     return lambda candidate_id, sources: factory(candidate_id, reference, sources)
 
 
+_STATUS_PAIRS = (("M_pack", "rpi_m_pack_status"), ("M_pol", "rpi_m_pol_status"))
+
+
 def neutral_factors(row: Dict[str, Any]) -> str:
     """Which RPI factors in this row are a neutral fallback rather than a measured value,
     as ';'-joined 'Factor:reason' entries, or '' when E, M_pack and M_pol were all
@@ -97,7 +100,7 @@ def neutral_factors(row: Dict[str, Any]) -> str:
     unknown_e = row.get("rpi_e_unknown_components")
     if unknown_e:
         parts.append("E:" + str(unknown_e).replace(",", "+"))
-    for name, key in (("M_pack", "rpi_m_pack_status"), ("M_pol", "rpi_m_pol_status")):
+    for name, key in _STATUS_PAIRS:
         status = row.get(key)
         if status not in (None, "scored"):
             parts.append(f"{name}:{status}")
@@ -110,11 +113,7 @@ def missing_status_keys(row: Dict[str, Any]) -> str:
     a data-quality gap -- the factor's scoring state is unknown -- and must not be
     silently treated as either 'scored' or 'neutral'. Returns '' when all status keys are
     present."""
-    missing = []
-    for name, key in (("M_pack", "rpi_m_pack_status"), ("M_pol", "rpi_m_pol_status")):
-        if row.get(key) is None:
-            missing.append(name)
-    return ",".join(missing)
+    return ",".join(name for name, key in _STATUS_PAIRS if row.get(key) is None)
 
 
 class Oracle:
