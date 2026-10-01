@@ -129,9 +129,11 @@ class Oracle:
             self.errors.append((triplet, repr(exc)))
             value = 0.0
             self.cache[triplet] = value
-            self.rows[triplet] = {"verdict": "scoring_error", "scoring_error": repr(exc)}
+            self.rows[triplet] = {"verdict": "scoring_error", "score_state": "scoring_error",
+                                  "scoring_error": repr(exc)}
             return value
-        value = 0.0 if row.get("verdict") == "junk_sequence" else float(row.get("rpi_generation") or 0.0)
+        junk = row.get("verdict") == "junk_sequence"
+        value = 0.0 if junk else float(row.get("rpi_generation") or 0.0)
         self.cache[triplet] = value
         self.rows[triplet] = {k: row.get(k) for k in (
             "verdict", "rpi_generation", "rpi_retention", "rpi_e_total",
@@ -139,6 +141,7 @@ class Oracle:
             "rpi_m_pack_status", "rpi_m_pol", "rpi_m_pol_status", "rpi_k_stratum",
             "rpi_k_stratum_provisional", "gate1_pattern", "gate1_discordant_segment",
             "gate1_implicated_species")}
+        self.rows[triplet]["score_state"] = "junk_sequence" if junk else "scored"
         self.rows[triplet]["rpi_neutral_factors"] = neutral_factors(row)
         return value
 
@@ -477,8 +480,10 @@ def _run_one_pool(pool_name: str, pool: List[str], reference: Any, precomputed: 
         if triplet in seen:
             continue
         seen.add(triplet)
-        winners.append({"triplet": list(triplet), "fitness": value,
-                        **oracle.rows.get(triplet, {})})
+        row_data = oracle.rows.get(triplet, {})
+        if row_data.get("score_state") == "scoring_error":
+            continue  # a crashed scorer must not appear as a winner
+        winners.append({"triplet": list(triplet), "fitness": value, **row_data})
         if len(winners) >= args.top:
             break
     # FASTA outputs are written before gate4 so a phylogeny failure never prevents them.
@@ -1225,6 +1230,74 @@ class OracleTest(unittest.TestCase):
         self.assertEqual(oracle.errors[0][0], ("a", "b", "c"))
         self.assertIn("boom", oracle.errors[0][1])
         self.assertEqual(oracle.rows[("a", "b", "c")]["verdict"], "scoring_error")
+        self.assertEqual(oracle.rows[("a", "b", "c")]["score_state"], "scoring_error")
+
+    def test_score_state_is_scored_for_normal_candidates(self):
+        oracle = self._oracle()
+        row = {"verdict": "no_conflict", "rpi_generation": 0.5}
+        with mock.patch.object(rc, "score_candidate", return_value=row):
+            oracle.score(("a", "b", "c"))
+        self.assertEqual(oracle.rows[("a", "b", "c")]["score_state"], "scored")
+
+    def test_score_state_is_junk_sequence_for_junk_candidates(self):
+        oracle = self._oracle()
+        row = {"verdict": "junk_sequence", "rpi_generation": None}
+        with mock.patch.object(rc, "score_candidate", return_value=row):
+            oracle.score(("a", "b", "c"))
+        self.assertEqual(oracle.rows[("a", "b", "c")]["score_state"], "junk_sequence")
+
+    def test_scoring_error_candidates_excluded_from_winners(self):
+        """A crashed scorer must not appear in the winner list even if the GA selects it.
+        Verifies the explicit score_state filter in _run_one_pool's winner selection by
+        having the fake run_search call score_fn for both triplets (normal + crash), then
+        returning both in final_population; only the good triplet should pass the filter."""
+        from types import SimpleNamespace as NS
+        from unittest.mock import patch
+        # Reference must have all six isolate keys so Oracle.by_key lookup succeeds
+        reference = NS(isolates=[NS(isolate_key=k) for k in ("a", "b", "c", "d", "e", "f")])
+        args = NS(seed=1, population=4, generations=2, mutation_rate=0.0,
+                  tournament_size=2, elitism=1, plateau=50, diversity=0.0,
+                  top=5, with_phylogeny=False)
+
+        def fake_run_search(pool, score_fn, *a, **kw):
+            score_fn(("a", "b", "c"))  # scores normally
+            score_fn(("d", "e", "f"))  # crashes -> scoring_error in oracle.rows
+            return {"final_population": [(("a", "b", "c"), 0.8), (("d", "e", "f"), 0.0)],
+                    "generations_run": 2, "stopped_on_plateau": False, "log": []}
+
+        def fake_candidate_from_isolates(candidate_id, ref, sources):
+            from types import SimpleNamespace as _NS
+            return _NS(s_key=sources["S"].isolate_key)
+
+        def fake_score_candidate(candidate, *a, **kw):
+            if candidate.s_key == "d":  # S-segment donor "d" -> simulated crash
+                raise ValueError("simulated crash")
+            return {"verdict": "no_conflict", "rpi_generation": 0.8}
+
+        captured_winners = []
+
+        def capture_write_winner(ref, winners, *a, **kw):
+            captured_winners.extend(winners)
+            return (Path(tmp) / "w.fa", 0)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp)
+            with patch("Algorithm.run_search", side_effect=fake_run_search), \
+                 patch("Algorithm._check_no_total_scoring_failure"), \
+                 patch("Algorithm.confirm_winners", return_value="not_requested"), \
+                 patch("Algorithm.write_winner_sequences",
+                       side_effect=capture_write_winner), \
+                 patch("Algorithm.write_pool_sequences",
+                       return_value=(out_dir / "p.fa", 0)), \
+                 patch.object(rc, "_candidate_from_isolates",
+                              side_effect=fake_candidate_from_isolates), \
+                 patch.object(rc, "score_candidate", side_effect=fake_score_candidate):
+                _run_one_pool("p", ["a", "b", "c", "d", "e", "f"],
+                              reference, {}, out_dir, args, reserved=set(), overlap={})
+
+        self.assertEqual(len(captured_winners), 1,
+                         "scoring_error triplet must not appear as a winner")
+        self.assertEqual(captured_winners[0]["triplet"], ["a", "b", "c"])
 
     def test_score_candidate_exception_is_memoized_like_any_other_score(self):
         oracle = self._oracle()
