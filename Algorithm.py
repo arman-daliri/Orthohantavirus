@@ -140,7 +140,10 @@ class Oracle:
         # Three segments from the same species cannot be a reassortment candidate:
         # no inter-species segment transfer is possible. Skip full scoring and record
         # the reason so the CSV audit trail explains the zero rather than hiding it.
-        if len({self.by_key[k].species_name for k in triplet}) == 1:
+        # Guard: None or "" species_name means the metadata is absent — fall through
+        # to the scorer rather than treating three unknown-species isolates as same-species.
+        _sp = {self.by_key[k].species_name for k in triplet}
+        if len(_sp) == 1 and None not in _sp and "" not in _sp:
             self.cache[triplet] = 0.0
             self.rows[triplet] = {"verdict": "single_species_triplet",
                                   "score_state": "single_species_triplet"}
@@ -1356,6 +1359,33 @@ class OracleTest(unittest.TestCase):
             oracle.score(("a", "b", "c"))
         self.assertEqual(spy.call_count, 1)
         self.assertEqual(len(oracle.errors), 1)
+
+    def test_single_species_triplet_with_none_species_name_falls_through_to_scorer(self):
+        """If species_name is None (absent metadata), three None values form a set of
+        size 1 and must NOT trigger the single-species guard — the guard only fires when
+        a real species name is confirmed identical across all three isolates."""
+        from types import SimpleNamespace as NS
+        reference = NS(isolates=[NS(isolate_key=k, species_name=None) for k in ("a", "b", "c")])
+        oracle = Oracle(reference, precomputed={}, args=object(),
+                        candidate_factory=lambda cid, sources: None)
+        row = {"verdict": "no_conflict", "rpi_generation": 0.3}
+        with mock.patch.object(rc, "score_candidate", return_value=row) as spy:
+            value = oracle.score(("a", "b", "c"))
+        spy.assert_called_once()  # scorer must be called, not short-circuited
+        self.assertEqual(value, 0.3)
+        self.assertEqual(oracle.rows[("a", "b", "c")]["score_state"], "scored")
+
+    def test_single_species_triplet_with_empty_species_name_falls_through_to_scorer(self):
+        """Same as above for empty-string species_name."""
+        from types import SimpleNamespace as NS
+        reference = NS(isolates=[NS(isolate_key=k, species_name="") for k in ("a", "b", "c")])
+        oracle = Oracle(reference, precomputed={}, args=object(),
+                        candidate_factory=lambda cid, sources: None)
+        row = {"verdict": "no_conflict", "rpi_generation": 0.3}
+        with mock.patch.object(rc, "score_candidate", return_value=row) as spy:
+            value = oracle.score(("a", "b", "c"))
+        spy.assert_called_once()
+        self.assertEqual(value, 0.3)
 
     def test_single_species_triplet_scores_zero_without_calling_scorer(self):
         """Three segments from the same species cannot reassort; Oracle must short-circuit
