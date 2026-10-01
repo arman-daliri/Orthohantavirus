@@ -882,6 +882,35 @@ class DumpScoredIsUnconditionalTest(unittest.TestCase):
         indent = len(call_line) - len(call_line.lstrip())
         self.assertEqual(indent, 4, "call must sit at function-body level, not inside a block")
 
+    def test_dump_files_exist_on_disk_after_pool_run(self):
+        """Integration guard for the invariant above: verifies the dump files are
+        actually written to disk after a pool run, not just that the call-site looks
+        unconditional. Mocks run_search and I/O helpers so no real scoring or
+        phylogenetics occurs."""
+        from types import SimpleNamespace as NS
+        from unittest.mock import patch, Mock
+        reference = NS(isolates=[])
+        args = NS(seed=7, population=10, generations=2, mutation_rate=0.1,
+                  tournament_size=2, elitism=1, plateau=50, diversity=0.0,
+                  top=1, with_phylogeny=False)
+        fake_search = {"final_population": [], "generations_run": 2,
+                       "stopped_on_plateau": False, "log": []}
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp)
+            with patch("Algorithm.run_search", return_value=fake_search), \
+                 patch("Algorithm._check_no_total_scoring_failure"), \
+                 patch("Algorithm.confirm_winners", return_value="not_requested"), \
+                 patch("Algorithm.write_winner_sequences",
+                       return_value=(out_dir / "w.fa", 0)), \
+                 patch("Algorithm.write_pool_sequences",
+                       return_value=(out_dir / "p.fa", 0)):
+                _run_one_pool("p", [], reference, {}, out_dir, args,
+                              reserved=set(), overlap={})
+            self.assertTrue((out_dir / "all_scored_seed_7.jsonl").exists(),
+                            "JSONL dump file must be written unconditionally")
+            self.assertTrue((out_dir / "all_scored_seed_7.csv").exists(),
+                            "CSV dump file must be written unconditionally")
+
 
 class DumpScoredTableTest(unittest.TestCase):
     """Every unique scored triplet (not just winners) is written alongside the existing
