@@ -90,11 +90,20 @@ Run Step 1 first. Steps 2 and 3 are independent. After Step 1 finishes, run Step
 | 2 (parallel with Step 2) | Step 3a | `rpi_core.py` | ViennaRNA (for `M_pack` scoring) | minutes |
 | 3 (after Step 3a) | Step 3b | `Algorithm.py` | `rpi_core.py`; `mafft` + `iqtree` for gate4 only | ~14 min |
 
-Step 1 uses only `pandas` and `numpy`. All other steps need `mafft`, `iqtree`, or ViennaRNA. How you supply those depends on your platform — see Step 0-3.1 (Linux via conda) and Step 0-3.2 (Windows via pip + `tools/`).
+Step 1 uses only `pandas` and `numpy`. All other steps need `mafft`, `iqtree`, or ViennaRNA. How you supply those depends on your platform:
+
+| Platform | `mafft` / `iqtree` source | `tools/` directory |
+|---|---|---|
+| **Linux** | conda (`environment.yml`) or system package manager | **Not needed.** `tools/` contains Windows-only pre-built binaries. Do not download or extract them on Linux. |
+| **Windows** | Pre-built binaries in `tools/` (downloaded manually — see Step 0-3.2) | Required for Steps 2 and 3b. |
+
+See Step 0-3.1 (Linux via conda) and Step 0-3.2 (Windows via pip + `tools/`) for platform-specific commands.
 
 #### Step 0-3.1: Linux
 
 > **Not yet provisioned.** These steps have been verified on Windows only (see Step 0-3.2). The Linux conda environment (`environment.yml`) has never been built on a real Linux machine. In particular, whether bioconda serves `viennarna=2.7.2` is unconfirmed. The steps below are correct in intent; treat them as untested until a green run on Linux is recorded in `tools/VERSIONS.txt`.
+
+**On Linux, `tools/` is not needed.** `mafft` and `iqtree` come from the conda environment. Do not download or unpack the Windows archives.
 
 Install Miniconda if you do not have conda:
 
@@ -106,7 +115,7 @@ bash Miniconda3-latest-Linux-x86_64.sh
 ```
 
 ```bash
-# One-time: create the conda environment (needed for Steps 2, 3a, 3b)
+# One-time: create the conda environment (installs mafft, iqtree, ViennaRNA, and all Python deps)
 conda config --set channel_priority strict
 conda env create -f environment.yml
 
@@ -114,6 +123,8 @@ conda env create -f environment.yml
 python3 prepare_dataset.py --input . --output output
 
 # ── Step 2 (run in its own terminal, ~5–9 hr) ────────────────────────────────
+# conda provides mafft and iqtree3 on PATH when the environment is active;
+# no --mafft-bin / --iqtree-bin needed.
 conda activate hanta_phylo
 python3 phylogeny.py --output output
 
@@ -125,13 +136,18 @@ python3 rpi_core.py
 # Standard run (~14 min, no gate4):
 python3 Algorithm.py --reference-input output --output output/ga_search
 
-# With gate4 winner confirmation (~14 min + ~11 hr per pool, needs mafft/iqtree):
+# With gate4 winner confirmation (~14 min + ~11 hr per pool).
+# Omit --mafft-bin / --iqtree-bin if the conda env is active (binaries are on PATH);
+# pass them explicitly if running outside the conda env:
+conda activate hanta_phylo
 python3 Algorithm.py --reference-input output --output output/ga_search --with-phylogeny
 ```
 
 #### Step 0-3.2: Windows
 
-This machine does not use conda. `mafft` and `iqtree` ship as pinned binaries in `tools/`. All Python packages install via pip. The MAFFT version on Windows is 7.526 (no 7.525 Windows build exists — see `tools/VERSIONS.txt` for the recorded divergence and how the reproducibility fixture handles it).
+This machine does not use conda. `mafft` and `iqtree` ship as pinned binaries in `tools/` (Windows-only). All Python packages install via pip. The MAFFT version on Windows is 7.526 (no 7.525 Windows build exists — see `tools/VERSIONS.txt` for the recorded divergence and how the reproducibility fixture handles it).
+
+> **Running in Git Bash (recommended).** All commands below work in both PowerShell and Git Bash. The driver script `run_main.sh` (see below) runs the full pipeline as a single command and must be run from **Git Bash**, not PowerShell: `bash run_main.sh`.
 
 **One-time setup — Python packages:**
 
@@ -170,17 +186,31 @@ After extraction, verify these paths exist:
 - `tools\mafft-win\mafft.bat`
 - `tools\iqtree-3.1.3-Windows\bin\iqtree3.exe`
 
-**Run the pipeline:**
+**Option A — full pipeline at once (Git Bash, recommended):**
 
-```powershell
+`run_main.sh` is a driver script that archives any existing output, runs all five steps in order, and writes `STATUS.log`. Run it from the project root in Git Bash:
+
+```bash
+# Dry run: archive + Step 1 only, then stop so you can inspect the output
+bash run_main.sh --preflight
+
+# Full run (~22–26 hr total, all steps)
+bash run_main.sh
+```
+
+`run_main.sh` already passes the correct `tools/` binary paths internally — no manual `--mafft-bin`/`--iqtree-bin` flags needed when using the driver script.
+
+**Option B — run each step manually (PowerShell or Git Bash):**
+
+```bash
 # ── Step 1 ──────────────────────────────────────────────────────────────────
 python prepare_dataset.py --input . --output output
 
 # ── Step 2 (run in its own terminal, ~5–9 hr) ────────────────────────────────
 # Pass the tools/ binaries explicitly via --mafft-bin / --iqtree-bin:
-python phylogeny.py --output output `
-    --mafft-bin tools\mafft-win\mafft.bat `
-    --iqtree-bin tools\iqtree-3.1.3-Windows\bin\iqtree3.exe
+python phylogeny.py --output output \
+    --mafft-bin  tools/mafft-win/mafft.bat \
+    --iqtree-bin tools/iqtree-3.1.3-Windows/bin/iqtree3.exe
 
 # ── Step 3a (can start while Step 2 is running) ──────────────────────────────
 python rpi_core.py
@@ -189,11 +219,14 @@ python rpi_core.py
 python Algorithm.py --reference-input output --output output/ga_search
 
 # ── Step 3b with gate4 (~14 min + ~11 hr per pool) ──────────────────────────
-# Algorithm.py resolves mafft/iqtree from PATH (no --mafft-bin flag).
-# Add the tools/ dirs to PATH for this terminal session first:
-$env:PATH = "$(Resolve-Path tools\mafft-win);$(Resolve-Path tools\iqtree-3.1.3-Windows\bin);$env:PATH"
-python Algorithm.py --reference-input output --output output/ga_search --with-phylogeny
+# Pass the tools/ binaries explicitly -- no PATH manipulation required:
+python Algorithm.py --reference-input output --output output/ga_search \
+    --with-phylogeny \
+    --mafft-bin  tools/mafft-win/mafft.bat \
+    --iqtree-bin tools/iqtree-3.1.3-Windows/bin/iqtree3.exe
 ```
+
+> **PowerShell note.** In PowerShell, replace `\` line continuation with a backtick (`` ` ``) and forward slashes with backslashes in paths: e.g. `--mafft-bin tools\mafft-win\mafft.bat`.
 
 ### Step 0-4: Reproducibility model
 
