@@ -245,7 +245,9 @@ def run_search(pool: Sequence[str], score_fn: Callable[[Triplet], float], seed: 
 
 
 def confirm_winners(oracle: Oracle, winners: List[Dict[str, Any]], output_dir: Path,
-                    with_phylogeny: bool, checkpoint_path: Optional[Path] = None) -> str:
+                    with_phylogeny: bool, checkpoint_path: Optional[Path] = None,
+                    mafft_bin: Optional[str] = None,
+                    iqtree_bin: Optional[str] = None) -> str:
     """checkpoint_path, if given, appends each winner's result to a JSONL file as soon
     as it finishes -- not only to the in-memory `winners` list this function already
     mutates. A real gate4 run over hundreds-of-taxa comparator trees can run for hours;
@@ -257,8 +259,8 @@ def confirm_winners(oracle: Oracle, winners: List[Dict[str, Any]], output_dir: P
         return ("deferred: full-gate confirmation not requested "
                 "(re-run with --with-phylogeny on a machine with mafft/iqtree)")
     try:
-        mafft_bin = ph.resolve_binary(None, "mafft")
-        iqtree_bin = ph.resolve_binary(None, "iqtree3")
+        mafft_bin = mafft_bin or ph.resolve_binary(None, "mafft")
+        iqtree_bin = iqtree_bin or ph.resolve_binary(None, "iqtree3")
     except SystemExit as exc:
         return f"failed: could not resolve mafft/iqtree3 -- {exc}"
     args = argparse.Namespace(output=str(output_dir), mafft_bin=mafft_bin, iqtree_bin=iqtree_bin,
@@ -525,7 +527,9 @@ def _run_one_pool(pool_name: str, pool: List[str], reference: Any, precomputed: 
     print(f"[{pool_name}] wrote {len(pool)} pool isolate(s)' sequences to {pool_fasta_path}"
           + (f" ({pool_missing} segment(s) had no sequence available)" if pool_missing else ""))
 
-    confirmation = confirm_winners(oracle, winners, pool_out_dir, args.with_phylogeny)
+    confirmation = confirm_winners(oracle, winners, pool_out_dir, args.with_phylogeny,
+                                   mafft_bin=getattr(args, "mafft_bin", None),
+                                   iqtree_bin=getattr(args, "iqtree_bin", None))
 
     payload = {"config": vars(args), "pool_name": pool_name,
                "calibration_reserved_excluded": len(reserved),
@@ -574,6 +578,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--top", type=int, default=10)
     parser.add_argument("--diversity", action="store_true")
     parser.add_argument("--with-phylogeny", action="store_true")
+    parser.add_argument("--mafft-bin", default=None)
+    parser.add_argument("--iqtree-bin", default=None)
     return parser
 
 

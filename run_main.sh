@@ -153,7 +153,9 @@ step "Step3b_ga_search" \
         --generations 100 \
         --plateau 50 \
         --seed 20260904 \
-        --with-phylogeny
+        --with-phylogeny \
+        --mafft-bin  "$MAFFT" \
+        --iqtree-bin "$IQTREE"
 
 # ══════════════════════════════════════════════════════════════════════════
 # Step 4 — Robustness sweep  (~5-10 min)
