@@ -151,6 +151,7 @@ step "Step3b_ga_search" \
         --output          "$PROJ/output/ga_search" \
         --population 150 \
         --generations 100 \
+        --plateau 50 \
         --seed 20260904 \
         --with-phylogeny
 
