@@ -28,6 +28,8 @@ def main(argv=None):
     parser.add_argument("--ga-search-root",  default="output/ga_search")
     parser.add_argument("--mafft-bin",  required=True)
     parser.add_argument("--iqtree-bin", required=True)
+    parser.add_argument("--pools", nargs="+", default=POOLS,
+                        help="Which pools to process (default: all)")
     args = parser.parse_args(argv)
 
     # Resolve binary paths to absolute so they survive subprocess CWD changes.
@@ -40,7 +42,7 @@ def main(argv=None):
     precomputed = rc._build_precomputed(reference)
     reserved = load_reserved_isolate_keys()
 
-    for pool_name in POOLS:
+    for pool_name in args.pools:
         pool_out_dir = Path(args.ga_search_root) / pool_name
         seed_json = pool_out_dir / f"seed_{SEED}.json"
         if not seed_json.exists():
