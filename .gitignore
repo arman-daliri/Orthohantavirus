@@ -27,7 +27,14 @@ output/phylo_rpi_ga_snapshot_manifest.json
 # pipeline; large (pool CSVs ~3 MB; ga_search/ tree artifacts can exceed 1 GB).
 output/ga_pool_*.csv
 output/ga_pools_manifest.json
-output/ga_search/
+output/ga_search/**
+# The per-pool seed JSONs are the primary research output (winners, fitness log,
+# gate4 verdicts). Track them; ignore everything else under ga_search/.
+!output/ga_search/terminal_complete/
+!output/ga_search/terminal_complete/seed_*.json
+!output/ga_search/strict_both/
+!output/ga_search/strict_both/seed_*.json
+!output/ga_search/ga_pool_comparison.json
 
 # Step 3 validation gate4 tree artifacts -- MAFFT alignments and IQ-TREE outputs
 # per candidate, regenerable with `rpi_core.py validate --with-phylogeny`. Each

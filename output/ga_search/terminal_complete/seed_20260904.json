@@ -1,0 +1,586 @@
+{
+  "config": {
+    "reference_input": "C:/git-projects/Orthohantavirus/output",
+    "output": "C:/git-projects/Orthohantavirus/output/ga_search",
+    "seed": 20260904,
+    "population": 150,
+    "generations": 100,
+    "mutation_rate": 0.02,
+    "tournament_size": 3,
+    "elitism": 2,
+    "plateau": 20,
+    "top": 10,
+    "diversity": false,
+    "with_phylogeny": true
+  },
+  "pool_name": "terminal_complete",
+  "calibration_reserved_excluded": 42,
+  "pool_ruler": "terminal_complete",
+  "pool_size": 272,
+  "completeness_overlap": {
+    "both": 94,
+    "only_coding": 91,
+    "only_terminal": 178
+  },
+  "generations_run": 23,
+  "stopped_on_plateau": true,
+  "log": [
+    {
+      "generation": 0,
+      "best": 0.4183586966,
+      "mean": 0.012504307516666667,
+      "median": 0.00091755115,
+      "distinct_triplets": 150
+    },
+    {
+      "generation": 1,
+      "best": 0.4183586966,
+      "mean": 0.019180802172666666,
+      "median": 0.0046173075,
+      "distinct_triplets": 149
+    },
+    {
+      "generation": 2,
+      "best": 0.4716981132,
+      "mean": 0.040201318661333335,
+      "median": 0.008927166850000001,
+      "distinct_triplets": 146
+    },
+    {
+      "generation": 3,
+      "best": 0.4716981132,
+      "mean": 0.06577736264799999,
+      "median": 0.0123235909,
+      "distinct_triplets": 145
+    },
+    {
+      "generation": 4,
+      "best": 0.4716981132,
+      "mean": 0.107212094056,
+      "median": 0.0165588475,
+      "distinct_triplets": 133
+    },
+    {
+      "generation": 5,
+      "best": 0.4716981132,
+      "mean": 0.17669494079933334,
+      "median": 0.0927627195,
+      "distinct_triplets": 110
+    },
+    {
+      "generation": 6,
+      "best": 0.4716981132,
+      "mean": 0.3290766434446667,
+      "median": 0.4183586966,
+      "distinct_triplets": 79
+    },
+    {
+      "generation": 7,
+      "best": 0.4716981132,
+      "mean": 0.41076312394,
+      "median": 0.4716981132,
+      "distinct_triplets": 51
+    },
+    {
+      "generation": 8,
+      "best": 0.4716981132,
+      "mean": 0.4548757177286667,
+      "median": 0.4716981132,
+      "distinct_triplets": 23
+    },
+    {
+      "generation": 9,
+      "best": 0.4716981132,
+      "mean": 0.43846414900266667,
+      "median": 0.4716981132,
+      "distinct_triplets": 25
+    },
+    {
+      "generation": 10,
+      "best": 0.4716981132,
+      "mean": 0.45323514785999997,
+      "median": 0.4716981132,
+      "distinct_triplets": 18
+    },
+    {
+      "generation": 11,
+      "best": 0.4716981132,
+      "mean": 0.440714100858,
+      "median": 0.4716981132,
+      "distinct_triplets": 23
+    },
+    {
+      "generation": 12,
+      "best": 0.4716981132,
+      "mean": 0.425625320608,
+      "median": 0.4716981132,
+      "distinct_triplets": 24
+    },
+    {
+      "generation": 13,
+      "best": 0.4716981132,
+      "mean": 0.4536562833613333,
+      "median": 0.4716981132,
+      "distinct_triplets": 16
+    },
+    {
+      "generation": 14,
+      "best": 0.4716981132,
+      "mean": 0.44703610896400003,
+      "median": 0.4716981132,
+      "distinct_triplets": 16
+    },
+    {
+      "generation": 15,
+      "best": 0.4716981132,
+      "mean": 0.43513912264133336,
+      "median": 0.4716981132,
+      "distinct_triplets": 22
+    },
+    {
+      "generation": 16,
+      "best": 0.4716981132,
+      "mean": 0.432023128384,
+      "median": 0.4716981132,
+      "distinct_triplets": 21
+    },
+    {
+      "generation": 17,
+      "best": 0.4716981132,
+      "mean": 0.45873177779933333,
+      "median": 0.4716981132,
+      "distinct_triplets": 17
+    },
+    {
+      "generation": 18,
+      "best": 0.4716981132,
+      "mean": 0.45581294593733335,
+      "median": 0.4716981132,
+      "distinct_triplets": 18
+    },
+    {
+      "generation": 19,
+      "best": 0.4716981132,
+      "mean": 0.4525191874633333,
+      "median": 0.4716981132,
+      "distinct_triplets": 20
+    },
+    {
+      "generation": 20,
+      "best": 0.4716981132,
+      "mean": 0.4524501492413333,
+      "median": 0.4716981132,
+      "distinct_triplets": 22
+    },
+    {
+      "generation": 21,
+      "best": 0.4716981132,
+      "mean": 0.439673136716,
+      "median": 0.4716981132,
+      "distinct_triplets": 24
+    },
+    {
+      "generation": 22,
+      "best": 0.4716981132,
+      "mean": 0.4370059641873333,
+      "median": 0.4716981132,
+      "distinct_triplets": 25
+    }
+  ],
+  "winners": [
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js9",
+        "t2|Orthohantavirus seoulense|hbt62 2014",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "verdict": "insufficient_comparators",
+      "rpi_generation": 0.4716981132,
+      "rpi_retention": 0.070754717,
+      "rpi_e_total": 1.0,
+      "rpi_e_isolate_basis": "actual_parents",
+      "rpi_e_unknown_components": "",
+      "rpi_m_pack": 1.0,
+      "rpi_m_pack_status": "scored",
+      "rpi_m_pol": 1.0,
+      "rpi_m_pol_status": "no_signal_beyond_tag",
+      "rpi_k_stratum": "close",
+      "rpi_k_stratum_provisional": true,
+      "gate1_pattern": "s_or_l_involving",
+      "gate1_discordant_segment": "S",
+      "gate1_implicated_species": "Orthohantavirus hantanense;Orthohantavirus seoulense",
+      "score_state": "scored",
+      "rpi_neutral_factors": "M_pol:no_signal_beyond_tag",
+      "rpi_missing_status_keys": "",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support"
+    },
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js9",
+        "t2|Orthohantavirus seoulense|hbt5 2016",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "verdict": "insufficient_comparators",
+      "rpi_generation": 0.4716981132,
+      "rpi_retention": 0.070754717,
+      "rpi_e_total": 1.0,
+      "rpi_e_isolate_basis": "actual_parents",
+      "rpi_e_unknown_components": "",
+      "rpi_m_pack": 1.0,
+      "rpi_m_pack_status": "scored",
+      "rpi_m_pol": 1.0,
+      "rpi_m_pol_status": "no_signal_beyond_tag",
+      "rpi_k_stratum": "close",
+      "rpi_k_stratum_provisional": true,
+      "gate1_pattern": "s_or_l_involving",
+      "gate1_discordant_segment": "S",
+      "gate1_implicated_species": "Orthohantavirus hantanense;Orthohantavirus seoulense",
+      "score_state": "scored",
+      "rpi_neutral_factors": "M_pol:no_signal_beyond_tag",
+      "rpi_missing_status_keys": "",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support"
+    },
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js9",
+        "t2|Orthohantavirus seoulense|hbt61 2014",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "verdict": "insufficient_comparators",
+      "rpi_generation": 0.4716981132,
+      "rpi_retention": 0.070754717,
+      "rpi_e_total": 1.0,
+      "rpi_e_isolate_basis": "actual_parents",
+      "rpi_e_unknown_components": "",
+      "rpi_m_pack": 1.0,
+      "rpi_m_pack_status": "scored",
+      "rpi_m_pol": 1.0,
+      "rpi_m_pol_status": "no_signal_beyond_tag",
+      "rpi_k_stratum": "close",
+      "rpi_k_stratum_provisional": true,
+      "gate1_pattern": "s_or_l_involving",
+      "gate1_discordant_segment": "S",
+      "gate1_implicated_species": "Orthohantavirus hantanense;Orthohantavirus seoulense",
+      "score_state": "scored",
+      "rpi_neutral_factors": "M_pol:no_signal_beyond_tag",
+      "rpi_missing_status_keys": "",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support"
+    },
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js9",
+        "t2|Orthohantavirus seoulense|hbt4 2016",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "verdict": "insufficient_comparators",
+      "rpi_generation": 0.4716981132,
+      "rpi_retention": 0.070754717,
+      "rpi_e_total": 1.0,
+      "rpi_e_isolate_basis": "actual_parents",
+      "rpi_e_unknown_components": "",
+      "rpi_m_pack": 1.0,
+      "rpi_m_pack_status": "scored",
+      "rpi_m_pol": 1.0,
+      "rpi_m_pol_status": "no_signal_beyond_tag",
+      "rpi_k_stratum": "close",
+      "rpi_k_stratum_provisional": true,
+      "gate1_pattern": "s_or_l_involving",
+      "gate1_discordant_segment": "S",
+      "gate1_implicated_species": "Orthohantavirus hantanense;Orthohantavirus seoulense",
+      "score_state": "scored",
+      "rpi_neutral_factors": "M_pol:no_signal_beyond_tag",
+      "rpi_missing_status_keys": "",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support"
+    },
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js5",
+        "t2|Orthohantavirus seoulense|hbt62 2014",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "verdict": "insufficient_comparators",
+      "rpi_generation": 0.4716981132,
+      "rpi_retention": 0.070754717,
+      "rpi_e_total": 1.0,
+      "rpi_e_isolate_basis": "actual_parents",
+      "rpi_e_unknown_components": "",
+      "rpi_m_pack": 1.0,
+      "rpi_m_pack_status": "scored",
+      "rpi_m_pol": 1.0,
+      "rpi_m_pol_status": "no_signal_beyond_tag",
+      "rpi_k_stratum": "close",
+      "rpi_k_stratum_provisional": true,
+      "gate1_pattern": "s_or_l_involving",
+      "gate1_discordant_segment": "S",
+      "gate1_implicated_species": "Orthohantavirus hantanense;Orthohantavirus seoulense",
+      "score_state": "scored",
+      "rpi_neutral_factors": "M_pol:no_signal_beyond_tag",
+      "rpi_missing_status_keys": "",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support"
+    },
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js9",
+        "t2|Orthohantavirus seoulense|hunan2020c007 45",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "verdict": "insufficient_comparators",
+      "rpi_generation": 0.4716981132,
+      "rpi_retention": 0.070754717,
+      "rpi_e_total": 1.0,
+      "rpi_e_isolate_basis": "actual_parents",
+      "rpi_e_unknown_components": "",
+      "rpi_m_pack": 1.0,
+      "rpi_m_pack_status": "scored",
+      "rpi_m_pol": 1.0,
+      "rpi_m_pol_status": "no_signal_beyond_tag",
+      "rpi_k_stratum": "close",
+      "rpi_k_stratum_provisional": true,
+      "gate1_pattern": "s_or_l_involving",
+      "gate1_discordant_segment": "S",
+      "gate1_implicated_species": "Orthohantavirus hantanense;Orthohantavirus seoulense",
+      "score_state": "scored",
+      "rpi_neutral_factors": "M_pol:no_signal_beyond_tag",
+      "rpi_missing_status_keys": "",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "no_conflict"
+    },
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js5",
+        "t2|Orthohantavirus seoulense|hbt4 2016",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "verdict": "insufficient_comparators",
+      "rpi_generation": 0.4716981132,
+      "rpi_retention": 0.070754717,
+      "rpi_e_total": 1.0,
+      "rpi_e_isolate_basis": "actual_parents",
+      "rpi_e_unknown_components": "",
+      "rpi_m_pack": 1.0,
+      "rpi_m_pack_status": "scored",
+      "rpi_m_pol": 1.0,
+      "rpi_m_pol_status": "no_signal_beyond_tag",
+      "rpi_k_stratum": "close",
+      "rpi_k_stratum_provisional": true,
+      "gate1_pattern": "s_or_l_involving",
+      "gate1_discordant_segment": "S",
+      "gate1_implicated_species": "Orthohantavirus hantanense;Orthohantavirus seoulense",
+      "score_state": "scored",
+      "rpi_neutral_factors": "M_pol:no_signal_beyond_tag",
+      "rpi_missing_status_keys": "",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support"
+    },
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js9",
+        "t2|Orthohantavirus seoulense|hunan2020c004 50",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "verdict": "insufficient_comparators",
+      "rpi_generation": 0.4716981132,
+      "rpi_retention": 0.070754717,
+      "rpi_e_total": 1.0,
+      "rpi_e_isolate_basis": "actual_parents",
+      "rpi_e_unknown_components": "",
+      "rpi_m_pack": 1.0,
+      "rpi_m_pack_status": "scored",
+      "rpi_m_pol": 1.0,
+      "rpi_m_pol_status": "no_signal_beyond_tag",
+      "rpi_k_stratum": "close",
+      "rpi_k_stratum_provisional": true,
+      "gate1_pattern": "s_or_l_involving",
+      "gate1_discordant_segment": "S",
+      "gate1_implicated_species": "Orthohantavirus hantanense;Orthohantavirus seoulense",
+      "score_state": "scored",
+      "rpi_neutral_factors": "M_pol:no_signal_beyond_tag",
+      "rpi_missing_status_keys": "",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support"
+    },
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js5",
+        "t2|Orthohantavirus seoulense|hbt61 2014",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "verdict": "insufficient_comparators",
+      "rpi_generation": 0.4716981132,
+      "rpi_retention": 0.070754717,
+      "rpi_e_total": 1.0,
+      "rpi_e_isolate_basis": "actual_parents",
+      "rpi_e_unknown_components": "",
+      "rpi_m_pack": 1.0,
+      "rpi_m_pack_status": "scored",
+      "rpi_m_pol": 1.0,
+      "rpi_m_pol_status": "no_signal_beyond_tag",
+      "rpi_k_stratum": "close",
+      "rpi_k_stratum_provisional": true,
+      "gate1_pattern": "s_or_l_involving",
+      "gate1_discordant_segment": "S",
+      "gate1_implicated_species": "Orthohantavirus hantanense;Orthohantavirus seoulense",
+      "score_state": "scored",
+      "rpi_neutral_factors": "M_pol:no_signal_beyond_tag",
+      "rpi_missing_status_keys": "",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support"
+    },
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js9",
+        "t2|Orthohantavirus seoulense|hbcz88 1999",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "verdict": "insufficient_comparators",
+      "rpi_generation": 0.4716981132,
+      "rpi_retention": 0.070754717,
+      "rpi_e_total": 1.0,
+      "rpi_e_isolate_basis": "actual_parents",
+      "rpi_e_unknown_components": "",
+      "rpi_m_pack": 1.0,
+      "rpi_m_pack_status": "scored",
+      "rpi_m_pol": 1.0,
+      "rpi_m_pol_status": "no_signal_beyond_tag",
+      "rpi_k_stratum": "close",
+      "rpi_k_stratum_provisional": true,
+      "gate1_pattern": "s_or_l_involving",
+      "gate1_discordant_segment": "S",
+      "gate1_implicated_species": "Orthohantavirus hantanense;Orthohantavirus seoulense",
+      "score_state": "scored",
+      "rpi_neutral_factors": "M_pol:no_signal_beyond_tag",
+      "rpi_missing_status_keys": "",
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support"
+    }
+  ],
+  "confirmation": "attempted: per-winner gate4 fields recorded (errors included, if any)",
+  "scoring_errors": [],
+  "gate4_phylogeny": [
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js9",
+        "t2|Orthohantavirus seoulense|hbt62 2014",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support",
+      "gate4_error": null
+    },
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js9",
+        "t2|Orthohantavirus seoulense|hbt5 2016",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support",
+      "gate4_error": null
+    },
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js9",
+        "t2|Orthohantavirus seoulense|hbt61 2014",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support",
+      "gate4_error": null
+    },
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js9",
+        "t2|Orthohantavirus seoulense|hbt4 2016",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support",
+      "gate4_error": null
+    },
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js5",
+        "t2|Orthohantavirus seoulense|hbt62 2014",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support",
+      "gate4_error": null
+    },
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js9",
+        "t2|Orthohantavirus seoulense|hunan2020c007 45",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "no_conflict",
+      "gate4_error": null
+    },
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js5",
+        "t2|Orthohantavirus seoulense|hbt4 2016",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support",
+      "gate4_error": null
+    },
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js9",
+        "t2|Orthohantavirus seoulense|hunan2020c004 50",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support",
+      "gate4_error": null
+    },
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js5",
+        "t2|Orthohantavirus seoulense|hbt61 2014",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support",
+      "gate4_error": null
+    },
+    {
+      "triplet": [
+        "t2|Orthohantavirus hantanense|js9",
+        "t2|Orthohantavirus seoulense|hbcz88 1999",
+        "t2|Orthohantavirus seoulense|hbt43 2012"
+      ],
+      "fitness": 0.4716981132,
+      "gate4_phylo_status": "analyzed",
+      "gate4_reassortment_call": "weak_signal_low_bootstrap_support",
+      "gate4_error": null
+    }
+  ]
+}

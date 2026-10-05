@@ -1,0 +1,55 @@
+{
+  "seed": 20260904,
+  "hyperparameters": {
+    "population": 150,
+    "generations": 100,
+    "mutation_rate": 0.02,
+    "tournament_size": 3,
+    "elitism": 2,
+    "plateau": 20
+  },
+  "runs": [
+    {
+      "pool_name": "terminal_complete",
+      "pool_size": 272,
+      "generations_run": 23,
+      "stopped_on_plateau": true,
+      "best_fitness": 0.4716981132,
+      "winner_fitnesses": [
+        0.4716981132,
+        0.4716981132,
+        0.4716981132,
+        0.4716981132,
+        0.4716981132,
+        0.4716981132,
+        0.4716981132,
+        0.4716981132,
+        0.4716981132,
+        0.4716981132
+      ],
+      "scoring_error_count": 0,
+      "wall_seconds": 248.6
+    },
+    {
+      "pool_name": "strict_both",
+      "pool_size": 94,
+      "generations_run": 23,
+      "stopped_on_plateau": true,
+      "best_fitness": 0.1088580597,
+      "winner_fitnesses": [
+        0.1088580597,
+        0.1088580597,
+        0.0927627195,
+        0.0927627195,
+        0.0927627195,
+        0.0927627195,
+        0.0927627195,
+        0.0927627195,
+        0.0927627195,
+        0.0927627195
+      ],
+      "scoring_error_count": 0,
+      "wall_seconds": 229.6
+    }
+  ]
+}
