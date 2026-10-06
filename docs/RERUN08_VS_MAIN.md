@@ -8,7 +8,8 @@ changes alter your conclusions?"
 **Preserved outputs**: `../_pipeline_archive/Ortho_rerun08_full_output.tar.gz`
 (1627 files, 106 MB — full `output/` tree including all_scored CSVs, figures, phylogenetics,
 gate4 results).  
-**Code recovery**: `git checkout bc1b117` or `git checkout remotes/origin/08-work`.
+**Code recovery**: `git checkout bc1b117` (the 08-work merge base; `origin/08-work` was
+deleted after confirming 0 unique commits — every 08-work commit is an ancestor of main).
 
 ---
 
@@ -16,8 +17,8 @@ gate4 results).
 
 | Label | Code at run time | Git ref |
 |---|---|---|
-| **Ortho_rerun08** | 08-work branch, stopped at merge base | `bc1b117` |
-| **main_branch** | current main (+21 commits past merge base) | `6a5b56e` |
+| **Ortho_rerun08** | 08-work branch at merge base | `bc1b117` |
+| **main_branch** | current main (+45 commits past merge base) | `b74c79a` |
 
 A third artifact, `_pipeline_archive/run_20261002_003026`, has `generations_run=2` —
 it is a partially-started run, not a completed GA result, and is excluded from this
