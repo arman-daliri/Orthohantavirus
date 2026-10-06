@@ -1,0 +1,25 @@
+{
+  "segment": "S",
+  "panels": [
+    {
+      "group": "arvicolinae_borne",
+      "n_species": 6,
+      "n_isolates": 755
+    },
+    {
+      "group": "murinae_borne",
+      "n_species": 6,
+      "n_isolates": 550
+    },
+    {
+      "group": "sigmodontinae_borne",
+      "n_species": 9,
+      "n_isolates": 137
+    },
+    {
+      "group": "soricomorpha_borne",
+      "n_species": 8,
+      "n_isolates": 80
+    }
+  ]
+}
