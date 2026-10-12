@@ -1,0 +1,315 @@
+isolate_key,species_name,s_accession,m_accession,l_accession,grouping_tier,grouping_confidence
+t1|Orthohantavirus andesense|SAMEA122916161|chile 9717869,Orthohantavirus andesense,OZ485013.1,OZ485012.1,OZ485011.1,tier_1_biosample_isolate,1.0
+t1|Orthohantavirus dobravaense|SAMEA3283064|dobv ano poroia afl9 1999,Orthohantavirus dobravaense,NC_005233.1,NC_005234.1,NC_005235.1,tier_1_biosample_isolate,1.0
+t1|Orthohantavirus luxiense|SAMN45108004|ljgc ynsf73,Orthohantavirus luxiense,PQ678287.1,PQ678298.1,PQ678274.1,tier_1_biosample_isolate,1.0
+t1|Orthohantavirus luxiense|SAMN45108040|dlyl ynsf87,Orthohantavirus luxiense,PQ678286.1,PQ678297.1,PQ678273.1,tier_1_biosample_isolate,1.0
+t2|Orthohantavirus andesense|areb14 p2,Orthohantavirus andesense,MN850084.1,MN850089.1,MN850094.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus andesense|chile 9717869,Orthohantavirus andesense,NC_003466.1,NC_003467.2,NC_003468.2,tier_2_species_isolate,0.95
+t2|Orthohantavirus boweense|vn1512,Orthohantavirus boweense,NC_034405.1,NC_034406.1,NC_034407.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus brugesense|be vieux genappe te 2013 1,Orthohantavirus brugesense,NC_034394.1,NC_034395.1,NC_034402.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus brugesense|de wandlitz te 2013 1,Orthohantavirus brugesense,MF683844.1,MF683845.1,MF683846.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus caobangense|3,Orthohantavirus caobangense,NC_034484.1,NC_034474.1,NC_034485.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus chocloense|588,Orthohantavirus chocloense,KT983771.1,KT983772.1,EF397003.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus dobravaense|grw aa,Orthohantavirus dobravaense,JQ026204.1,JQ026205.1,JQ026206.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|84fli,Orthohantavirus hantanense,AY017064.1,AF345636.2,AF336826.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa 08 1111,Orthohantavirus hantanense,KY594718.1,KY594715.1,KY594712.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa 09 189,Orthohantavirus hantanense,KY594719.1,KY594716.1,KY594713.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa 09 198,Orthohantavirus hantanense,KY594720.1,KY594717.1,KY594714.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa03 161,Orthohantavirus hantanense,KT935024.1,KT934990.1,KT934956.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa03 386,Orthohantavirus hantanense,KT935025.1,KT934991.1,KT934957.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa03 387,Orthohantavirus hantanense,KT935026.1,KT934992.1,KT934958.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa04 722,Orthohantavirus hantanense,KU207190.1,KU207182.1,KU207174.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa05 190,Orthohantavirus hantanense,KT935027.1,KT934993.1,KT934959.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa05 241,Orthohantavirus hantanense,KT935028.1,KT934994.1,KT934960.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa05 246,Orthohantavirus hantanense,KU207191.1,KU207183.1,KU207175.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa05 249,Orthohantavirus hantanense,KT935029.1,KT934995.1,KT934961.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa05 331,Orthohantavirus hantanense,KT935030.1,KT934996.1,KT934962.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa05 771,Orthohantavirus hantanense,KT935031.1,KT934997.1,KT934963.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa05 775,Orthohantavirus hantanense,KT935032.1,KT934998.1,KT934964.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa09 1000,Orthohantavirus hantanense,KT935035.1,KT935001.1,KT934967.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa09 17,Orthohantavirus hantanense,KU207192.1,KU207184.1,KU207176.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa09 410,Orthohantavirus hantanense,KU207193.1,KU207185.1,KU207177.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa09 652,Orthohantavirus hantanense,KT935033.1,KT934999.1,KT934965.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa09 948,Orthohantavirus hantanense,KT935034.1,KT935000.1,KT934966.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa10 123,Orthohantavirus hantanense,KT935036.1,KT935002.1,KT934968.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa10 265,Orthohantavirus hantanense,KU207194.1,KU207186.1,KU207178.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa10 288,Orthohantavirus hantanense,KT935037.1,KT935003.1,KT934969.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa10 434,Orthohantavirus hantanense,KT935038.1,KT935004.1,KT934970.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa10 518,Orthohantavirus hantanense,KT935039.1,KT935005.1,KT934971.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa10 521,Orthohantavirus hantanense,MH598499.1,MH598485.1,MH598471.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa10 561,Orthohantavirus hantanense,KT935040.1,KT935006.1,KT934972.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa10 569,Orthohantavirus hantanense,MH598500.1,MH598486.1,MH598472.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa10 679,Orthohantavirus hantanense,KT935041.1,KT935007.1,KT934973.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa13 3,Orthohantavirus hantanense,KX687232.1,KX687227.1,KX687237.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 172,Orthohantavirus hantanense,KT935042.1,KT935008.1,KT934974.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 175,Orthohantavirus hantanense,KU207170.1,KU207163.1,KU207156.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 184,Orthohantavirus hantanense,KU207171.1,KU207164.1,KU207157.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 186,Orthohantavirus hantanense,KX687233.1,KX687228.1,KX687238.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 188,Orthohantavirus hantanense,KT935043.1,KT935009.1,KT934975.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 198,Orthohantavirus hantanense,KT935044.1,KT935010.1,KT934976.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 204,Orthohantavirus hantanense,KT935045.1,KT935011.1,KT934977.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 207,Orthohantavirus hantanense,KX687234.1,KX687229.1,KT934978.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 234,Orthohantavirus hantanense,KX687235.1,KX687230.1,KX687240.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 239,Orthohantavirus hantanense,KX687236.1,KX687231.1,KX687241.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 266,Orthohantavirus hantanense,KT935047.1,KT935013.1,KT934979.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 272,Orthohantavirus hantanense,KT935048.1,KT935014.1,KT934980.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 362,Orthohantavirus hantanense,KT935049.1,KT935015.1,KT934981.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 368,Orthohantavirus hantanense,KT935050.1,KT935016.1,KT934982.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 386,Orthohantavirus hantanense,KT935051.1,KT935017.1,KT934983.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 404,Orthohantavirus hantanense,KT935052.1,KT935018.1,KT934984.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 406,Orthohantavirus hantanense,KT935053.1,KT935019.1,KT934985.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 408,Orthohantavirus hantanense,KT935054.1,KT935020.1,KT934986.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 412,Orthohantavirus hantanense,KT935055.1,KT935021.1,KT934987.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 423,Orthohantavirus hantanense,KT935056.1,KT935022.1,KT934988.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa14 438,Orthohantavirus hantanense,KT935057.1,KT935023.1,KT934989.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa15 56,Orthohantavirus hantanense,KU207195.1,KU207187.1,KU207179.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa15 58,Orthohantavirus hantanense,KU207196.1,KU207188.1,KU207180.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa15 59,Orthohantavirus hantanense,KU207197.1,KU207189.1,KU207181.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa15 69,Orthohantavirus hantanense,MT012546.1,MT012558.1,MT012570.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa15 74,Orthohantavirus hantanense,MT012547.1,MT012559.1,MT012571.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa15 82,Orthohantavirus hantanense,MT012548.1,MT012560.1,MT012572.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa15 84,Orthohantavirus hantanense,MT012549.1,MT012561.1,MT012573.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa16 176,Orthohantavirus hantanense,MH598501.1,MH598487.1,MH598473.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa16 178,Orthohantavirus hantanense,MH598502.1,MH598488.1,MH598474.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa16 181 p,Orthohantavirus hantanense,MK548650.1,MK548659.1,MK548668.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa16 185 p,Orthohantavirus hantanense,MK548651.1,MK548660.1,MK548669.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa16 19 p,Orthohantavirus hantanense,MK548646.1,MK548655.1,MK548664.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa16 21 p,Orthohantavirus hantanense,MK548647.1,MK548656.1,MK548665.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa16 22 p,Orthohantavirus hantanense,MK548648.1,MK548657.1,MK548666.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa16 50 p,Orthohantavirus hantanense,MK548649.1,MK548658.1,MK548667.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa17 285,Orthohantavirus hantanense,OR700516.1,OR700509.1,OR700502.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa17 289,Orthohantavirus hantanense,OR700517.1,OR700510.1,OR700503.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa17 337,Orthohantavirus hantanense,MT012550.1,MT012562.1,MT012574.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa17 353,Orthohantavirus hantanense,MT012551.1,MT012563.1,MT012575.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa17 367,Orthohantavirus hantanense,MT012552.1,MT012564.1,MT012576.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa17 421,Orthohantavirus hantanense,MT012553.1,MT012565.1,MT012577.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa17 422,Orthohantavirus hantanense,MT012554.1,MT012566.1,MT012578.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa17 48,Orthohantavirus hantanense,MH598505.1,MH598491.1,MH598477.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa17 49,Orthohantavirus hantanense,MH598506.1,MH598492.1,MH598478.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa17 49 r,Orthohantavirus hantanense,MK548679.1,MK548688.1,MK548697.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa17 52 p,Orthohantavirus hantanense,MK548652.1,MK548661.1,MK548670.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa17 53,Orthohantavirus hantanense,MH598507.1,MH598493.1,MH598479.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa17 66 p,Orthohantavirus hantanense,MK548653.1,MK548662.1,MK548671.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa17 7,Orthohantavirus hantanense,MH598503.1,MH598489.1,MH598475.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa17 76 p,Orthohantavirus hantanense,MK548654.1,MK548663.1,MK548672.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa17 8,Orthohantavirus hantanense,MH598504.1,MH598490.1,MH598476.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa18 104,Orthohantavirus hantanense,PP951051.1,PP951056.1,PP951061.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa18 164,Orthohantavirus hantanense,MT012555.1,MT012567.1,MT012579.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa18 179,Orthohantavirus hantanense,MT012556.1,MT012568.1,MT012580.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa18 185,Orthohantavirus hantanense,MT012557.1,MT012569.1,MT012581.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa18 192,Orthohantavirus hantanense,OR700520.1,OR700513.1,OR700506.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa18 195,Orthohantavirus hantanense,OR700521.1,OR700514.1,OR700507.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa18 197,Orthohantavirus hantanense,OR700522.1,OR700515.1,OR700508.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa18 39,Orthohantavirus hantanense,OR700539.1,OR700511.1,OR700504.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa18 43,Orthohantavirus hantanense,OR700540.1,OR700512.1,OR700505.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 144 minion,Orthohantavirus hantanense,MW796175.1,MW796163.1,MW796151.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 144 miseq,Orthohantavirus hantanense,MW796139.1,MW796127.1,MW796115.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 152 minion,Orthohantavirus hantanense,MW796176.1,MW796164.1,MW796152.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 152 miseq,Orthohantavirus hantanense,MW796140.1,MW796128.1,MW796116.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 153 minion,Orthohantavirus hantanense,MW796177.1,MW796165.1,MW796153.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 153 miseq,Orthohantavirus hantanense,MW796141.1,MW796129.1,MW796117.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 167 minion,Orthohantavirus hantanense,MW796178.1,MW796166.1,MW796154.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 167 miseq,Orthohantavirus hantanense,MW796142.1,MW796130.1,MW796118.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 233 minion,Orthohantavirus hantanense,MW796179.1,MW796167.1,MW796155.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 233 miseq,Orthohantavirus hantanense,MW796143.1,MW796131.1,MW796119.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 236 minion,Orthohantavirus hantanense,MW796180.1,MW796168.1,MW796156.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 236 miseq,Orthohantavirus hantanense,MW796144.1,MW796132.1,MW796120.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 278 minion,Orthohantavirus hantanense,MW796181.1,MW796169.1,MW796157.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 278 miseq,Orthohantavirus hantanense,MW796145.1,MW796133.1,MW796121.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 36 minion,Orthohantavirus hantanense,MW796170.1,MW796158.1,MW796146.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 36 miseq,Orthohantavirus hantanense,MW796134.1,MW796122.1,MW796110.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 38 minion,Orthohantavirus hantanense,MW796171.1,MW796159.1,MW796147.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 38 miseq,Orthohantavirus hantanense,MW796135.1,MW796123.1,MW796111.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 39 minion,Orthohantavirus hantanense,MW796172.1,MW796160.1,MW796148.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 39 miseq,Orthohantavirus hantanense,MW796136.1,MW796124.1,MW796112.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 57 minion,Orthohantavirus hantanense,MW796173.1,MW796161.1,MW796149.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 57 miseq,Orthohantavirus hantanense,MW796137.1,MW796125.1,MW796113.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 89 minion,Orthohantavirus hantanense,MW796174.1,MW796162.1,MW796150.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa19 89 miseq,Orthohantavirus hantanense,MW796138.1,MW796126.1,MW796114.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa22 127,Orthohantavirus hantanense,PQ247679.1,PQ247664.1,PQ212941.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa22 159,Orthohantavirus hantanense,PQ247680.1,PQ247665.1,PQ212942.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa22 184,Orthohantavirus hantanense,PQ247681.1,PQ247666.1,PQ212943.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa22 65,Orthohantavirus hantanense,PQ247675.1,PQ247660.1,PQ212937.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa22 82,Orthohantavirus hantanense,PQ247676.1,PQ247661.1,PQ212938.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa22 84,Orthohantavirus hantanense,PQ247677.1,PQ247662.1,PQ212939.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa22 95,Orthohantavirus hantanense,PQ247678.1,PQ247663.1,PQ212940.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa23 115,Orthohantavirus hantanense,PQ247683.1,PQ247668.1,PQ212945.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa23 117,Orthohantavirus hantanense,PQ247684.1,PQ247669.1,PQ212946.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa23 118,Orthohantavirus hantanense,PQ247685.1,PQ247670.1,PQ212947.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa23 130,Orthohantavirus hantanense,PQ247686.1,PQ247671.1,PQ212948.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa23 132,Orthohantavirus hantanense,PQ247687.1,PQ247672.1,PQ212949.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa23 170,Orthohantavirus hantanense,PQ247688.1,PQ247673.1,PQ212950.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa23 174,Orthohantavirus hantanense,PQ247689.1,PQ247674.1,PQ212951.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|aa23 35,Orthohantavirus hantanense,PQ247682.1,PQ247667.1,PQ212944.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|ac22 19,Orthohantavirus hantanense,PQ410874.1,PQ410883.1,PQ410892.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|ac22 24,Orthohantavirus hantanense,PQ410875.1,PQ410884.1,PQ410893.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|ac23 1,Orthohantavirus hantanense,PQ410876.1,PQ410885.1,PQ410894.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|ac23 15,Orthohantavirus hantanense,PQ410877.1,PQ410886.1,PQ410895.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|ac23 17,Orthohantavirus hantanense,PQ410878.1,PQ410887.1,PQ410896.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|ac23 18,Orthohantavirus hantanense,PQ410879.1,PQ410888.1,PQ410897.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|ac23 19,Orthohantavirus hantanense,PQ410880.1,PQ410889.1,PQ410898.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|ac23 20,Orthohantavirus hantanense,PQ410881.1,PQ410890.1,PQ410899.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|ac23 22,Orthohantavirus hantanense,PQ410882.1,PQ410891.1,PQ410900.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|ap15 21,Orthohantavirus hantanense,PP951047.1,PP951052.1,PP951057.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|ap15 22,Orthohantavirus hantanense,PP951048.1,PP951053.1,PP951058.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|ap15 23,Orthohantavirus hantanense,PP951049.1,PP951054.1,PP951059.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|ap18 3,Orthohantavirus hantanense,PP951050.1,PP951055.1,PP951060.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|cl 1,Orthohantavirus hantanense,D25530.1,D25529.1,D25528.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|cl 2,Orthohantavirus hantanense,D25533.1,D25532.1,D25531.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|gahu79 2021,Orthohantavirus hantanense,OL961324.1,OL961342.1,OL961361.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|gaw13 2021,Orthohantavirus hantanense,OL961320.1,OL961339.1,OL961357.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|gaw29 2021,Orthohantavirus hantanense,OL961321.1,OL961340.1,OL961358.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|gaw47 2021,Orthohantavirus hantanense,OL961322.1,OL961341.1,OL961359.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|h8205,Orthohantavirus hantanense,KC136244.1,KC136243.1,KC136242.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|hv004,Orthohantavirus hantanense,JQ083395.1,JQ083394.1,JQ083393.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|js1,Orthohantavirus hantanense,KP970572.1,KP970560.1,KP896307.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|js10,Orthohantavirus hantanense,KP970581.1,KP970569.1,KP896316.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|js11,Orthohantavirus hantanense,KP970582.1,KP970570.1,KP896317.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|js12,Orthohantavirus hantanense,KP970583.1,KP970571.1,KP896318.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|js2,Orthohantavirus hantanense,KP970573.1,KP970561.1,KP896308.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|js3,Orthohantavirus hantanense,KP970574.1,KP970562.1,KP896309.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|js4,Orthohantavirus hantanense,KP970575.1,KP970563.1,KP896310.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|js5,Orthohantavirus hantanense,KP970576.1,KP970564.1,KP896311.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|js6,Orthohantavirus hantanense,KP970577.1,KP970565.1,KP896312.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|js7,Orthohantavirus hantanense,KP970578.1,KP970566.1,KP896313.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|js8,Orthohantavirus hantanense,KP970579.1,KP970567.1,KP896314.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|js9,Orthohantavirus hantanense,KP970580.1,KP970568.1,KP896315.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|jxgahu197 2022,Orthohantavirus hantanense,PP540018.1,PP540019.1,PP540020.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|khf,Orthohantavirus hantanense,LC209206.1,LC209208.1,LC209210.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|lr1,Orthohantavirus hantanense,AF288294.1,AF288293.1,AF288292.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|roka16 10,Orthohantavirus hantanense,MW219752.1,MW219748.1,MW219744.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|roka16 12,Orthohantavirus hantanense,MW219753.1,MW219749.1,MW219745.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|roka16 9,Orthohantavirus hantanense,MH598494.1,MH598480.1,MH598466.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|roka17 15,Orthohantavirus hantanense,MW219755.1,MW219751.1,MW219747.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|roka17 2,Orthohantavirus hantanense,MW219754.1,MW219750.1,MW219746.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|roka17 3,Orthohantavirus hantanense,MH598495.1,MH598481.1,MH598467.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|roka17 5,Orthohantavirus hantanense,MH598496.1,MH598482.1,MH598468.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|roka17 7,Orthohantavirus hantanense,MH598497.1,MH598483.1,MH598469.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|roka17 8,Orthohantavirus hantanense,MH598498.1,MH598484.1,MH598470.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|sc 1,Orthohantavirus hantanense,AY675349.1,AY675353.1,DQ056292.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|sc 2,Orthohantavirus hantanense,AY675350.1,DQ056293.1,AY675354.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus hantanense|tjj16,Orthohantavirus hantanense,AY839871.1,EU074672.1,KU215675.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus jejuense|cu09 33,Orthohantavirus jejuense,PV105733.1,PV105732.1,PV105731.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus khabarovskense|fuyuan mm 217,Orthohantavirus khabarovskense,NC_034527.1,NC_034518.1,NC_034519.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus khabarovskense|fuyuan mm 228,Orthohantavirus khabarovskense,KJ857343.1,KJ857339.1,KJ857322.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus khabarovskense|fuyuan mm 250,Orthohantavirus khabarovskense,KJ857344.1,KJ857340.1,KJ857311.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus khabarovskense|fuyuan mm 254,Orthohantavirus khabarovskense,KJ857345.1,KJ857329.1,KJ857312.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus khabarovskense|fuyuan mm 312,Orthohantavirus khabarovskense,KJ857346.1,KJ857330.1,KJ857313.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus mamorense|htn 007,Orthohantavirus mamorense,FJ532244.1,FJ608550.1,FJ809772.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus maporalense|hv 97021050,Orthohantavirus maporalense,NC_034566.1,NC_034552.1,NC_034553.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|11 1,Orthohantavirus puumalaense,JX028273.1,JX028272.1,JX028271.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|11 4,Orthohantavirus puumalaense,JX046484.1,JX046483.1,JX046482.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|11 5,Orthohantavirus puumalaense,JX046487.1,JX046486.1,JX046485.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|cg1820,Orthohantavirus puumalaense,NC_077668.1,NC_077666.1,NC_077667.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|cr13 1,Orthohantavirus puumalaense,PV276149.1,PV276143.1,PV276137.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|cr15 1,Orthohantavirus puumalaense,PV276150.1,PV276144.1,PV276138.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|cr15 13,Orthohantavirus puumalaense,PV276151.1,PV276145.1,PV276139.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|cr15 15,Orthohantavirus puumalaense,PV276152.1,PV276146.1,PV276140.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|cr16 3,Orthohantavirus puumalaense,PV276153.1,PV276147.1,PV276141.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|dtk ufa 97,Orthohantavirus puumalaense,AB297665.2,AB297666.2,AB297667.2,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|mgldcr02,Orthohantavirus puumalaense,MT514271.1,MT514281.1,MT514291.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|mgldke04,Orthohantavirus puumalaense,MT514272.1,MT514282.1,MT514292.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|mgldke05,Orthohantavirus puumalaense,MT514273.1,MT514283.1,MT514293.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|mglltu01,Orthohantavirus puumalaense,MT514274.1,MT514284.1,MT514294.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|puuv pieksamaki human kidney 2008,Orthohantavirus puumalaense,JN831950.1,JN831951.1,JN831952.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|puuv pieksamaki human lung 2008,Orthohantavirus puumalaense,JN831947.1,JN831948.1,JN831949.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|puuv pieksamaki mg7 2008,Orthohantavirus puumalaense,JN831943.1,JN831944.1,JN831945.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|samara 49 cg 2005,Orthohantavirus puumalaense,AB433843.2,AB433850.2,AB574183.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|samara 94 cg 2005,Orthohantavirus puumalaense,AB433845.2,AB433852.2,AB574184.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|saratov mg120 russia 2019,Orthohantavirus puumalaense,MZ014465.1,MZ014468.1,MZ014471.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|saratov mg125 russia 2019,Orthohantavirus puumalaense,MZ014466.1,MZ014469.1,MZ014472.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|sotkamo 2009,Orthohantavirus puumalaense,HE801633.1,HE801634.1,HE801635.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus puumalaense|umea hu,Orthohantavirus puumalaense,AY526219.1,AY526218.1,AY526217.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus rockportense|msb57412,Orthohantavirus rockportense,NC_038696.1,NC_038694.1,NC_038695.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|80 39,Orthohantavirus seoulense,NC_005236.1,NC_005237.1,NC_005238.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|93hbj20,Orthohantavirus seoulense,OQ739692.1,OQ739755.1,OQ739630.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|93hbq3,Orthohantavirus seoulense,OQ739693.1,OQ739754.1,OQ739631.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|93hbq4,Orthohantavirus seoulense,OQ739694.1,OQ739756.1,OQ739632.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|93hbx10,Orthohantavirus seoulense,OQ739695.1,OQ739757.1,OQ739633.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|93hbx12,Orthohantavirus seoulense,OQ739697.1,OQ739759.1,OQ739635.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|baltimore 811696,Orthohantavirus seoulense,OQ835584.1,OQ835583.1,OQ835582.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbb35 2002,Orthohantavirus seoulense,OQ739698.1,OQ739760.1,OQ739636.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbb36 2002,Orthohantavirus seoulense,OQ739699.1,OQ739761.1,OQ739637.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbcd1 2017,Orthohantavirus seoulense,OQ739700.1,OQ739762.1,OQ739638.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbcd1 2018,Orthohantavirus seoulense,OQ739701.1,OQ739763.1,OQ739639.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbcd13 2019,Orthohantavirus seoulense,OQ739707.1,OQ739769.1,OQ739645.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbcd3 2017,Orthohantavirus seoulense,OQ739702.1,OQ739764.1,OQ739640.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbcd4 2017,Orthohantavirus seoulense,OQ739703.1,OQ739765.1,OQ739641.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbcd44 2021,Orthohantavirus seoulense,OQ739708.1,OQ739770.1,OQ739646.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbcd52 2002,Orthohantavirus seoulense,OQ739709.1,OQ739771.1,OQ739647.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbcd55 2002,Orthohantavirus seoulense,OQ739710.1,OQ739772.1,OQ739648.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbcd55 2021,Orthohantavirus seoulense,OQ739711.1,OQ739773.1,OQ739649.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbcd56 2002,Orthohantavirus seoulense,OQ739712.1,OQ739774.1,OQ739650.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbcd6 2017,Orthohantavirus seoulense,OQ739704.1,OQ739766.1,OQ739642.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbcd8 2017,Orthohantavirus seoulense,OQ739705.1,OQ739767.1,OQ739643.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbcd9 2017,Orthohantavirus seoulense,OQ739706.1,OQ739768.1,OQ739644.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbcz88 1999,Orthohantavirus seoulense,OQ739713.1,OQ739775.1,OQ739651.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbh51 2021,Orthohantavirus seoulense,OQ739715.1,OQ739776.1,OQ739652.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbl131 2007,Orthohantavirus seoulense,OQ739716.1,OQ739778.1,OQ739654.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbl3 2005,Orthohantavirus seoulense,OQ739714.1,OQ739777.1,OQ739653.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq1 2015,Orthohantavirus seoulense,OQ739717.1,OQ739779.1,OQ739655.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq15 2018,Orthohantavirus seoulense,OQ739723.1,OQ739785.1,OQ739661.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq2 2015,Orthohantavirus seoulense,OQ739718.1,OQ739780.1,OQ739656.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq24 2011,Orthohantavirus seoulense,OQ739724.1,OQ739786.1,OQ739662.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq3 2012,Orthohantavirus seoulense,OQ739719.1,OQ739781.1,OQ739657.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq4 2012,Orthohantavirus seoulense,OQ739720.1,OQ739782.1,OQ739658.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq47 2021,Orthohantavirus seoulense,OQ739725.1,OQ739787.1,OQ739663.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq49 2004,Orthohantavirus seoulense,OQ739726.1,OQ739788.1,OQ739664.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq5 2015,Orthohantavirus seoulense,OQ739721.1,OQ739783.1,OQ739659.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq50 2021,Orthohantavirus seoulense,OQ739727.1,OQ739789.1,OQ739665.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq57 2021,Orthohantavirus seoulense,OQ739728.1,OQ739790.1,OQ739666.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq58 2021,Orthohantavirus seoulense,OQ739729.1,OQ739791.1,OQ739667.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq59 2021,Orthohantavirus seoulense,OQ739730.1,OQ739792.1,OQ739668.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq60 2021,Orthohantavirus seoulense,OQ739731.1,OQ739793.1,OQ739669.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq62 2001,Orthohantavirus seoulense,OQ739732.1,OQ739794.1,OQ739670.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq63 2001,Orthohantavirus seoulense,OQ739733.1,OQ739795.1,OQ739671.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq63 2021,Orthohantavirus seoulense,OQ739734.1,OQ739796.1,OQ739672.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq64 2022,Orthohantavirus seoulense,OQ739735.1,OQ739797.1,OQ739673.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq65 2009,Orthohantavirus seoulense,OQ739736.1,OQ739798.1,OQ739674.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq7 2012,Orthohantavirus seoulense,OQ739722.1,OQ739784.1,OQ739660.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq72 2000,Orthohantavirus seoulense,OQ739737.1,OQ739799.1,OQ739675.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq73 2000,Orthohantavirus seoulense,OQ739738.1,OQ739800.1,OQ739676.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq74 2000,Orthohantavirus seoulense,OQ739739.1,OQ739801.1,OQ739677.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbq75 2000,Orthohantavirus seoulense,OQ739740.1,OQ739802.1,OQ739678.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbt4 2016,Orthohantavirus seoulense,OQ739741.1,OQ739803.1,OQ739679.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbt41 2012,Orthohantavirus seoulense,OQ739745.1,OQ739807.1,OQ739683.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbt43 2012,Orthohantavirus seoulense,OQ739746.1,OQ739808.1,OQ739684.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbt5 2016,Orthohantavirus seoulense,OQ739742.1,OQ739804.1,OQ739680.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbt52 2013,Orthohantavirus seoulense,OQ739747.1,OQ739809.1,OQ739685.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbt6 2015,Orthohantavirus seoulense,OQ739743.1,OQ739805.1,OQ739681.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbt60 2013,Orthohantavirus seoulense,OQ739748.1,OQ739810.1,OQ739686.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbt61 2014,Orthohantavirus seoulense,OQ739749.1,OQ739811.1,OQ739687.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbt62 2014,Orthohantavirus seoulense,OQ739750.1,OQ739812.1,OQ739688.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbt63 2013,Orthohantavirus seoulense,OQ739751.1,OQ739813.1,OQ739689.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbt64 2014,Orthohantavirus seoulense,OQ739752.1,OQ739814.1,OQ739690.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbt65 2014,Orthohantavirus seoulense,OQ739753.1,OQ739815.1,OQ739691.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hbt7 2016,Orthohantavirus seoulense,OQ739744.1,OQ739806.1,OQ739682.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hq114,Orthohantavirus seoulense,PX445886.1,PX445885.1,PX445884.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|humber,Orthohantavirus seoulense,JX879769.1,JX879768.1,JX879770.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hunan2019c041 88,Orthohantavirus seoulense,OM337633.1,OM337632.1,OM337631.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hunan2020c004 39,Orthohantavirus seoulense,OM337636.1,OM337635.1,OM337634.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hunan2020c004 46,Orthohantavirus seoulense,OM337639.1,OM337638.1,OM337637.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hunan2020c004 50,Orthohantavirus seoulense,OM337642.1,OM337641.1,OM337640.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hunan2020c007 45,Orthohantavirus seoulense,OM337645.1,OM337644.1,OM337643.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hunan2020c017 10,Orthohantavirus seoulense,OM337648.1,OM337647.1,OM337646.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|hunan2020c017 44,Orthohantavirus seoulense,OM337651.1,OM337650.1,OM337649.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|l99,Orthohantavirus seoulense,AF288299.1,AF288298.1,AF288297.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|ln01,Orthohantavirus seoulense,MT711952.1,MT711946.1,MT711940.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|ln02,Orthohantavirus seoulense,MT711953.1,MT711947.1,MT711941.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|ln03,Orthohantavirus seoulense,MT711954.1,MT711948.1,MT711942.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|ln04,Orthohantavirus seoulense,MT711955.1,MT711949.1,MT711943.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|ln05,Orthohantavirus seoulense,MT711956.1,MT711950.1,MT711944.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|ln06,Orthohantavirus seoulense,MT711957.1,MT711951.1,MT711945.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|nmgmq74,Orthohantavirus seoulense,PZ024107.1,PZ165968.1,PZ165969.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|rn10 134 ngs,Orthohantavirus seoulense,MF149947.1,MF149942.1,MF149938.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|rn10 145 ngs,Orthohantavirus seoulense,MF149948.1,MF149943.1,MF149939.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|rn11 44 ngs,Orthohantavirus seoulense,MF149949.1,MF149944.1,MF149940.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|rn11 53 ngs,Orthohantavirus seoulense,MF149950.1,MF149945.1,MF149941.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|sov rn18 1,Orthohantavirus seoulense,OK746253.1,OK746251.1,OK746249.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|sov rn19 5,Orthohantavirus seoulense,OK746254.1,OK746252.1,OK746250.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus seoulense|zt71,Orthohantavirus seoulense,AY750171.1,EF117248.1,EF190551.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus sinnombreense|new york 1,Orthohantavirus sinnombreense,MG717391.1,MG717392.1,MG717393.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus tigrayense|et2121,Orthohantavirus tigrayense,KU934010.1,KU934009.1,NC_055147.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus tulaense|magdef02 1,Orthohantavirus tulaense,MT514275.1,MT514285.1,MT514295.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus tulaense|marchel42,Orthohantavirus tulaense,MT514277.1,MT514287.1,MT514297.1,tier_2_species_isolate,0.95
+t2|Orthohantavirus tulaense|marczgr07,Orthohantavirus tulaense,MT514278.1,MT514288.1,MT514298.1,tier_2_species_isolate,0.95

@@ -2,9 +2,12 @@ __pycache__/
 *.py[cod]
 .venv/
 
-# The pipeline log is written fresh on every run and records absolute paths for the
-# machine it ran on. output/ortho_pipeline.log is already tracked; untrack it with
-# `git rm --cached output/ortho_pipeline.log` if you would rather it not be committed.
+# Pipeline logs are written fresh on every run and DO record absolute paths for the
+# machine they ran on (verified: both ortho_pipeline.log and ortho_phylogeny.log embed
+# the checkout path on their "Package:"/"Output:" lines). Neither is tracked. The
+# figures that matter from them -- record counts, isolate/triplet totals, pool sizes,
+# per-phylogroup runtimes -- are reproduced in README.md, so nothing is lost by
+# ignoring them. Scrub the paths before committing a log if you ever need one in-repo.
 output/*.log
 
 # External tool binaries: 38 MB of downloadable archives plus their extracted trees.
@@ -15,26 +18,44 @@ tools/mafft-win/
 tools/iqtree-3.1.3-Windows/
 tools/_download_meta.json
 
-# Stage 1's reference snapshot -- derived from all_hanta/ (also gitignored, see Step 1 in
-# the README), so committing it without its source would be misleading provenance. It
-# regenerates deterministically in ~16 seconds; run prepare_dataset.py before Stages 2/3.
+# Stage 1's reference snapshot -- 78 MB of data derived entirely from all_hanta/, which
+# IS tracked in this repository (see .gitattributes). Because the source package ships
+# with the repo, the snapshot regenerates deterministically in ~16 seconds and committing
+# 78 MB of derivable JSON would only bloat history. Run prepare_dataset.py before
+# Stages 2/3. (Earlier revisions of this comment claimed all_hanta/ was gitignored --
+# it is not, and never was: README.md line 77 relies on `git checkout -- all_hanta/`.)
 output/phylo_rpi_ga_isolates.json
 output/phylo_rpi_ga_genomic.json
 output/phylo_rpi_ga_cds.json
 output/phylo_rpi_ga_snapshot_manifest.json
 
-# Step 1 pool files and Step 3 GA-search outputs -- all regenerable by running the
-# pipeline; large (pool CSVs ~3 MB; ga_search/ tree artifacts can exceed 1 GB).
-output/ga_pool_*.csv
-output/ga_pools_manifest.json
+# Step 3 GA-search working tree. The per-candidate MAFFT/IQ-TREE artifacts under
+# candidate_phylogenetics/ are ~507 MB over 740 files, so the whole tree is ignored by
+# default and the research outputs are whitelisted back below.
+#
+# NOTE: Step 1's pool files (ga_pool_*.csv, ga_pools_manifest.json) used to be ignored
+# here on the grounds that they were "~3 MB". They are 40 KB and 14 KB. They define the
+# search space every GA result is relative to, so they are now tracked.
 output/ga_search/**
-# The per-pool seed JSONs are the primary research output (winners, fitness log,
-# gate4 verdicts). Track them; ignore everything else under ga_search/.
+# --- Whitelisted: the scored result of the search, not the bytes it was computed from ---
 !output/ga_search/terminal_complete/
-!output/ga_search/terminal_complete/seed_*.json
 !output/ga_search/strict_both/
+# Winners, fitness log and gate4 verdicts (~19 KB each).
+!output/ga_search/terminal_complete/seed_*.json
 !output/ga_search/strict_both/seed_*.json
+# Cross-pool comparison (pool sizes, generations run, best fitness per pool).
 !output/ga_search/ga_pool_comparison.json
+# The FULL scored population -- 1,063 triplets (strict_both) / 964 (terminal_complete)
+# with all 22 RPI component columns. seed_*.json carries only the top 10 winners, so
+# without these the score distribution behind the winners is unreproducible without a
+# full GA rerun (which needs MAFFT + IQ-TREE installed). ~350 KB + ~750 KB per pool.
+!output/ga_search/*/all_scored_seed_*.csv
+!output/ga_search/*/all_scored_seed_*.jsonl
+# Sequences of the winning candidates (30 records per pool, ~120 KB) and of the search
+# pool itself (~4.4 MB combined). Both are extracts of the tracked all_hanta/ package,
+# but committing them makes a run auditable without rerunning Step 1.
+!output/ga_search/*/winner_sequences_seed_*.fasta
+!output/ga_search/*/pool_sequences_seed_*.fasta
 
 # Step 3 validation gate4 tree artifacts -- MAFFT alignments and IQ-TREE outputs
 # per candidate, regenerable with `rpi_core.py validate --with-phylogeny`. Each

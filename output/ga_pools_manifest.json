@@ -1,0 +1,21 @@
+{
+  "pipeline_version": "2.0.0",
+  "generated_at_utc": "2026-10-01T20:45:50Z",
+  "note": "reserved-calibration exclusion is NOT applied here; Algorithm.py applies it at load time",
+  "pools": {
+    "terminal_complete": {
+      "file": "ga_pool_terminal_complete.csv",
+      "ruler": "terminally-complete (full-length S/M/L with 5'/3' panhandle tags)",
+      "count": 314
+    },
+    "strict_both": {
+      "file": "ga_pool_strict_both.csv",
+      "ruler": "terminally-complete AND coding-complete (has_complete_triplet)",
+      "count": 108
+    }
+  },
+  "overlap": {
+    "terminal_only": 206,
+    "strict_both_shared": 108
+  }
+}
