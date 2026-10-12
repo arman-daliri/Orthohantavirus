@@ -1,0 +1,187 @@
+[2026-10-02T00:45:39] Orthohantavirus pipeline — full scratch run
+[2026-10-02T00:45:39] Project root : /c/git-projects/Orthohantavirus
+[2026-10-02T00:45:39] Git commit   : ef811f8bd3fcea5e68d5d8b5a7a752afb42f8736
+[2026-10-02T00:45:40] Git branch   : main
+[2026-10-02T00:45:40] Python       : Python 3.14.6
+[2026-10-02T00:45:40] IQ-TREE version: IQ-TREE version 3.1.3 for Windows 64-bit built Jun 19 2026
+[2026-10-02T00:45:41] MAFFT response : Active code page: 65001   Preparing environment to run MAFFT on Windows.  
+[2026-10-02T00:45:41] Archive root : /c/git-projects/Orthohantavirus/../_pipeline_archive/run_20261002_004541
+[2026-10-02T00:45:41] Archiving output/ → /c/git-projects/Orthohantavirus/../_pipeline_archive/run_20261002_004541/output
+[2026-10-02T00:45:41] Archiving data/rpi_calibration.json → /c/git-projects/Orthohantavirus/../_pipeline_archive/run_20261002_004541/rpi_calibration.json
+[2026-10-02T00:45:42] === START Step1_prepare_dataset ===
+2026-10-02 00:45:43,107 | INFO | Orthohantavirus pipeline v2.0.0
+2026-10-02 00:45:43,107 | INFO | Package: C:\git-projects\Orthohantavirus\all_hanta\ncbi_dataset\data
+2026-10-02 00:45:43,107 | INFO | Output : C:\git-projects\Orthohantavirus\output
+2026-10-02 00:45:43,107 | INFO | Verifying package integrity against NCBI md5sum.txt
+2026-10-02 00:45:43,304 | INFO | Integrity: 7/7 files verified against NCBI md5sum.txt
+2026-10-02 00:45:43,305 | INFO | Loading reports
+2026-10-02 00:45:44,146 | INFO |   data_report: 16028 records
+2026-10-02 00:45:44,466 | INFO |   annotation_report: 16028 records (32056 index keys)
+2026-10-02 00:45:44,469 | INFO |   biosample_report: 44 samples
+2026-10-02 00:45:44,469 | INFO | Parsing FASTA
+2026-10-02 00:45:44,717 | INFO |   genomic: 16028 sequences, protein: 15507 sequences
+2026-10-02 00:45:44,717 | INFO | Transforming accession records
+2026-10-02 00:45:45,820 | INFO |   16028 transformed, 0 failed
+2026-10-02 00:45:45,830 | INFO | Reservoir curation audit: all curated reservoirs agree with observed hosts
+2026-10-02 00:45:45,830 | INFO | Reconstructing isolates
+2026-10-02 00:45:46,148 | INFO |   9867 isolates, 223 complete triplets
+2026-10-02 00:45:46,148 | INFO | Clustering by k-mer distance (threshold 0.020)
+2026-10-02 00:45:49,448 | INFO | Writing outputs
+2026-10-02 00:45:49,448 | INFO | Loading CDS index
+2026-10-02 00:45:49,605 | INFO |   cds: 15376 accessions with at least one CDS
+2026-10-02 00:45:49,606 | INFO | Writing reference snapshot
+GA pools (before reserved-calibration exclusion): terminal=314, strict(terminal+coding)=108, terminal-only=206
+2026-10-02 00:45:50,683 | INFO | GA pools (before reserved-calibration exclusion): terminal=314, strict(terminal+coding)=108, terminal-only=206
+2026-10-02 00:45:50,697 | INFO | Wrote 314 rows x 7 cols to ga_pool_terminal_complete.csv
+2026-10-02 00:45:50,703 | INFO | Wrote 108 rows x 7 cols to ga_pool_strict_both.csv
+2026-10-02 00:45:50,711 | INFO | Done. 16028 accessions -> 39 species -> 9867 isolates (223 complete triplets)
+[2026-10-02T00:45:51] === DONE  Step1_prepare_dataset ===
+[2026-10-02T00:45:51] === START Step2_phylogeny ===
+2026-10-02 00:45:52,448 | INFO | Orthohantavirus phylogenetics stage (Stage 2)
+2026-10-02 00:45:52,448 | INFO | Output: C:\git-projects\Orthohantavirus\output
+2026-10-02 00:45:52,448 | INFO | Loading Stage 1 reference snapshot from C:\git-projects\Orthohantavirus\output
+2026-10-02 00:45:52,987 | INFO |   9867 isolates, 223 complete triplets
+2026-10-02 00:45:57,537 | INFO |   cds: 15376 accessions with at least one CDS
+2026-10-02 00:45:57,538 | INFO | Running phylogenetics stage
+2026-10-02 00:45:57,538 | WARNING | Phylogroup trees are unrooted (no --phylo-outgroup given): they can show THAT segments from different species cluster together, but not which species was donor and which was recipient.
+2026-10-02 00:45:57,614 | INFO | Phylogenetics (species): 1470 candidate isolates (8082 excluded before grouping: {'missing_cds_for_one_or_more_segments': 6413, 'species_not_classified': 1503, 'lab_or_vaccine_excluded': 166})
+2026-10-02 00:45:57,615 | INFO | Phylogenetics: excluded group below --phylo-min-taxa: Orthohantavirus brugesense: only 1 candidate(s), need 4
+2026-10-02 00:45:57,615 | INFO | Phylogenetics: excluded group below --phylo-min-taxa: Orthohantavirus montanoense: only 1 candidate(s), need 4
+2026-10-02 00:45:57,615 | INFO | Phylogenetics: excluded group below --phylo-min-taxa: Orthohantavirus boweense: only 1 candidate(s), need 4
+2026-10-02 00:45:57,615 | INFO | Phylogenetics: excluded group below --phylo-min-taxa: Orthohantavirus fugongense: only 1 candidate(s), need 4
+2026-10-02 00:45:57,615 | INFO | Phylogenetics: excluded group below --phylo-min-taxa: Orthohantavirus delgaditoense: only 1 candidate(s), need 4
+2026-10-02 00:45:57,615 | INFO | Phylogenetics: excluded group below --phylo-min-taxa: Orthohantavirus maporalense: only 1 candidate(s), need 4
+2026-10-02 00:45:57,615 | INFO | Phylogenetics: excluded group below --phylo-min-taxa: Orthohantavirus kenkemeense: only 1 candidate(s), need 4
+2026-10-02 00:45:57,615 | INFO | Phylogenetics: excluded group below --phylo-min-taxa: Orthohantavirus bayoui: only 3 candidate(s), need 4
+2026-10-02 00:45:57,615 | INFO | Phylogenetics: excluded group below --phylo-min-taxa: Orthohantavirus luxiense: only 1 candidate(s), need 4
+2026-10-02 00:45:57,615 | INFO | Phylogenetics: excluded group below --phylo-min-taxa: Orthohantavirus rockportense: only 1 candidate(s), need 4
+2026-10-02 00:45:57,615 | INFO | Phylogenetics: excluded group below --phylo-min-taxa: Orthohantavirus tatenalense: only 1 candidate(s), need 4
+2026-10-02 00:45:57,615 | INFO | Phylogenetics: excluded group below --phylo-min-taxa: Orthohantavirus carrizalense: only 1 candidate(s), need 4
+2026-10-02 00:45:57,615 | INFO | Phylogenetics: excluded group below --phylo-min-taxa: Orthohantavirus wufangense: only 1 candidate(s), need 4
+2026-10-02 00:45:57,615 | INFO | Phylogenetics: excluded group below --phylo-min-taxa: Orthohantavirus sangassouense: only 2 candidate(s), need 4
+2026-10-02 00:45:57,616 | INFO | Phylogenetics (species): analyzing 14 group(s): ['Orthohantavirus andesense', 'Orthohantavirus caobangense', 'Orthohantavirus chocloense', 'Orthohantavirus dabieshanense', 'Orthohantavirus dobravaense', 'Orthohantavirus hantanense', 'Orthohantavirus jejuense', 'Orthohantavirus khabarovskense', 'Orthohantavirus mamorense', 'Orthohantavirus puumalaense', 'Orthohantavirus seoulense', 'Orthohantavirus sinnombreense', 'Orthohantavirus thailandense', 'Orthohantavirus tulaense']
+2026-10-02 00:45:57,617 | INFO | Phylogenetics (species): Orthohantavirus puumalaense (425 taxa) -- aligning + building trees
+2026-10-02 00:45:57,618 | INFO | Phylogenetics (species): Orthohantavirus tulaense (316 taxa) -- aligning + building trees
+2026-10-02 00:45:57,619 | INFO | Phylogenetics (species): Orthohantavirus hantanense (273 taxa) -- aligning + building trees
+2026-10-02 00:45:57,620 | INFO | Phylogenetics (species): Orthohantavirus seoulense (213 taxa) -- aligning + building trees
+2026-10-02 01:39:26,650 | INFO | Phylogenetics (species): Orthohantavirus seoulense done in 3209.0s
+2026-10-02 01:39:26,651 | INFO | Phylogenetics (species): Orthohantavirus andesense (69 taxa) -- aligning + building trees
+2026-10-02 01:43:53,702 | INFO | Phylogenetics (species): Orthohantavirus andesense done in 267.1s
+2026-10-02 01:43:53,702 | INFO | Phylogenetics (species): Orthohantavirus sinnombreense (49 taxa) -- aligning + building trees
+2026-10-02 01:48:22,033 | INFO | Phylogenetics (species): Orthohantavirus sinnombreense done in 268.3s
+2026-10-02 01:48:22,033 | INFO | Phylogenetics (species): Orthohantavirus dobravaense (47 taxa) -- aligning + building trees
+2026-10-02 01:52:08,751 | INFO | Phylogenetics (species): Orthohantavirus dobravaense done in 226.7s
+2026-10-02 01:52:08,751 | INFO | Phylogenetics (species): Orthohantavirus caobangense (12 taxa) -- aligning + building trees
+2026-10-02 01:52:51,451 | INFO | Phylogenetics (species): Orthohantavirus caobangense done in 42.7s
+2026-10-02 01:52:51,451 | INFO | Phylogenetics (species): Orthohantavirus jejuense (11 taxa) -- aligning + building trees
+2026-10-02 01:53:24,857 | INFO | Phylogenetics (species): Orthohantavirus jejuense done in 33.4s
+2026-10-02 01:53:24,857 | INFO | Phylogenetics (species): Orthohantavirus khabarovskense (11 taxa) -- aligning + building trees
+2026-10-02 01:53:58,267 | INFO | Phylogenetics (species): Orthohantavirus khabarovskense done in 33.4s
+2026-10-02 01:53:58,267 | INFO | Phylogenetics (species): Orthohantavirus dabieshanense (9 taxa) -- aligning + building trees
+2026-10-02 01:54:26,633 | INFO | Phylogenetics (species): Orthohantavirus dabieshanense done in 28.4s
+2026-10-02 01:54:26,634 | INFO | Phylogenetics (species): Orthohantavirus chocloense (8 taxa) -- aligning + building trees
+2026-10-02 01:54:50,442 | INFO | Phylogenetics (species): Orthohantavirus chocloense done in 23.8s
+2026-10-02 01:54:50,442 | INFO | Phylogenetics (species): Orthohantavirus thailandense (6 taxa) -- aligning + building trees
+2026-10-02 01:55:18,545 | INFO | Phylogenetics (species): Orthohantavirus thailandense done in 28.1s
+2026-10-02 01:55:18,545 | INFO | Phylogenetics (species): Orthohantavirus mamorense (4 taxa) -- aligning + building trees
+2026-10-02 01:55:43,692 | INFO | Phylogenetics (species): Orthohantavirus mamorense done in 25.1s
+2026-10-02 02:06:24,830 | INFO | Phylogenetics (species): Orthohantavirus tulaense done in 4827.2s
+2026-10-02 02:29:00,371 | INFO | Phylogenetics (species): Orthohantavirus hantanense done in 6182.8s
+2026-10-02 02:52:39,650 | INFO | Phylogenetics (species): Orthohantavirus puumalaense done in 7602.0s
+2026-10-02 02:52:39,724 | INFO | Phylogenetics (phylogroup): 1525 candidate isolates (7511 excluded before grouping: {'missing_cds_for_one_or_more_segments': 6413, 'species_not_classified_and_no_resolvable_phylogroup': 932, 'lab_or_vaccine_excluded': 166})
+2026-10-02 02:52:39,726 | INFO | Phylogenetics: excluded group below --phylo-min-taxa: phylogroup chiroptera_borne: only 3 candidate(s), need 4
+2026-10-02 02:52:39,726 | INFO | Phylogenetics (phylogroup): analyzing 4 group(s): ['arvicolinae_borne', 'murinae_borne', 'sigmodontinae_borne', 'soricomorpha_borne']
+2026-10-02 02:52:39,727 | INFO | Phylogenetics (phylogroup): arvicolinae_borne (755 taxa) -- aligning + building trees
+2026-10-02 02:52:39,728 | INFO | Phylogenetics (phylogroup): murinae_borne (550 taxa) -- aligning + building trees
+2026-10-02 02:52:39,730 | INFO | Phylogenetics (phylogroup): sigmodontinae_borne (137 taxa) -- aligning + building trees
+2026-10-02 02:52:39,731 | INFO | Phylogenetics (phylogroup): soricomorpha_borne (80 taxa) -- aligning + building trees
+2026-10-02 03:23:19,327 | INFO | Phylogenetics (phylogroup): sigmodontinae_borne done in 1839.6s
+2026-10-02 04:12:08,071 | INFO | Phylogenetics (phylogroup): soricomorpha_borne done in 4768.3s
+2026-10-02 07:32:42,140 | INFO | Phylogenetics (phylogroup): murinae_borne done in 16802.4s
+2026-10-02 08:58:55,499 | INFO | Phylogenetics (phylogroup): arvicolinae_borne done in 21975.8s
+2026-10-02 08:58:55,631 | INFO | Wrote 2995 rows x 38 cols to ortho_reassortment_table.csv
+2026-10-02 08:58:55,632 | INFO | Done. 2995 candidate rows written to ortho_reassortment_table.csv
+[2026-10-02T08:58:55] === DONE  Step2_phylogeny ===
+[2026-10-02T08:58:56] === START Step3a_rpi_core_run ===
+tau = 3.914
+  a_random_fakes: n=20
+  b1_within_species_shuffle: n=30
+  b2_cross_species_sympatric: n=36
+  c_real_positive: n=11
+overall_ranking_supported = True
+
+wrote output\pipeline\run_20261002T045953Z.json
+[2026-10-02T08:59:53] === DONE  Step3a_rpi_core_run ===
+[2026-10-02T08:59:53] === START Step3b_ga_search ===
+[terminal_complete] wrote 964 scored triplet(s) to C:\git-projects\Orthohantavirus\output\ga_search\terminal_complete\all_scored_seed_20260904.jsonl and C:\git-projects\Orthohantavirus\output\ga_search\terminal_complete\all_scored_seed_20260904.csv
+[terminal_complete] wrote 10 winner(s)' sequences to C:\git-projects\Orthohantavirus\output\ga_search\terminal_complete\winner_sequences_seed_20260904.fasta
+[terminal_complete] wrote 272 pool isolate(s)' sequences to C:\git-projects\Orthohantavirus\output\ga_search\terminal_complete\pool_sequences_seed_20260904.fasta
+[terminal_complete] generations: 23 (plateau stop: True)
+[terminal_complete] best fitness: first 0.4184 -> final 0.4717
+[terminal_complete] winners written: 10; confirmation: failed: could not resolve mafft/iqtree3 -- Phylogenetics stage requires 'mafft' on PATH (or pass --mafft-bin=/path/to/mafft).
+Install dependencies with:
+  conda env create -f environment.yml
+then either 'conda activate hanta_phylo' before running this script, or pass --mafft-bin pointing at that environment's bin/mafft.
+[terminal_complete] wrote C:\git-projects\Orthohantavirus\output\ga_search\terminal_complete\seed_20260904.json
+[strict_both] wrote 1063 scored triplet(s) to C:\git-projects\Orthohantavirus\output\ga_search\strict_both\all_scored_seed_20260904.jsonl and C:\git-projects\Orthohantavirus\output\ga_search\strict_both\all_scored_seed_20260904.csv
+[strict_both] wrote 10 winner(s)' sequences to C:\git-projects\Orthohantavirus\output\ga_search\strict_both\winner_sequences_seed_20260904.fasta
+[strict_both] wrote 94 pool isolate(s)' sequences to C:\git-projects\Orthohantavirus\output\ga_search\strict_both\pool_sequences_seed_20260904.fasta
+[strict_both] generations: 23 (plateau stop: True)
+[strict_both] best fitness: first 0.0928 -> final 0.1089
+[strict_both] winners written: 10; confirmation: failed: could not resolve mafft/iqtree3 -- Phylogenetics stage requires 'mafft' on PATH (or pass --mafft-bin=/path/to/mafft).
+Install dependencies with:
+  conda env create -f environment.yml
+then either 'conda activate hanta_phylo' before running this script, or pass --mafft-bin pointing at that environment's bin/mafft.
+[strict_both] wrote C:\git-projects\Orthohantavirus\output\ga_search\strict_both\seed_20260904.json
+
+=== GA pool comparison ===
+  terminal_complete: pool=272, gens=23 (plateau=True), best=0.4717, errors=0, wall=248.6s
+  strict_both: pool=94, gens=23 (plateau=True), best=0.1089, errors=0, wall=229.6s
+wrote C:\git-projects\Orthohantavirus\output\ga_search\ga_pool_comparison.json
+[2026-10-02T09:07:54] === DONE  Step3b_ga_search ===
+[2026-10-02T09:07:54] === START Step4_robustness_sweep ===
+wrote C:\git-projects\Orthohantavirus\output\rpi_parameter_robustness_sweep.json
+wrote C:\git-projects\Orthohantavirus\output\figures\parameter_robustness_sweep.png
+geo_d0_km: rank_correlation range [0.826, 1.000], worst mover M_geo_near
+time_tau_years: rank_correlation range [0.934, 1.000], worst mover Q_time_mid
+host_decay_scale: rank_correlation range [0.965, 1.000], worst mover I_single_species_close_S
+retention_f_scale: rank_correlation range [0.981, 1.000], worst mover B_same_species_close_S
+joint sweep (81 combos): rank_correlation range [0.988, 1.000]
+real discrimination panel pass fraction: 100%
+[2026-10-02T09:09:23] === DONE  Step4_robustness_sweep ===
+[2026-10-02T09:09:23] === START Step5a_figures_before ===
+wrote 7 figure(s) to C:/git-projects/Orthohantavirus/output/figures/before
+[2026-10-02T09:09:29] === DONE  Step5a_figures_before ===
+[2026-10-02T09:09:29] === START Step5b_figures_after_terminal_complete ===
+wrote 10 figure(s) and C:\git-projects\Orthohantavirus\output\figures\after_terminal_complete\ga_winners_parents.csv
+[2026-10-02T09:09:35] === DONE  Step5b_figures_after_terminal_complete ===
+[2026-10-02T09:09:35] === START Step5b_figures_after_strict_both ===
+wrote 10 figure(s) and C:\git-projects\Orthohantavirus\output\figures\after_strict_both\ga_winners_parents.csv
+[2026-10-02T09:09:41] === DONE  Step5b_figures_after_strict_both ===
+[2026-10-02T09:09:41] === START Step5c_figures_trees ===
+wrote 18 file(s) to C:/git-projects/Orthohantavirus/output/figures/trees
+[2026-10-02T09:10:23] === DONE  Step5c_figures_trees ===
+[2026-10-02T09:10:23] === START Step5d_figures_overview_S ===
+wrote 2 file(s) to C:/git-projects/Orthohantavirus/output/figures/overview
+[2026-10-02T09:10:25] === DONE  Step5d_figures_overview_S ===
+[2026-10-02T09:10:25] === START Step5d_figures_overview_M ===
+wrote 2 file(s) to C:/git-projects/Orthohantavirus/output/figures/overview
+[2026-10-02T09:10:28] === DONE  Step5d_figures_overview_M ===
+[2026-10-02T09:10:28] === START Step5d_figures_overview_L ===
+wrote 2 file(s) to C:/git-projects/Orthohantavirus/output/figures/overview
+[2026-10-02T09:10:31] === DONE  Step5d_figures_overview_L ===
+[2026-10-02T09:10:31] 
+[2026-10-02T09:10:31] === PIPELINE COMPLETE ===
+[2026-10-02T09:10:31] 
+[2026-10-02T09:10:31] Post-run diagnostics — run manually after inspecting results:
+[2026-10-02T09:10:31]   # How many of the top-10 winners have neutral factors (fallback-affected)?
+[2026-10-02T09:10:31]   python -c "
+[2026-10-02T09:10:31]   import csv; rows = sorted(csv.DictReader(open('output/ga_search/terminal_complete/all_scored_seed_20260904.csv')), key=lambda r: float(r.get('fitness') or 0), reverse=True)[:10]
+[2026-10-02T09:10:31]   print(sum(1 for r in rows if r.get('rpi_neutral_factors')), 'of 10 top winners have neutral factors')
+[2026-10-02T09:10:31]   "
+[2026-10-02T09:10:31] 
+[2026-10-02T09:10:31]   # Compare winner ranks against archived Ortho_rerun08 run (if present):
+[2026-10-02T09:10:31]   # ls /c/git-projects/Orthohantavirus/../_pipeline_archive/run_20261002_004541
+[2026-10-02T09:10:31] 
+[2026-10-02T09:10:31] Full log: /c/git-projects/Orthohantavirus/STATUS.log
+[2026-10-02T09:10:32] Archive : /c/git-projects/Orthohantavirus/../_pipeline_archive/run_20261002_004541

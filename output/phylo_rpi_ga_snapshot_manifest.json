@@ -1,0 +1,9 @@
+{
+  "pipeline_version": "2.0.0",
+  "generated_at_utc": "2026-10-01T20:45:50Z",
+  "files": {
+    "phylo_rpi_ga_isolates.json": "3008eb802d73fc7288b09b5197e3764d2ab9fe2f92f7585904de4734b394ee0c",
+    "phylo_rpi_ga_genomic.json": "dbc802c2e9917b303a57b46df1c7f4ad9ff08859d330f9dc4d210d7ccf9fde53",
+    "phylo_rpi_ga_cds.json": "25a4cf7cecf926df0c0be99ee7eee21331b8043b427ffd4065dae1837648df2c"
+  }
+}

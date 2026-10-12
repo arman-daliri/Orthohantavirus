@@ -2,13 +2,25 @@ __pycache__/
 *.py[cod]
 .venv/
 
-# Pipeline logs are written fresh on every run and DO record absolute paths for the
-# machine they ran on (verified: both ortho_pipeline.log and ortho_phylogeny.log embed
-# the checkout path on their "Package:"/"Output:" lines). Neither is tracked. The
-# figures that matter from them -- record counts, isolate/triplet totals, pool sizes,
-# per-phylogroup runtimes -- are reproduced in README.md, so nothing is lost by
-# ignoring them. Scrub the paths before committing a log if you ever need one in-repo.
-output/*.log
+# ---------------------------------------------------------------------------
+# Policy: every research artifact this pipeline produces is committed -- the
+# Stage 1 reference snapshot, the full GA scored population, and the complete
+# per-candidate gate4 alignment and tree output that earlier revisions excluded.
+# Only three classes remain ignored: third-party binaries, solver scratch state
+# that is not a result, and the two top-level pipeline logs. Each is explained
+# at its rule below.
+#
+# Measured cost of tracking the rest (2026-10-13). The headline 498 MB of gate4
+# tree files is misleading on two counts:
+#   * 53.6% of those 740 files are byte-identical across candidates, and Git
+#     stores content once -- 498 MB of files is 231 MB of distinct blobs.
+#   * FASTA, .mldist and .phy are text and pack at 3.6x, so those 231 MB pack
+#     to 26 MB. The snapshot's 74 MB of JSON packs to 7 MB (10.6x).
+# Net pack growth ~34 MB, taking the repository from 295 MB to ~329 MB. That is
+# comfortably inside every GitHub limit (100 MB per file, 2 GB per push, 5 GB
+# per repository; largest file here is 27.5 MB). Re-measure with:
+#     git count-objects -vH
+# ---------------------------------------------------------------------------
 
 # External tool binaries: 38 MB of downloadable archives plus their extracted trees.
 # The pin is recorded by tools/CHECKSUMS.sha256 and tools/VERSIONS.txt, which ARE
@@ -18,59 +30,28 @@ tools/mafft-win/
 tools/iqtree-3.1.3-Windows/
 tools/_download_meta.json
 
-# Stage 1's reference snapshot -- 78 MB of data derived entirely from all_hanta/, which
-# IS tracked in this repository (see .gitattributes). Because the source package ships
-# with the repo, the snapshot regenerates deterministically in ~16 seconds and committing
-# 78 MB of derivable JSON would only bloat history. Run prepare_dataset.py before
-# Stages 2/3. (Earlier revisions of this comment claimed all_hanta/ was gitignored --
-# it is not, and never was: README.md line 77 relies on `git checkout -- all_hanta/`.)
-output/phylo_rpi_ga_isolates.json
-output/phylo_rpi_ga_genomic.json
-output/phylo_rpi_ga_cds.json
-output/phylo_rpi_ga_snapshot_manifest.json
+# IQ-TREE resume checkpoints -- the one genuine bloat source in the gate4 output.
+# 60 files that pack to 36.9 MB: 58% of the entire tree-artifact footprint, more
+# than everything else under candidate_phylogenetics/ combined. They are already
+# gzipped so they do not compress further, and they are pure solver scratch --
+# IQ-TREE writes tree.ckp.gz only so an interrupted search can resume. Nothing
+# scientific is lost: the tree (tree.treefile, tree.contree), branch support
+# (tree.splits.nex), model selection and fit (tree.iqtree, tree.model.gz), the
+# ML distances (tree.mldist), the input alignment (aligned.fasta) and the exact
+# IQ-TREE invocation including -B 1000 and --seed (tree.log) are all tracked.
+*.ckp.gz
 
-# Step 3 GA-search working tree. The per-candidate MAFFT/IQ-TREE artifacts under
-# candidate_phylogenetics/ are ~507 MB over 740 files, so the whole tree is ignored by
-# default and the research outputs are whitelisted back below.
-#
-# NOTE: Step 1's pool files (ga_pool_*.csv, ga_pools_manifest.json) used to be ignored
-# here on the grounds that they were "~3 MB". They are 40 KB and 14 KB. They define the
-# search space every GA result is relative to, so they are now tracked.
-output/ga_search/**
-# --- Whitelisted: the scored result of the search, not the bytes it was computed from ---
-!output/ga_search/terminal_complete/
-!output/ga_search/strict_both/
-# Winners, fitness log and gate4 verdicts (~19 KB each).
-!output/ga_search/terminal_complete/seed_*.json
-!output/ga_search/strict_both/seed_*.json
-# Cross-pool comparison (pool sizes, generations run, best fitness per pool).
-!output/ga_search/ga_pool_comparison.json
-# The FULL scored population -- 1,063 triplets (strict_both) / 964 (terminal_complete)
-# with all 22 RPI component columns. seed_*.json carries only the top 10 winners, so
-# without these the score distribution behind the winners is unreproducible without a
-# full GA rerun (which needs MAFFT + IQ-TREE installed). ~350 KB + ~750 KB per pool.
-!output/ga_search/*/all_scored_seed_*.csv
-!output/ga_search/*/all_scored_seed_*.jsonl
-# Sequences of the winning candidates (30 records per pool, ~120 KB) and of the search
-# pool itself (~4.4 MB combined). Both are extracts of the tracked all_hanta/ package,
-# but committing them makes a run auditable without rerunning Step 1.
-!output/ga_search/*/winner_sequences_seed_*.fasta
-!output/ga_search/*/pool_sequences_seed_*.fasta
-
-# Step 3 validation gate4 tree artifacts -- MAFFT alignments and IQ-TREE outputs
-# per candidate, regenerable with `rpi_core.py validate --with-phylogeny`. Each
-# alignment file runs ~76,000 lines; the full panel produces >1,400 files. The
-# summary validation_report.json IS tracked (it's the scored result, not raw
-# alignment bytes).
-output/validation/candidate_phylogenetics/
-
-# Captured stdout/stderr from pipeline runs -- record absolute paths and machine-
-# specific timing; not a research artifact.
-output/*_stdout.txt
-output/*_stderr.txt
-
-# run_main.sh writes STATUS.log to the project root on every run.
-STATUS.log
+# The two top-level pipeline logs. Unlike every other artifact here they are
+# rewritten wholesale on every run, so tracking them makes each rerun a large
+# diff against the previous machine's timings rather than a result change.
+# Nothing in them is secret -- the paths they embed are the project directory,
+# with no username or home path -- and every figure that matters from them
+# (record counts, isolate and triplet totals, pool sizes, per-phylogroup
+# runtimes) is reproduced in README.md. Drop these two lines if you want them.
+# Note this pattern is depth-1 only: the 60 per-candidate IQ-TREE tree.log files
+# under output/ga_search/.../ are deliberately NOT matched and ARE tracked.
+output/ortho_pipeline.log
+output/ortho_phylogeny.log
 
 # run_main.sh archives output/ to a sibling directory outside the repo.
 # Adding the pattern here covers the case where someone runs it from inside the repo.
