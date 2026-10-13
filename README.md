@@ -272,7 +272,7 @@ python3 prepare_dataset.py --input . --output output
 
 The transform is GIL-bound and runs serially.
 
-**A fresh checkout does not ship the reference snapshot.** `phylo_rpi_ga_isolates.json`, `phylo_rpi_ga_genomic.json`, `phylo_rpi_ga_cds.json`, and `phylo_rpi_ga_snapshot_manifest.json` are git-ignored — together they are 78 MB of data derived entirely from `all_hanta/`, which **is** tracked in this repository. Because the source package ships with the checkout, the snapshot regenerates deterministically in ~16 seconds and committing it would only bloat history. Run Step 1 before any command that reads `--output` or `--reference-input`. Each raises `FileNotFoundError` naming the missing file if you skip this.
+**A fresh checkout ships the reference snapshot.** `phylo_rpi_ga_isolates.json`, `phylo_rpi_ga_genomic.json`, `phylo_rpi_ga_cds.json` and `phylo_rpi_ga_snapshot_manifest.json` are tracked (78 MB), as is the `all_hanta/` package they derive from, so Stages 2 and 3 run against a clone with no Step 1 run required. Regenerating them is still deterministic and takes ~16 seconds. If you delete them, run Step 1 before any command that reads `--output` or `--reference-input` — each raises `FileNotFoundError` naming the missing file.
 
 The sections below describe what Step 1 computes and records on every isolate. All results go into the reference snapshot (`phylo_rpi_ga_isolates.json`). Downstream steps read them via `load_reference_data`.
 
@@ -705,20 +705,20 @@ python -m unittest Algorithm                                     # full suite
 - `<output>/terminal_complete/pool_sequences_seed_<N>.fasta` and the corresponding `strict_both/` file — always written: the S/M/L segment sequences for **every** isolate in that pool (314 isolates for terminal_complete, 108 for strict_both as of the current dataset), not just the top `--top` winners — covers every isolate that could appear in any row of `all_scored_seed_<N>.csv`. Cheap despite the pool CSV having 1000+ scored rows: the GA draws every triplet from this same small, fixed pool, so the file has at most `3 x pool size` records (one per isolate per segment) regardless of how many triplets were scored (a few MB of FASTA text total, not gigabytes). Headers: `<isolate_key>_<segment>|<accession>|<species>`. Same missing-sequence handling as `winner_sequences_seed_<N>.fasta`.
 - `<output>/ga_pool_comparison.json` — side-by-side summary of both pool runs: pool sizes, generation counts, plateau-stop flags, best fitness, scoring-error counts, wall-clock times.
 
-**Runtime.** On the 16,028-record package, default settings (`--population 150 --generations 100 --plateau 20`) typically plateau-stop at generation ~21. Measured (both pools, all-scored dump included): ~7 min per pool, ~14 min total. The `--generations 300 --plateau 10000` long run takes ~25 min per pool. Gate4 winner confirmation (`--with-phylogeny`) adds ~328 min (~5.5 hr) for the 10-winner phase on Windows (same mafft+iqtree stack as Step 2), bringing the total to ~339 min (~5.7 hr) per pool. Measured gate4 verdicts (10 winners per pool, current run): terminal_complete pool — 1 `supported_reassortment_candidate`, 4 `weak_signal_low_bootstrap_support`, 5 `no_conflict`; strict_both pool — 3 `weak_signal_low_bootstrap_support`, 7 `no_conflict`. The `candidate_phylogenetics/` folder under each pool's output dir holds per-winner alignment and tree files.
+**Runtime.** On the 16,028-record package, default settings (`--population 150 --generations 100 --plateau 20`) plateau-stop early: both pools in the shipped run stopped at generation 23 of 100 (`stopped_on_plateau: true`). Measured wall-clock from `ga_pool_comparison.json`: 248.6 s (~4.1 min) for terminal_complete and 229.6 s (~3.8 min) for strict_both, ~8 min for both pools together. The `--generations 300 --plateau 10000` long run takes ~25 min per pool. Gate4 winner confirmation (`--with-phylogeny`) adds ~328 min (~5.5 hr) for the 10-winner phase on Windows (same mafft+iqtree stack as Step 2), bringing the total to ~339 min (~5.7 hr) per pool. Measured gate4 verdicts (10 winners per pool, shipped run seed 20260904, read from each pool's `seed_20260904.json` `gate4_phylogeny` block): terminal_complete pool — 9 `weak_signal_low_bootstrap_support`, 1 `no_conflict`; strict_both pool — 7 `weak_signal_low_bootstrap_support`, 3 `no_conflict`. All 20 have `gate4_phylo_status: analyzed`, and **none is a `supported_reassortment_candidate`** — no GA winner has so far cleared the bootstrap gate. The `candidate_phylogenetics/` folder under each pool's output dir holds per-winner alignment and tree files.
 
 ---
 
 ## Outputs
 
-The **In repo** column says whether a fresh `git clone` already contains the file. Everything marked *regenerate* is derivable from what is tracked — the raw NCBI package `all_hanta/` **is** committed — and is left out only because of size. See [Data and results availability](#data-and-results-availability).
+Every file below is committed: a fresh `git clone` contains all of it, with no pipeline run required. The only exceptions in the whole of `output/` are the two top-level run logs, noted at the bottom of the table. See [Data and results availability](#data-and-results-availability).
 
 | File | Produced by | In repo | Contents |
 |---|---|---|---|
-| `phylo_rpi_ga_isolates.json` | Step 1 | regenerate (~16 s) | Serialised `IsolateRecord` objects for every reconstructed isolate |
-| `phylo_rpi_ga_genomic.json` | Step 1 | regenerate (~16 s) | Serialised genomic sequence records, keyed by accession |
-| `phylo_rpi_ga_cds.json` | Step 1 | regenerate (~16 s) | CDS index keyed by accession |
-| `phylo_rpi_ga_snapshot_manifest.json` | Step 1 | regenerate (~16 s) | Pipeline version, UTC timestamp, and SHA-256 digests of the three snapshot files above |
+| `phylo_rpi_ga_isolates.json` | Step 1 | ✅ | Serialised `IsolateRecord` objects for every reconstructed isolate |
+| `phylo_rpi_ga_genomic.json` | Step 1 | ✅ | Serialised genomic sequence records, keyed by accession |
+| `phylo_rpi_ga_cds.json` | Step 1 | ✅ | CDS index keyed by accession |
+| `phylo_rpi_ga_snapshot_manifest.json` | Step 1 | ✅ | Pipeline version, UTC timestamp, and SHA-256 digests of the three snapshot files above |
 | `ga_pool_terminal_complete.csv` | Step 1 | ✅ | Terminally-complete isolates (full-length S+M+L, both genuine genomic termini present) — broader calibration/search pool, without reserved-calibration exclusion |
 | `ga_pool_strict_both.csv` | Step 1 | ✅ | Strict-merged isolates (terminally-complete AND coding-complete) — narrower GA search pool, without reserved-calibration exclusion |
 | `ga_pools_manifest.json` | Step 1 | ✅ | Pool sizes and their overlap decomposition |
@@ -732,25 +732,26 @@ The **In repo** column says whether a fresh `git clone` already contains the fil
 | `ga_search/*/all_scored_seed_<N>.{jsonl,csv}` | Step 3 (always) | ✅ | Every unique triplet the search evaluated — full RPI row plus `fitness` and S/M/L donor isolate keys |
 | `ga_search/*/winner_sequences_seed_<N>.fasta` | Step 3 (before gate4) | ✅ | Actual S/M/L segment nucleotide sequences for the top `--top` winners only, resolved from the reference snapshot's `genomic_index`; written before phylogeny confirmation so a gate4 failure does not prevent sequence export |
 | `ga_search/*/pool_sequences_seed_<N>.fasta` | Step 3 (before gate4) | ✅ | Same, for every isolate in the pool — one record per isolate per segment, covering every isolate that could appear in `all_scored_seed_<N>.csv` |
-| `ga_search/*/candidate_phylogenetics/<cand>/<pair>/<segment>/` | Step 3 (`--with-phylogeny`) | regenerate (~507 MB) | Per-candidate gate4 MAFFT alignment + IQ-TREE artifacts (`aligned.fasta`, `tree.treefile`, `tree.contree`, `tree.splits.nex`, …). 740 files. The *verdicts* computed from them are in `seed_<N>.json`'s `gate4_phylogeny` block, which is tracked |
-| `ortho_pipeline.log`, `ortho_phylogeny.log` | Steps 1–2 | no (by design) | Run logs. Deliberately untracked: they embed the absolute checkout path of the machine that produced them. Every figure they report (record counts, isolate and triplet totals, pool sizes, per-phylogroup runtimes) is reproduced in this README |
+| `ga_search/*/candidate_phylogenetics/<cand>/<pair>/<segment>/` | Step 3 (`--with-phylogeny`) | ✅ (740 files) | Per-candidate gate4 MAFFT alignment and IQ-TREE output, complete: `aligned.fasta`, `sequences.fasta`, `tree.treefile`, `tree.contree`, `tree.splits.nex`, `tree.iqtree`, `tree.mldist`, `tree.model.gz`, `tree.ckp.gz`, `tree.log` (carries the exact invocation), `tree.bionj`, `tree.uniqueseq.phy`, `labels.json`. The verdicts computed from them are in `seed_<N>.json`'s `gate4_phylogeny` block |
+| `figures/before/<isolate>.png` | `python figures.py` | ✅ (7 files) | Per-isolate pre-GA views for the Step 2 `supported_reassortment_candidate` isolates |
+| `figures/overview/phylogroup_overview_<segment>.{png,json}` | `python figures.py` | ✅ (6 files) | Per-segment phylogroup overview plot and its backing data |
+| `figures/after_<pool>/ga-winner-<NN>.png` | `python figures.py` | ✅ (10 per pool) | One view per GA winner, for both pools |
+| `figures/after_<pool>/ga_winners_parents.csv` | `python figures.py` | ✅ | The winners' donor isolates with the `rpi_e_unknown_components` and `rpi_neutral_factors` diagnostics, so a reader can see whether a winner's fitness rests on missing metadata |
+| `figures/parameter_robustness_sweep.png` | `python rpi_core.py robustness-sweep` | ✅ | The sweep plotted; raw data in `rpi_parameter_robustness_sweep.json` |
+| `rpi_parameter_robustness_sweep.json` | `python rpi_core.py robustness-sweep` | ✅ | One-at-a-time and joint parameter sweeps ; see the parameter robustness and sensitivity analysis in the RPI section |
+| `validation/validation_report.json` | `python rpi_core.py validate --json <path>` | ❌ (not run) | Scored a/b1/b2/c discrimination panel. Not produced by the shipped run; the command above writes it |
+| `ortho_pipeline.log`, `ortho_phylogeny.log` | Steps 1–2 | ❌ | **The only two ignored files under `output/`.** Rewritten wholesale on every run, so tracking them would make each rerun a large diff of another machine's timings. Every figure they report (record counts, isolate and triplet totals, pool sizes, per-phylogroup runtimes) is reproduced in this README |
 
 ### Data and results availability
 
-A `git clone` of this repository contains, with no pipeline run required:
+A `git clone` of this repository is self-contained: **1,492 tracked files, 1,456 of them under `output/`**, with every result the pipeline produced and the raw data it ran on. No pipeline run, and no external download, is required to inspect any result in this README.
 
-- **The raw input data.** The NCBI Datasets *Orthohantavirus* package is committed in full under `all_hanta/` (16,028 records; `genomic.fna` 25.8 MB, `cds.fna` 24.8 MB, `protein.faa` 9.4 MB, `data_report.jsonl` 35.9 MB), byte-identical to what NCBI published and verifiable against the shipped `md5sum.txt`. `.gitattributes` marks the package `-text` so no checkout rewrites a single byte; a side effect is that GitHub's web viewer will not render these files inline (they exceed its size limit and are treated as binary) — clone or use the raw link.
-- **Every scored result.** Step 2's 641 per-species and per-phylogroup tree files, `ortho_reassortment_table.csv` (2,995 rows), the RPI robustness sweep, all 54 figures, and Step 3's complete GA output for both pools: the top-10 winners *and* the full scored population (1,063 and 964 triplets with all 22 RPI component columns), the pool rosters, and the winner and pool sequences.
+- **The raw input data.** The NCBI Datasets *Orthohantavirus* package is committed in full under `all_hanta/` (16,028 records; `genomic.fna` 25.8 MB, `cds.fna` 24.8 MB, `protein.faa` 9.4 MB, `data_report.jsonl` 35.9 MB), byte-identical to what NCBI published and verifiable against the shipped `md5sum.txt`. `.gitattributes` marks the package `-text` so no checkout rewrites a single byte. A side effect is that GitHub's web viewer will not render these files inline — they are treated as binary and exceed its size limit — so clone the repository or use the raw link rather than the file view.
+- **Every result.** Step 1's reference snapshot and pool rosters; Step 2's 641 per-species and per-phylogroup tree files and `ortho_reassortment_table.csv` (2,995 rows × 38 columns); all 54 figures; the RPI parameter sweep; and Step 3's complete GA output for both pools — the top-10 winners, the full scored population (1,063 and 964 triplets × 22 columns), the pool rosters, the winner and pool sequences, and all 740 per-candidate gate4 alignment and tree files.
 
-Left out, with the reason:
+Two files under `output/` are ignored, both top-level run logs (`ortho_pipeline.log`, `ortho_phylogeny.log`, ~10 KB): they are rewritten wholesale on every run, so tracking them would turn each rerun into a large diff of another machine's timings. Nothing they report is lost — every count, total and runtime in them is reproduced in this README.
 
-| Not in repo | Size | Why |
-|---|---|---|
-| Stage-1 reference snapshot (4 JSON files) | 78 MB | Derived from the tracked `all_hanta/`; regenerates deterministically in ~16 s via `prepare_dataset.py` |
-| `candidate_phylogenetics/` gate4 artifacts | 507 MB | Raw alignment and tree bytes for 740 files. The scored verdicts derived from them are tracked |
-| Run logs | 10 KB | Embed machine-specific absolute paths |
-
-Nothing that is left out is a result; each is either an input-derived intermediate or raw bytes behind a verdict that *is* committed. For archival of the 507 MB gate4 tree artifacts alongside a publication, attach them to a tagged GitHub Release or deposit them with a DOI (Zenodo accepts 50 GB per record) rather than committing them — `.git` is already ~300 MB.
+**Repository size.** 329 MB packed (`git count-objects -vH`), against GitHub's 5 GB per-repository and 100 MB per-file limits; the largest tracked file is 27.5 MB. The gate4 tree output is far cheaper than its 498 MB on disk suggests: 53.6% of those files are byte-identical across candidates and Git stores content once, and the FASTA, `.mldist` and `.phy` text packs at 3.6x, so 685 files and 535 MB of raw output cost about 2 MB of pack. The one genuine cost is `tree.ckp.gz` (36.9 MB), already gzipped and so neither compressible nor deltable by Git.
 
 ---
 
