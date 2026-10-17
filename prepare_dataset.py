@@ -109,7 +109,8 @@ HANTAVIRUS_GENOMIC_3P_TAG = "TACTACTA"  # == reverse complement of 5P tag
 def has_genomic_panhandle_termini(sequence: str) -> bool:
     """Does this deposit carry both genuine genomic termini, or is it trimmed?
 
-    48% of the wild full-length triplet pool carries NEITHER tag (rpi_calibration.py WS3.1).
+    A large share of the wild full-length triplet pool carries NEITHER tag (measured
+    during M_pack calibration; see data/rpi_calibration.json).
     A truncated deposit's "terminal window" scores noise, not a panhandle.
     """
     sequence = sequence.strip().upper()
@@ -191,7 +192,7 @@ SEGMENT_FIELD_RULES: List[Tuple[re.Pattern, str]] = [
     (re.compile(r"^n$"), "S"),
 ]
 
-# Derived from the 122 distinct CDS product names in annotation_report.jsonl.
+# Derived from the distinct CDS product names in annotation_report.jsonl.
 #
 # Two related but deliberately different questions are asked of a product name:
 #   - which SEGMENT does it imply?  (loose: any nonstructural mention implies S)
@@ -548,7 +549,8 @@ HOST_ORDER_RISK_PRIOR = {
 
 # Disease syndrome -> pathogenicity class. TULV's 'rare_opportunistic' is kept out of
 # pathogenic_hfrs deliberately: lumping its handful of mild case reports with HTNV/DOBV
-# would put 2,123 records into the same class as the viruses that drive HFRS mortality.
+# would put every TULV record into the same class as the viruses that drive HFRS
+# mortality.
 SYNDROME_TO_PATHOGENICITY = {
     "HCPS": "pathogenic_hcps",
     "HFRS": "pathogenic_hfrs",
@@ -919,12 +921,14 @@ def is_cross_study_label(label: str) -> bool:
 
     Submitters number their own samples independently, so labels like '2', '43' or 'B1'
     collide between unrelated studies. Treating such a collision as evidence that one
-    isolate was assigned to two species manufactures incongruence: 31 of the 70 isolates
-    previously flagged carried a purely numeric label, including five distinct isolates
-    named simply '2' spread across PUUV, SEOV, SNV, CBNV and unclassified records.
+    isolate was assigned to two species manufactures incongruence: a large share of the
+    isolates previously flagged carried a purely numeric label, including several
+    distinct isolates named simply '2' spread across PUUV, SEOV, SNV, CBNV and
+    unclassified records.
 
     Grouping is not subject to this: a group key also contains the species and any
-    over-merge it causes surfaces as metadata_conflict (4 of 254 numeric-label isolates).
+    over-merge it causes surfaces as metadata_conflict (a small minority of
+    numeric-label isolates).
     A cross-species check has no such backstop, and its output feeds the risk score.
     """
     key = normalize_key_text(label).replace(" ", "")
@@ -1023,7 +1027,7 @@ def parse_cds_fasta(path: Optional[Path]) -> Dict[str, List[Tuple[str, str]]]:
     Unlike protein.faa (keyed by protein accessionVersion), cds.fna's defline carries the
     parent nucleotide accession plus a coordinate suffix (e.g. 'PX492530.1:1-430'),
     because a CDS is a coordinate range on its parent nucleotide record. A single
-    nucleotide accession can carry more than one CDS -- 134 in this package, mostly
+    nucleotide accession can carry more than one CDS -- a minority of them do, mostly
     ambisense S segments encoding both N and NSs on overlapping reading frames, plus a
     few M segments annotated with separate G1/G2 CDS alongside a combined precursor
     entry. parse_fasta's setdefault-first-wins index would silently keep whichever CDS
@@ -1055,8 +1059,8 @@ def parse_cds_fasta(path: Optional[Path]) -> Dict[str, List[Tuple[str, str]]]:
 class ReferenceData:
     """Everything a downstream stage needs, reconstructed from Stage 1's snapshot --
     never from a raw all_hanta/ read. isolates is the full, UNFILTERED set; Stage 2's
-    206-coding-complete and Stage 3's 272-terminally-complete/strict-merged filters are
-    applied by their own callers, not here.
+    coding-complete and Stage 3's terminally-complete/strict-merged filters are applied
+    by their own callers, not here.
     """
     isolates: List[IsolateRecord]
     genomic_index: Dict[str, FastaRecord]
@@ -1320,10 +1324,10 @@ def resolve_species(record: Dict[str, Any]) -> SpeciesAssignment:
 
 
 # Cache for resolve_host_taxonomy, keyed on host taxid. Verified safe against this
-# package: all 253 distinct host taxids carry a consistent organismName and lineage, so
-# one walk per taxid replaces one walk per record (15,991 -> 253).
+# package: every distinct host taxid carries a consistent organismName and lineage, so
+# one walk per taxid replaces one walk per record -- far fewer walks, same result.
 #
-# Deliberately NOT done for resolve_species: 3 of 551 virus taxids carry more than one
+# Deliberately NOT done for resolve_species: a few virus taxids carry more than one
 # organismName or lineage (e.g. taxid 1980456 appears as both 'Orthohantavirus andesense'
 # and 'Andes orthohantavirus'), and even (taxid, organismName) still collides for
 # 'Lanka hantavirus'. Caching there would silently change the observed_organism column.
@@ -1456,8 +1460,8 @@ def choose_segment(
 def determine_completeness(record: Dict[str, Any], segment: str, nt_len: int) -> Tuple[str, str, bool]:
     """Return (completeness, source, is_coding_complete).
 
-    NCBI's structured ``completeness`` is present on 100% of records in this package
-    (PARTIAL 14,652 / COMPLETE 1,339) and is authoritative. The previous implementation
+    NCBI's structured ``completeness`` is present on every record in this package, the
+    large majority of them PARTIAL, and is authoritative. The previous implementation
     carried an elaborate cascade of definition-line text matching, ambiguous-base counting
     and terminal-panhandle motif checks that never executed. Length is used only to
     qualify a COMPLETE call for coding-completeness, never to override NCBI.
@@ -1481,7 +1485,7 @@ def length_anomaly(segment: str, nt_len: int, completeness: str) -> str:
 
     Only complete records are checked against the lower bound: a partial sequence is
     *expected* to be short, and the previous rule ('M' and not 1500 <= n <= 5000) fired
-    on 5,856 records, almost all of them legitimately partial.
+    on thousands of records, almost all of them legitimately partial.
     """
     if not segment or not nt_len:
         return ""
@@ -1642,20 +1646,21 @@ def build_group_key(
 ) -> Tuple[str, str, float]:
     """Group accessions that represent the same physical virus isolate.
 
-    BioSample is present on only 87 of 15,991 records here (0.54%), so a BioSample-first
-    cascade almost never fires and the dataset shatters into per-accession groups.
-    ``isolate.name`` is present on 15,491 records (96.9%) and is the field submitters
-    actually use to tie an isolate's S, M and L segments together -- grouping on it
-    recovers 1,484 complete S/M/L triplets against 214 previously.
+    BioSample is present on well under 1% of records here, so a BioSample-first cascade
+    almost never fires and the dataset shatters into per-accession groups.
+    ``isolate.name`` is present on the large majority of records and is the field
+    submitters actually use to tie an isolate's S, M and L segments together --
+    grouping on it recovers an order of magnitude more complete S/M/L triplets than a
+    BioSample-first cascade does.
     """
     label = isolate or strain
     if species_name and biosample and label:
         return (f"t1|{species_name}|{biosample}|{normalize_key_text(label)}",
                 "tier_1_biosample_isolate", 1.00)
     if species_name and isolate:
-        # Normalized, not raw. Tier 2 claims 15,404 of 15,991 records, so it short-circuits
+        # Normalized, not raw. Tier 2 claims the large majority of records, so it short-circuits
         # the normalized tier below for every record that has an isolate name -- which is
-        # to say normalize_key_text never reached a grouping decision at all. 52 isolates
+        # to say normalize_key_text never reached a grouping decision at all. Isolates
         # were split across spelling variants of one label ('Aa19-152/MInION' vs
         # 'Aa19-152/MinION', 'PUUV/Kazan/human/RT500/2019' vs 'PUUV/Kazan/human_RT500/2019').
         return f"t2|{species_name}|{normalize_key_text(isolate)}", "tier_2_species_isolate", 0.95
@@ -1872,8 +1877,8 @@ def choose_best_segment_record(records: Sequence[AccessionRecord]) -> Optional[A
 def deduplicate_by_sequence_hash(records: Sequence[AccessionRecord]) -> List[AccessionRecord]:
     """Collapse records whose NCBI sequenceHash is identical.
 
-    12,598 distinct hashes cover 15,991 records here, so 3,393 are exact resubmissions of
-    a sequence already present. Counting them separately inflates group sizes and would
+    Distinct hashes cover materially fewer sequences than there are records here, so a
+    substantial minority are exact resubmissions of a sequence already present. Counting them separately inflates group sizes and would
     duplicate rows into the ML tables.
     """
     seen: Dict[str, AccessionRecord] = {}
@@ -2751,8 +2756,8 @@ def build_ml_tables(
     is_lab_derived is now FLAGGED, not filtered. An earlier version excluded every
     is_lab_derived isolate from this matrix, on the same "not a naturally occurring
     sample" reasoning Stage 2 (phylogeny.py) still uses. But NCBI's isLabHost field marks the
-    immediate recorded host, not sequence provenance: of 164 is_lab_derived isolates, 21
-    have host_taxid 9606 -- these are lab-acquired/occupational human infections in
+    immediate recorded host, not sequence provenance: a meaningful fraction of the
+    is_lab_derived isolates have host_taxid 9606 -- these are lab-acquired/occupational human infections in
     exactly the highest-CFR species (HTNV, ANDV, PUUV, DOBV) -- and most of the rest are
     samples from colony-maintained reservoir animals (Mus musculus, Rattus norvegicus,
     Apodemus agrarius), not attenuated or culture-adapted sequences. Blanket-filtering
@@ -3226,7 +3231,7 @@ def run_pipeline(paths: InputPaths, args: argparse.Namespace) -> None:
                  indexed_record_count(genomic_index), indexed_record_count(protein_index))
 
     # Serial by design: this work is pure-Python and GIL-bound, so the previous
-    # ThreadPoolExecutor added 15,991 futures of overhead for no parallelism.
+    # ThreadPoolExecutor added one future per record of overhead for no parallelism.
     logging.info("Transforming accession records")
     accessions: List[AccessionRecord] = []
     for record in data_records:
