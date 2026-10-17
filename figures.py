@@ -48,6 +48,13 @@ SEGMENTS = ("S", "M", "L")
 SLOT_COLOR = {"S": "#1b6ca8", "M": "#2e8b57", "L": "#c1440e"}
 DEFAULT_MIN_TIPS = 8
 
+# Highlighted-tip label geometry, in tip-row units (one unit = one tip row).
+# LABEL_Y_OFFSET lifts the label off its own marker; LABEL_HEADROOM is the clear space
+# kept above it so it cannot reach the panel title. TITLE_PAD_PT lifts the title itself.
+LABEL_Y_OFFSET = 0.4
+LABEL_HEADROOM = 1.0
+TITLE_PAD_PT = 12.0
+
 
 # ============================================================================
 # Ingest + tip relabeling (reads phylogeny.py's persisted labels.json; never
@@ -176,8 +183,29 @@ def draw_cladogram(ax, clade: "Bio.Phylo.BaseTree.Clade", highlight_name: Option
         ax.plot([cx], [cy], marker="o", markersize=6 if is_hl else 2,
                 color=highlight_color if is_hl else "#9aa5b1", zorder=5)
         if is_hl:
-            ax.text(cx, cy + 0.4, tip.name, fontsize=7, fontweight="bold",
-                    color=highlight_color, va="bottom", ha="left")
+            # The label sits above its tip. Left-aligning it unconditionally pushed it off
+            # the right edge whenever the highlighted donor was one of the right-most tips
+            # (ga-winner-00's L donor did exactly this), so flip to right-alignment -- the
+            # text then grows leftwards into empty tree space -- once the tip is past the
+            # middle of the panel's x-range.
+            x_lo, x_hi = min(x.values()), max(x.values())
+            span = (x_hi - x_lo) or 1.0
+            flip = (cx - x_lo) / span > 0.45
+            # In a dense neighborhood the label unavoidably crosses branch lines; a
+            # near-opaque backing box keeps it readable without displacing it.
+            ax.text(cx + (-0.015 if flip else 0.015) * span, cy + LABEL_Y_OFFSET, tip.name,
+                    fontsize=7, fontweight="bold", color=highlight_color,
+                    va="bottom", ha="right" if flip else "left", zorder=6,
+                    bbox=dict(facecolor="white", edgecolor="none", alpha=0.75,
+                              pad=1.0, boxstyle="square,pad=0.15"))
+
+    # Headroom above the top tip. Without it the highlighted tip's label collided with the
+    # panel title whenever that tip was the top-most one in the local neighborhood (the
+    # "S donor" title over t2|Orthohantavirus hantanense|js9 in ga-winner-00). Matplotlib
+    # autoscales to the tip markers only -- a text artist does not extend the data limits --
+    # so the headroom has to be asked for explicitly.
+    n_tips = len(tips)
+    ax.set_ylim(-0.8, (n_tips - 1) + LABEL_Y_OFFSET + LABEL_HEADROOM)
 
     ax.set_yticks([])
     for spine in ("top", "right", "left"):
@@ -266,7 +294,8 @@ def render_before_figures(output_dir: Path, data_dir: str = "output",
             positions = draw_cladogram(ax, clade, highlight_name=isolate_key, highlight_color=color)
             title = segment + (" -- discordant" if segment == discordant else "")
             ax.set_title(title, color=color if segment == discordant else "black",
-                        fontweight="bold" if segment == discordant else "normal")
+                        fontweight="bold" if segment == discordant else "normal",
+                        pad=TITLE_PAD_PT)
             if isolate_key in positions:
                 tip_pos[segment] = positions[isolate_key]
 
@@ -348,7 +377,8 @@ def render_after_figures(ga_search_json: Path, output_dir: Path, data_dir: str =
             tree = load_tree_relabeled(stage_dir / tree_path_str)
             clade = local_neighborhood(tree, donor_key, min_tips=min_tips)
             draw_cladogram(ax, clade, highlight_name=donor_key, highlight_color=SLOT_COLOR[segment])
-            ax.set_title(f"{segment} donor", color=SLOT_COLOR[segment], fontweight="bold")
+            ax.set_title(f"{segment} donor", color=SLOT_COLOR[segment], fontweight="bold",
+                         pad=TITLE_PAD_PT)
 
         fig.suptitle(f"{candidate_id} -- fitness {winner.get('fitness'):.4f}", fontsize=10)
         fig.text(0.5, 0.01,
@@ -890,6 +920,56 @@ class DrawCladogramTest(unittest.TestCase):
             self.assertEqual(set(positions), {"t1", "t2", "t3"})
             self.assertGreater(positions["t2"][0], 0)
         finally:
+            plt.close(fig)
+
+    def _draw(self, newick, highlight):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from io import StringIO
+        from Bio import Phylo
+        tree = Phylo.read(StringIO(newick), "newick")
+        fig, ax = plt.subplots()
+        positions = draw_cladogram(ax, tree.root, highlight_name=highlight)
+        return fig, ax, positions
+
+    def test_highlight_label_leaves_headroom_below_the_panel_title(self):
+        """The highlighted tip's label is drawn above its own marker, so when that tip is
+        the top-most one in the neighborhood the label used to run into the panel title
+        (ga-winner-00's "S donor" over t2|Orthohantavirus hantanense|js9). A text artist
+        does not extend the data limits, so the axes must reserve the space itself."""
+        newick = "((t1:0.1,t2:0.2):0.1,t3:0.3);"
+        fig, ax, positions = self._draw(newick, "t3")
+        try:
+            top_tip_y = max(y for _, y in positions.values())
+            label_top = top_tip_y + LABEL_Y_OFFSET
+            self.assertGreater(ax.get_ylim()[1], label_top,
+                               "no headroom above the highlighted tip's label")
+            self.assertGreaterEqual(ax.get_ylim()[1] - label_top, LABEL_HEADROOM * 0.9)
+        finally:
+            import matplotlib.pyplot as plt
+            plt.close(fig)
+
+    def test_right_hand_highlight_label_is_right_aligned_to_stay_in_panel(self):
+        """A left-aligned label on a right-most tip ran off the panel edge and was clipped
+        (ga-winner-00's L donor). Past the midpoint of the x-range it must grow leftwards."""
+        newick = "(t_short:0.01,t_long:1.0);"
+        fig, ax, _ = self._draw(newick, "t_long")
+        try:
+            labels = [t for t in ax.texts if t.get_text() == "t_long"]
+            self.assertEqual(len(labels), 1)
+            self.assertEqual(labels[0].get_ha(), "right")
+        finally:
+            import matplotlib.pyplot as plt
+            plt.close(fig)
+
+        fig, ax, _ = self._draw(newick, "t_short")
+        try:
+            labels = [t for t in ax.texts if t.get_text() == "t_short"]
+            self.assertEqual(len(labels), 1)
+            self.assertEqual(labels[0].get_ha(), "left")
+        finally:
+            import matplotlib.pyplot as plt
             plt.close(fig)
 
 
