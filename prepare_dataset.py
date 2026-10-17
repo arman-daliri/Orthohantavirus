@@ -1263,14 +1263,24 @@ def normalize_sequence_hash(value: Any) -> str:
 def resolve_species(record: Dict[str, Any]) -> SpeciesAssignment:
     """Resolve a record to its canonical ICTV species.
 
-    The organism-level ``virus.taxId`` is unusable as a species key: in this package it
-    takes 553 distinct values, mixing strain-level taxa ('Hantaan virus Lee', 'Four
-    Corners hantavirus') with legacy/current taxid pairs for the same species
-    ('Puumala orthohantavirus' 1980486 vs 'Orthohantavirus puumalaense' 3052493).
+    The organism-level ``virus.taxId`` is unusable as a species key: it takes far more
+    distinct values than there are species, mixing strain-level taxa ('Hantaan virus
+    Lee', 'Four Corners hantavirus') with legacy/current taxid pairs for the same
+    species ('Puumala orthohantavirus' 1980486 vs 'Orthohantavirus puumalaense'
+    3052493).
 
     The node immediately below genus Orthohantavirus in ``virus.lineage`` *is* the ICTV
-    species, and canonicalising on its binomial name merges the legacy/current pairs.
-    That collapses 553 organism values to 38 species plus 'unclassified Orthohantavirus'.
+    species, and canonicalising on its binomial name merges those legacy/current pairs,
+    collapsing the organism-level values to the named species plus the two labels this
+    function assigns when no species node exists: 'unclassified Orthohantavirus' and
+    'Orthohantavirus (genus-level only)'.
+
+    No counts are quoted here on purpose. How many distinct organism names, taxIds or
+    species a run sees is a property of whichever NCBI package is on disk, not of this
+    function, and a hardcoded figure goes stale silently as the package is re-downloaded.
+    Stage 1 logs the species count for the package it actually read (the closing
+    "Done. N accessions -> N species -> ..." line); README.md records the full set of
+    measured values for the shipped package.
     """
     virus = record.get("virus") or {}
     observed_name = clean_text(virus.get("organismName")) or ""
